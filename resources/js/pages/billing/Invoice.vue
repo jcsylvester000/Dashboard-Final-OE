@@ -16,9 +16,11 @@ import {
     destroy,
     finalize,
     index,
+    pdf,
     recalculate,
     show,
     update,
+    workReport,
     cancel as voidInvoice,
 } from '@/routes/billing/invoices';
 import { store as storePayment } from '@/routes/billing/invoices/payments';
@@ -94,6 +96,14 @@ function removeDraft(): void {
                 <p v-if="inv.credited_invoice_id" class="text-sm">
                     Credits <Link :href="show(inv.credited_invoice_id)" class="underline underline-offset-4">invoice #{{ inv.credited_invoice_id }}</Link>
                 </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" as-child>
+                    <a :href="pdf.url(inv.id)">{{ inv.status === 'draft' ? 'Preview PDF' : 'Download PDF' }}</a>
+                </Button>
+                <Button v-if="inv.kind === 'invoice'" variant="outline" size="sm" as-child>
+                    <a :href="workReport.url(inv.id)">Work report PDF</a>
+                </Button>
             </div>
             <div v-if="inv.status === 'draft'" class="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" @click="post(recalculate.url(inv.id))">Recalculate</Button>

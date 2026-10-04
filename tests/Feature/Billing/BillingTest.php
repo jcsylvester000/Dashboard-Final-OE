@@ -23,6 +23,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\DepartmentSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -62,6 +63,7 @@ class BillingTest extends TestCase
     {
         parent::setUp();
         $this->seed([RolesAndPermissionsSeeder::class, DepartmentSeeder::class]);
+        Storage::fake('local'); // finalize stores the invoice PDF
         $this->travelTo(CarbonImmutable::parse('2026-11-03 09:00:00'));
 
         $this->ws = Workspace::factory()->create(['name' => 'Client Co']);

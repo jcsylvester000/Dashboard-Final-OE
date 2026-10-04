@@ -4,6 +4,7 @@ import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { index as clientsIndex } from '@/routes/billing/clients';
 import { index as invoicesIndex } from '@/routes/billing/invoices';
 import { index as ratesIndex } from '@/routes/billing/rates';
+import { index as reportsIndex } from '@/routes/billing/reports';
 
 const { isCurrentOrParentUrl } = useCurrentUrl();
 
@@ -11,6 +12,7 @@ const items = [
     { title: 'Invoices', href: invoicesIndex() },
     { title: 'Clients', href: clientsIndex() },
     { title: 'Rates', href: ratesIndex() },
+    { title: 'Reports', href: reportsIndex() },
 ];
 </script>
 

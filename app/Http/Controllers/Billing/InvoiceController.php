@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Domain\Billing\BillingException;
+use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
 use App\Http\Controllers\Controller;
@@ -20,6 +21,7 @@ use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -112,6 +114,30 @@ class InvoiceController extends Controller
                     ->map(fn (Invoice $c): array => $this->row($c))->values(),
             ],
             'methods' => Payment::METHODS,
+        ]);
+    }
+
+    /**
+     * PDF invoice: the copy stored at finalize (live render with a DRAFT mark for drafts).
+     */
+    public function pdf(Invoice $invoice, InvoicePdf $pdf): HttpResponse
+    {
+        return $this->file($pdf->download($invoice), $invoice->displayNumber().'.pdf');
+    }
+
+    /**
+     * PDF work report: tasks, people and hours behind the invoice.
+     */
+    public function workReport(Invoice $invoice, InvoicePdf $pdf): HttpResponse
+    {
+        return $this->file($pdf->workReport($invoice), $invoice->displayNumber().' work report.pdf');
+    }
+
+    private function file(string $bytes, string $name): HttpResponse
+    {
+        return response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.str_replace('"', '', $name).'"',
         ]);
     }
 

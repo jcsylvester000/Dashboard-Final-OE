@@ -214,7 +214,7 @@ class InvoiceService
             throw new BillingException('There is nothing to bill on this invoice.');
         }
 
-        return DB::transaction(function () use ($invoice, $actor) {
+        $invoice = DB::transaction(function () use ($invoice, $actor) {
             $profile = BillingProfile::query()->where('workspace_id', $invoice->workspace_id)->first();
 
             // Postgres rejects FOR UPDATE with aggregates, so lock the highest numbered row instead.
@@ -242,6 +242,16 @@ class InvoiceService
 
             return $invoice;
         });
+
+        // Keep the PDF exactly as finalized. If rendering fails the invoice stays final;
+        // the first download renders and stores it instead.
+        try {
+            app(InvoicePdf::class)->store($invoice);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $invoice;
     }
 
     /**

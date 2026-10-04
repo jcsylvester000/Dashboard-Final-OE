@@ -217,7 +217,14 @@ composer dev                    # now also starts reverb:start
   check, cash); the invoice list shows receivables aging (current / 1-30 / 31-60 / 61-90 / 90+).
 - **Alerts:** Finance gets an in-app alert the day after an invoice's due date (`php artisan billing:alerts`, daily 07:00).
 - **Money** is stored as integer centavos/cents; tax as basis points (12% = 1200). No floats.
-- **Next (P6b):** PDF invoice + PDF work report (DomPDF), billing reports.
+- **PDFs (P6b):** on each invoice, **Download PDF** (the copy saved at finalize - identical every time) and
+  **Work report PDF** (tasks, people and hours behind the invoice, grouped by department; Marketing section with
+  campaign/channel/deliverable and SEO section with page/keyword/work type appear only when there is such work).
+  Agency details on the PDFs come from `BILLING_COMPANY_*` in `.env`. PDFs are stored privately in
+  `storage/app/private/invoices` - back this folder up on Forge.
+- **Billing > Reports:** revenue by client and month, retainer utilisation, unbilled approved time (valued at
+  current rates), profitability by project (needs internal cost rates).
+- Requires `composer require "barryvdh/laravel-dompdf:~3.1.2"` (pure PHP, no Chrome on the server). On Windows use `~`, not `^` (cmd strips `^`; 3.1.0 does not support Laravel 13).
 
 ## 5. Push to GitHub
 

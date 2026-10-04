@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Identity\Permissions;
+use App\Http\Controllers\Billing\BillingReportController;
 use App\Http\Controllers\Billing\ClientBillingController;
 use App\Http\Controllers\Billing\InvoiceController;
 use App\Http\Controllers\Billing\RateCardController;
@@ -15,6 +16,8 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_MANAGE])->prefix('billing
 
     Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
+    Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+    Route::get('invoices/{invoice}/work-report', [InvoiceController::class, 'workReport'])->name('invoices.work-report');
     Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');
     Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
     Route::post('invoices/{invoice}/recalculate', [InvoiceController::class, 'recalculate'])->name('invoices.recalculate');
@@ -34,6 +37,8 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_MANAGE])->prefix('billing
     Route::post('periods/{period}/invoice', [ClientBillingController::class, 'invoicePeriod'])->name('periods.invoice');
     Route::delete('expenses/{expense}', [ClientBillingController::class, 'destroyExpense'])->name('expenses.destroy');
     Route::put('projects/{project}/fixed-fee', [ClientBillingController::class, 'updateFixedFee'])->name('projects.fixed-fee');
+
+    Route::get('reports', BillingReportController::class)->name('reports.index');
 
     Route::get('rates', [RateCardController::class, 'index'])->name('rates.index');
     Route::post('rates', [RateCardController::class, 'store'])->name('rates.store');
