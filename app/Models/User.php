@@ -24,6 +24,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $email
  * @property string|null $title
  * @property int|null $primary_department_id
+ * @property int|null $last_workspace_id
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property bool $is_active
@@ -92,6 +93,20 @@ class User extends Authenticatable implements PasskeyUser
     public function departments(): BelongsToMany
     {
         return $this->belongsToMany(Department::class);
+    }
+
+    /**
+     * Client workspaces this user is a member of (with membership role).
+     *
+     * @return BelongsToMany<Workspace, $this, WorkspaceMember, 'membership'>
+     */
+    public function workspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'workspace_user')
+            ->using(WorkspaceMember::class)
+            ->as('membership')
+            ->withPivot(['id', 'role', 'department_id'])
+            ->withTimestamps();
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Identity\Permissions;
 use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -40,7 +41,37 @@ class HandleInertiaRequests extends Middleware
                 'can' => fn () => $this->abilities($user),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'workspaceNav' => fn () => $user ? $this->workspaceNav($request, $user) : null,
         ];
+    }
+
+    /**
+     * Data for the sidebar workspace switcher: the workspaces the user can open
+     * and the one currently in focus (route parameter, else last visited).
+     *
+     * @return array{current: array<string, mixed>|null, items: list<array<string, mixed>>}
+     */
+    private function workspaceNav(Request $request, User $user): array
+    {
+        $items = Workspace::query()
+            ->visibleTo($user)
+            ->where('status', '!=', 'archived')
+            ->orderBy('name')
+            ->limit(100)
+            ->get(['id', 'name', 'slug', 'color'])
+            ->map(fn (Workspace $w) => ['id' => $w->id, 'name' => $w->name, 'slug' => $w->slug, 'color' => $w->color])
+            ->values()
+            ->all();
+
+        $routeWorkspace = $request->route('workspace');
+        $currentId = $routeWorkspace instanceof Workspace ? $routeWorkspace->id : $user->last_workspace_id;
+
+        $current = collect($items)->firstWhere('id', $currentId);
+        if ($current === null && $routeWorkspace instanceof Workspace) {
+            $current = ['id' => $routeWorkspace->id, 'name' => $routeWorkspace->name, 'slug' => $routeWorkspace->slug, 'color' => $routeWorkspace->color];
+        }
+
+        return ['current' => $current, 'items' => $items];
     }
 
     /**

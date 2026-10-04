@@ -3,12 +3,15 @@
 namespace App\Providers;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Models\Project;
 use App\Models\User;
+use App\Models\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -37,6 +40,12 @@ class AppServiceProvider extends ServiceProvider
         DB::prohibitDestructiveCommands(app()->isProduction());
 
         // Catch N+1 lazy loading and silently discarded mass-assignment while developing.
+        // Short, stable type names for polymorphic links/mentions/labels (used in URLs and the API).
+        Relation::morphMap([
+            'workspace' => Workspace::class,
+            'project' => Project::class,
+        ]);
+
         Model::preventLazyLoading(! app()->isProduction());
         Model::preventSilentlyDiscardingAttributes(! app()->isProduction());
 

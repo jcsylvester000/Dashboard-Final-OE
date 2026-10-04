@@ -7,7 +7,7 @@ there is no public sign-up and the app never sends email.
 Tailwind CSS 4 + shadcn-vue · PostgreSQL 18 · Valkey (Redis-compatible) · Fortify (login, 2FA, passkeys) ·
 spatie/laravel-permission 8. Deploys to Laravel Forge.
 
-Build status: **P0 Foundation** and **P1 Auth, Admin & Access Control** are in place.
+Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** are in place.
 The phase checklist lives in `6 - Final Documentation/OverEasy Dashboard Build Game Plan - 2026-10-04/`.
 
 ---
@@ -107,6 +107,18 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
   Edit the permission matrix in **Admin › Roles & access** (Super Admin only by default).
 - **Departments:** Development, Research, Product, Marketing, SEO (editable).
 - Every sign-in, failed sign-in and admin action is written to the append-only **Activity log**.
+
+## 4b. Workspaces, projects & tagging (P2)
+
+- **Workspaces** = one per client (`/workspaces`, `/w/{slug}`). Admins (`workspaces.manage`) create them and become **Owner**.
+- **Workspace roles:** Owner (settings, members) · Lead (projects + labels, delete projects) · Member (create/edit projects) · Guest (read-only).
+  People with `workspaces.view-all` (e.g. Finance) can read every workspace as Guest.
+- **Switcher** in the sidebar remembers your last workspace.
+- **Projects** live inside a workspace with a type: Project, Campaign, SEO engagement, Research study, Product release.
+- **@mentions:** type `@` in a project brief to tag a workspace member. Tagged people see it on their dashboard ("Tagged in").
+- **Labels:** colour tags per workspace (Settings tab).
+- **References:** link any project/workspace to another (even across clients). The other side shows a backlink.
+  You only ever see links to records you are allowed to open.
 
 ## 5. Push to GitHub
 

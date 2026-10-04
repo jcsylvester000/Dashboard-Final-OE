@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Identity\Permissions;
+use App\Domain\Workspaces\WorkspaceAccess;
 use App\Models\ActivityLog;
 use App\Models\Department;
+use App\Models\Mention;
+use App\Models\Project;
 use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,6 +45,19 @@ class DashboardController extends Controller
                     ->get(['id', 'name', 'color'])
                     ->map(fn (Department $d) => ['id' => $d->id, 'name' => $d->name, 'color' => $d->color, 'members' => $d->members_count]),
             ] : null,
+            'workspaces' => Workspace::query()
+                ->visibleTo($user)
+                ->where('status', '!=', 'archived')
+                ->whereHas('members', fn ($q) => $q->whereKey($user->id))
+                ->withCount(['projects as open_projects_count' => fn ($q) => $q->whereNotIn('status', ['completed', 'archived'])])
+                ->orderBy('name')
+                ->limit(12)
+                ->get(['id', 'name', 'slug', 'color'])
+                ->map(fn (Workspace $w): array => [
+                    'id' => $w->id, 'name' => $w->name, 'slug' => $w->slug, 'color' => $w->color,
+                    'openProjects' => $w->open_projects_count,
+                ]),
+            'mentions' => $this->recentMentions($user),
             'recentActivity' => $user->can(Permissions::ACTIVITY_VIEW)
                 ? ActivityLog::with('actor:id,name')
                     ->latest('id')
@@ -54,5 +71,47 @@ class DashboardController extends Controller
                     ])
                 : null,
         ]);
+    }
+
+    /**
+     * Projects where the user was @mentioned and can still open.
+     *
+     * @return list<array{id: int, by: string|null, at: string, project: string, projectId: int, workspace: string, workspaceSlug: string}>
+     */
+    private function recentMentions(User $user): array
+    {
+        $access = app(WorkspaceAccess::class);
+        $rows = [];
+
+        $mentions = Mention::query()
+            ->where('mentioned_user_id', $user->id)
+            ->with(['author:id,name', 'mentionable' => fn ($m) => $m->morphWith([Project::class => ['workspace:id,name,slug']])])
+            ->latest('id')
+            ->limit(6)
+            ->get();
+
+        foreach ($mentions as $mention) {
+            $project = $mention->mentionable;
+            if (! $project instanceof Project) {
+                continue;
+            }
+
+            $workspace = $project->workspace;
+            if (! $access->canView($user, $workspace)) {
+                continue;
+            }
+
+            $rows[] = [
+                'id' => $mention->id,
+                'by' => $mention->author?->name,
+                'at' => $mention->created_at->toIso8601String(),
+                'project' => $project->name,
+                'projectId' => $project->id,
+                'workspace' => $workspace->name,
+                'workspaceSlug' => $workspace->slug,
+            ];
+        }
+
+        return $rows;
     }
 }

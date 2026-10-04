@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Briefcase,
     Building2,
+    FolderKanban,
     History,
+    LayoutDashboard,
     LayoutGrid,
     ShieldCheck,
     Users,
+    UsersRound,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher.vue';
 import {
     Sidebar,
     SidebarContent,
@@ -25,6 +30,9 @@ import { index as activityIndex } from '@/routes/admin/activity';
 import { index as departmentsIndex } from '@/routes/admin/departments';
 import { index as rolesIndex } from '@/routes/admin/roles';
 import { index as usersIndex } from '@/routes/admin/users';
+import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
+import { index as wsMembers } from '@/routes/workspaces/members';
+import { index as wsProjects } from '@/routes/workspaces/projects';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -36,7 +44,27 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
+    {
+        title: 'All workspaces',
+        href: workspacesIndex(),
+        icon: Briefcase,
+    },
 ];
+
+// Links for the workspace currently in focus (from the switcher).
+const currentWorkspace = computed(() => page.props.workspaceNav?.current ?? null);
+const workspaceNavItems = computed<NavItem[]>(() => {
+    const ws = currentWorkspace.value;
+    if (!ws) {
+        return [];
+    }
+
+    return [
+        { title: 'Overview', href: workspaceShow(ws.slug), icon: LayoutDashboard },
+        { title: 'Projects', href: wsProjects(ws.slug), icon: FolderKanban },
+        { title: 'Members', href: wsMembers(ws.slug), icon: UsersRound },
+    ];
+});
 
 // Admin links show only when the member holds the permission (server re-checks).
 const adminNavItems = computed<NavItem[]>(() => {
@@ -86,10 +114,15 @@ const adminNavItems = computed<NavItem[]>(() => {
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             </SidebarMenu>
+            <WorkspaceSwitcher />
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" label="Workspace" />
+            <NavMain :items="mainNavItems" label="Agency" />
+            <NavMain
+                :items="workspaceNavItems"
+                :label="currentWorkspace?.name ?? 'Workspace'"
+            />
             <NavMain :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

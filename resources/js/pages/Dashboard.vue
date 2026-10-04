@@ -13,6 +13,8 @@ import { departmentDot, roleLabel, timeAgo } from '@/lib/format';
 import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { edit as securityEdit } from '@/routes/security';
+import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
+import { show as projectShow } from '@/routes/workspaces/projects';
 import type { DepartmentOption } from '@/types/admin';
 
 defineProps<{
@@ -33,6 +35,16 @@ defineProps<{
     recentActivity:
         | { id: number; action: string; actor: string | null; at: string }[]
         | null;
+    workspaces: (DepartmentOption & { slug: string; openProjects: number })[];
+    mentions: {
+        id: number;
+        by: string | null;
+        at: string;
+        project: string;
+        projectId: number;
+        workspace: string;
+        workspaceSlug: string;
+    }[];
 }>();
 
 defineOptions({
@@ -90,11 +102,11 @@ defineOptions({
             </Card>
             <Card>
                 <CardHeader>
-                    <CardDescription>Needs my attention</CardDescription>
-                    <CardTitle class="text-2xl">—</CardTitle>
+                    <CardDescription>Tagged recently</CardDescription>
+                    <CardTitle class="text-2xl">{{ mentions.length }}</CardTitle>
                 </CardHeader>
                 <CardContent class="text-xs text-muted-foreground">
-                    Mentions, handoffs and overdue alerts (P4).
+                    Handoff and overdue alerts join this in P4.
                 </CardContent>
             </Card>
             <Card>
@@ -116,6 +128,58 @@ defineOptions({
                         />
                         {{ d.name }}
                     </Badge>
+                </CardContent>
+            </Card>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle class="text-base">My workspaces</CardTitle>
+                    <CardDescription>
+                        <Link :href="workspacesIndex()" class="underline underline-offset-4"
+                            >All workspaces</Link
+                        >
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p v-if="workspaces.length === 0" class="text-sm text-muted-foreground">
+                        You are not on any client workspace yet.
+                    </p>
+                    <ul v-else class="divide-y text-sm">
+                        <li v-for="w in workspaces" :key="w.id" class="flex items-center justify-between py-2">
+                            <Link :href="workspaceShow(w.slug)" class="flex items-center gap-2 hover:underline">
+                                <span class="size-2 rounded-full" :class="departmentDot[w.color] ?? 'bg-slate-500'" />
+                                {{ w.name }}
+                            </Link>
+                            <span class="text-xs text-muted-foreground">{{ w.openProjects }} open</span>
+                        </li>
+                    </ul>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle class="text-base">Tagged in</CardTitle>
+                    <CardDescription>Where teammates @mentioned you</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p v-if="mentions.length === 0" class="text-sm text-muted-foreground">No mentions yet.</p>
+                    <ul v-else class="divide-y text-sm">
+                        <li v-for="m in mentions" :key="m.id" class="flex items-center justify-between gap-3 py-2">
+                            <span class="min-w-0 truncate">
+                                <Link
+                                    :href="projectShow({ workspace: m.workspaceSlug, project: m.projectId })"
+                                    class="font-medium hover:underline"
+                                    >{{ m.project }}</Link
+                                >
+                                <span class="text-xs text-muted-foreground">
+                                    · {{ m.workspace }} · by {{ m.by ?? 'someone' }}</span
+                                >
+                            </span>
+                            <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(m.at) }}</span>
+                        </li>
+                    </ul>
                 </CardContent>
             </Card>
         </div>

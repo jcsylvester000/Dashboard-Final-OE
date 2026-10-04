@@ -23,5 +23,6 @@ Route::middleware('auth')->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 });
 
+require __DIR__.'/workspaces.php';
 require __DIR__.'/admin.php';
 require __DIR__.'/settings.php';
