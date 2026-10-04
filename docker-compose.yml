@@ -1,0 +1,43 @@
+# Local services for OverEasy Dashboard. PHP runs on the host (Laravel Herd).
+# Start: docker compose up -d    Stop: docker compose down
+# Postgres is published on host port 54320 (not 5432) to avoid clashes with a local
+# PostgreSQL install or Windows/Hyper-V reserved port ranges.
+name: overeasy-dashboard
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-overeasy}
+      POSTGRES_USER: ${DB_USERNAME:-overeasy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-local-only}
+    ports:
+      - "127.0.0.1:${DB_PORT:-54320}:5432"
+    # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>/docker,
+    # so the volume mounts the parent directory (not /var/lib/postgresql/data).
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-overeasy} -d ${DB_DATABASE:-overeasy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  valkeydata:
