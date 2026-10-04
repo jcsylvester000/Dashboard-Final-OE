@@ -5,8 +5,10 @@ namespace App\Providers;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Notifications\WorkEventSubscriber;
 use App\Models\Comment;
+use App\Models\Expense;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Carbon\CarbonImmutable;
@@ -65,6 +67,8 @@ class AppServiceProvider extends ServiceProvider
             'project' => Project::class,
             'task' => Task::class,
             'comment' => Comment::class,
+            'time_entry' => TimeEntry::class,
+            'expense' => Expense::class,
         ]);
 
         Model::preventLazyLoading(! app()->isProduction());

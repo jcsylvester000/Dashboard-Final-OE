@@ -6,7 +6,8 @@ export type NotificationKind =
     | 'status'
     | 'due_soon'
     | 'overdue'
-    | 'escalation';
+    | 'escalation'
+    | 'invoice_overdue';
 
 export type NotificationMode = 'realtime' | 'digest' | 'off';
 

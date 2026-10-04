@@ -18,6 +18,7 @@ enum NotificationKind: string
     case DueSoon = 'due_soon';
     case Overdue = 'overdue';
     case Escalation = 'escalation';
+    case InvoiceOverdue = 'invoice_overdue';
 
     public const MODE_REALTIME = 'realtime';
 
@@ -39,6 +40,7 @@ enum NotificationKind: string
             self::DueSoon => 'Due within 24 hours',
             self::Overdue => 'Overdue',
             self::Escalation => 'Overdue escalations (leads)',
+            self::InvoiceOverdue => 'Client invoice overdue (Finance)',
         };
     }
 
@@ -53,6 +55,6 @@ enum NotificationKind: string
     /** Kinds listed under "Needs my attention" even after being read. */
     public function needsAction(): bool
     {
-        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Overdue, self::Escalation], true);
+        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Overdue, self::Escalation, self::InvoiceOverdue], true);
     }
 }

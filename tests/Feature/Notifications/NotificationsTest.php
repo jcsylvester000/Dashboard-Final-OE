@@ -189,7 +189,7 @@ class NotificationsTest extends TestCase
         $this->actingAs($this->member)->get(route('notifications.edit'))->assertOk();
 
         $modes = ['assigned' => 'realtime', 'mentioned' => 'realtime', 'handoff' => 'digest', 'comment' => 'off',
-            'status' => 'off', 'due_soon' => 'digest', 'overdue' => 'realtime', 'escalation' => 'realtime'];
+            'status' => 'off', 'due_soon' => 'digest', 'overdue' => 'realtime', 'escalation' => 'realtime', 'invoice_overdue' => 'realtime'];
 
         $this->actingAs($this->member)->put(route('notifications.update'), ['modes' => $modes])
             ->assertRedirect(route('notifications.edit'));

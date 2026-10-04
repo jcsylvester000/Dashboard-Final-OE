@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
     Bell,
+    Receipt,
     Gauge,
     Briefcase,
     AlertTriangle,
@@ -40,6 +41,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
+import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as inboxIndex } from '@/routes/inbox';
 import { agency, index as reportsIndex } from '@/routes/reports';
 import { index as departmentsIndex } from '@/routes/admin/departments';
@@ -122,6 +124,10 @@ const workspaceNavItems = computed<NavItem[]>(() => {
 // Admin links show only when the member holds the permission (server re-checks).
 const adminNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [];
+
+    if (can.value['billing.manage']) {
+        items.push({ title: 'Billing', href: billingInvoices(), icon: Receipt });
+    }
 
     if (can.value['users.view']) {
         items.push({ title: 'Team members', href: usersIndex(), icon: Users });

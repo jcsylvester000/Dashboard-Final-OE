@@ -48,6 +48,7 @@ const kindColor: Record<NotificationKind, string> = {
     due_soon: 'bg-orange-500',
     overdue: 'bg-rose-600',
     escalation: 'bg-rose-700',
+    invoice_overdue: 'bg-fuchsia-600',
 };
 
 const opts = { preserveScroll: true };

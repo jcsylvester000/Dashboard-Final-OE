@@ -29,6 +29,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $start_on
  * @property Carbon|null $due_on
  * @property int|null $created_by
+ * @property int|null $fixed_fee_minor
+ * @property Carbon|null $fixed_fee_billed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -64,6 +66,8 @@ class Project extends Model implements Mentionable
         return [
             'start_on' => 'date',
             'due_on' => 'date',
+            'fixed_fee_minor' => 'integer',
+            'fixed_fee_billed_at' => 'datetime',
         ];
     }
 

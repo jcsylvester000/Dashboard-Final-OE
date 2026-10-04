@@ -28,3 +28,6 @@ Schedule::command('queue:prune-failed --hours=720')->daily();
 
 // Weekly report snapshots for workspace leads (P5).
 Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping();
+
+// Overdue client invoices -> Finance inbox (P6).
+Schedule::command('billing:alerts')->dailyAt('07:00')->withoutOverlapping();

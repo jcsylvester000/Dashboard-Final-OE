@@ -199,6 +199,26 @@ composer dev                    # now also starts reverb:start
 - **Weekly snapshots:** saved every Monday 06:00 for last week (`php artisan reports:snapshot`); leads see them under
   the workspace **Reports** tab and can save last week on demand.
 
+## 4g. Billing (P6a) - Finance only, no email to clients
+
+- **Who:** users with `billing.manage` (Finance role; Super Admin). Members never see rates or invoice amounts.
+- **Setup per client** (Billing > Clients > client): currency (PHP/USD), monthly/quarterly cycle, retainer + included
+  hours, what happens to hours over the retainer (bill or absorb), payment terms, VAT %, invoice series, bill-to
+  details, payment instructions. Expenses and fixed-fee projects are added on the same page.
+- **Rates** (Billing > Rates, plus per-client overrides): most specific wins - client+person, client+department,
+  client default, person, department, agency default; the latest rate effective on the work date applies.
+  Optional internal cost per hour feeds profitability reports (P6b).
+- **Periods:** add the next period, **Lock** it (nobody can add, change or delete time dated inside it), then
+  **Create invoice**. Only approved, billable time is invoiced. If time is approved after the draft is built,
+  click **Recalculate** before finalizing.
+- **Invoices:** every line opens to show the exact time entries / expenses / project it bills. **Finalize** assigns
+  the next number (INV-0001...) and freezes the invoice; changes are made with a **credit note** (CN-0001...).
+  Unpaid invoices can be **voided** (their time becomes billable again). Record payments (bank, GCash, Maya, card,
+  check, cash); the invoice list shows receivables aging (current / 1-30 / 31-60 / 61-90 / 90+).
+- **Alerts:** Finance gets an in-app alert the day after an invoice's due date (`php artisan billing:alerts`, daily 07:00).
+- **Money** is stored as integer centavos/cents; tax as basis points (12% = 1200). No floats.
+- **Next (P6b):** PDF invoice + PDF work report (DomPDF), billing reports.
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`

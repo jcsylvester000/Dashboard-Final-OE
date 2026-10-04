@@ -2,6 +2,7 @@
 
 namespace App\Domain\Work;
 
+use App\Domain\Billing\PeriodService;
 use App\Domain\Identity\ActivityLogger;
 use App\Models\Task;
 use App\Models\TimeEntry;
@@ -30,6 +31,8 @@ class TimeService
      */
     public function start(Task $task, User $user): TimeEntry
     {
+        $this->guardPeriod($task->workspace_id, now()->toDateString());
+
         return DB::transaction(function () use ($task, $user) {
             $current = $this->running($user);
             if ($current !== null) {
@@ -80,6 +83,7 @@ class TimeService
      */
     public function log(Task $task, User $user, array $data): TimeEntry
     {
+        $this->guardPeriod($task->workspace_id, $data['entry_date']);
         $this->activity->log('task.time-logged', $task, ['minutes' => $data['minutes']], $user);
 
         return TimeEntry::create([
@@ -101,6 +105,9 @@ class TimeService
     public function update(TimeEntry $entry, array $data): TimeEntry
     {
         $this->guardEditable($entry);
+        if (isset($data['entry_date'])) {
+            $this->guardPeriod($entry->workspace_id, $data['entry_date']);
+        }
         $entry->fill($data)->save();
 
         return $entry;
@@ -147,6 +154,12 @@ class TimeService
             ->whereNotNull('approved_at')
             ->whereNull('locked_at')
             ->where('user_id', '!=', $approver->id)
+            // Not inside a locked billing period: a draft invoice may already bill it.
+            ->whereNotExists(fn ($q) => $q->from('billing_periods')
+                ->whereColumn('billing_periods.workspace_id', 'time_entries.workspace_id')
+                ->where('billing_periods.status', '!=', 'open')
+                ->whereColumn('billing_periods.starts_on', '<=', 'time_entries.entry_date')
+                ->whereColumn('billing_periods.ends_on', '>=', 'time_entries.entry_date'))
             ->update(['approved_by' => null, 'approved_at' => null]);
 
         if ($count > 0) {
@@ -161,6 +174,19 @@ class TimeService
         if ($entry->isLocked()) {
             throw ValidationException::withMessages([
                 'entry' => __('This entry is approved or billed and can no longer be changed.'),
+            ]);
+        }
+        $this->guardPeriod($entry->workspace_id, $entry->entry_date->toDateString());
+    }
+
+    /**
+     * No time can be added, changed or removed inside a locked billing period (P6).
+     */
+    private function guardPeriod(int $workspaceId, string $date): void
+    {
+        if (PeriodService::isLocked($workspaceId, substr($date, 0, 10))) {
+            throw ValidationException::withMessages([
+                'entry' => __('This date is in a locked billing period. Ask Finance to unlock it.'),
             ]);
         }
     }
