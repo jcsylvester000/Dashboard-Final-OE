@@ -12,6 +12,7 @@ use App\Http\Requests\Work\SaveTaskRequest;
 use App\Models\ActivityLog;
 use App\Models\Comment;
 use App\Models\Task;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\WorkflowTemplate;
 use App\Models\Workspace;
@@ -133,6 +134,7 @@ class TaskController extends Controller
             'task' => [
                 ...$this->present->row($task, $open),
                 'description' => $task->description,
+                'work_details' => $task->work_details ?? (object) [],
                 'estimate_minutes' => $task->estimate_minutes,
                 'reporter' => $task->reporter?->only(['id', 'name']),
                 'completed_at' => $task->completed_at?->toIso8601String(),
@@ -155,6 +157,9 @@ class TaskController extends Controller
                 ])->values(),
             ],
             'timeline' => $timeline,
+            // Guests (read-only) don't see who logged what.
+            'time' => Gate::allows('update', $task) ? $this->timeSummary($task, $user) : null,
+            'workDetailFields' => Task::WORK_DETAIL_FIELDS,
             'links' => $links->linksFor($task, $user),
             'canDelete' => Gate::allows('delete', $task),
             // Same-workspace tasks for the "waiting on" picker.
@@ -217,6 +222,49 @@ class TaskController extends Controller
         $task->watchers()->toggle([$request->user()->id]);
 
         return back();
+    }
+
+    /**
+     * Time logged on the task: totals and the latest entries.
+     *
+     * @return array<string, mixed>
+     */
+    private function timeSummary(Task $task, User $user): array
+    {
+        $entries = TimeEntry::query()
+            ->with('user:id,name')
+            ->where('task_id', $task->id)
+            ->latest('entry_date')
+            ->latest('id')
+            ->limit(30)
+            ->get();
+
+        $totals = TimeEntry::query()->where('task_id', $task->id)
+            ->selectRaw('coalesce(sum(minutes), 0) as total')
+            ->selectRaw('coalesce(sum(case when is_billable then minutes else 0 end), 0) as billable')
+            ->selectRaw('coalesce(sum(case when user_id = ? then minutes else 0 end), 0) as mine', [$user->id])
+            ->first();
+
+        $running = TimeEntry::query()->where('user_id', $user->id)->running()->latest('id')->first();
+
+        return [
+            'total' => (int) ($totals?->getAttribute('total') ?? 0),
+            'billable' => (int) ($totals?->getAttribute('billable') ?? 0),
+            'mine' => (int) ($totals?->getAttribute('mine') ?? 0),
+            'estimate' => $task->estimate_minutes,
+            'running_here' => $running !== null && $running->task_id === $task->id,
+            'entries' => $entries->map(fn (TimeEntry $e): array => [
+                'id' => $e->id,
+                'user' => $e->user->name,
+                'is_mine' => $e->user_id === $user->id,
+                'entry_date' => $e->entry_date->toDateString(),
+                'minutes' => $e->minutes,
+                'note' => $e->note,
+                'is_billable' => $e->is_billable,
+                'running' => $e->isRunning(),
+                'locked' => $e->isLocked(),
+            ])->values(),
+        ];
     }
 
     /**

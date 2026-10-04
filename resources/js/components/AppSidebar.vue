@@ -4,6 +4,9 @@ import {
     Briefcase,
     Building2,
     CheckSquare,
+    CalendarDays,
+    ClipboardCheck,
+    Clock,
     Columns3,
     Inbox,
     Workflow,
@@ -41,7 +44,8 @@ import { mine as myTasks } from '@/routes/tasks';
 import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
 import { index as wsMembers } from '@/routes/workspaces/members';
 import { index as wsProjects } from '@/routes/workspaces/projects';
-import { board as wsBoard, index as wsTasks } from '@/routes/workspaces/tasks';
+import { approvals, timesheet } from '@/routes/time';
+import { board as wsBoard, calendar as wsCalendar, index as wsTasks } from '@/routes/workspaces/tasks';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -67,6 +71,10 @@ const mainNavItems: NavItem[] = [
 
 const agencyNavItems = computed<NavItem[]>(() => {
     const items = [...mainNavItems];
+    items.splice(2, 0, { title: 'My timesheet', href: timesheet(), icon: Clock });
+    if (page.props.auth.leads) {
+        items.splice(3, 0, { title: 'Time approvals', href: approvals(), icon: ClipboardCheck });
+    }
     const dept = page.props.auth.department;
     if (dept) {
         items.splice(2, 0, { title: `${dept.name} queue`, href: departmentQueue(dept.slug), icon: Inbox });
@@ -87,6 +95,7 @@ const workspaceNavItems = computed<NavItem[]>(() => {
         { title: 'Overview', href: workspaceShow(ws.slug), icon: LayoutDashboard },
         { title: 'Tasks', href: wsTasks(ws.slug), icon: ListTodo },
         { title: 'Board', href: wsBoard(ws.slug), icon: Columns3 },
+        { title: 'Calendar', href: wsCalendar(ws.slug), icon: CalendarDays },
         { title: 'Projects', href: wsProjects(ws.slug), icon: FolderKanban },
         { title: 'Members', href: wsMembers(ws.slug), icon: UsersRound },
     ];

@@ -7,7 +7,7 @@ there is no public sign-up and the app never sends email.
 Tailwind CSS 4 + shadcn-vue · PostgreSQL 18 · Valkey (Redis-compatible) · Fortify (login, 2FA, passkeys) ·
 spatie/laravel-permission 8. Deploys to Laravel Forge.
 
-Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** (verified) and **P3a Unified workflow** are in place.
+Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** (verified) **P3a Unified workflow** (verified) and **P3b Time tracking** are in place.
 The phase checklist lives in `6 - Final Documentation/OverEasy Dashboard Build Game Plan - 2026-10-04/`.
 
 ---
@@ -143,6 +143,17 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
 - **Workflow templates** (Admin › Workflow templates): Client Onboarding, Website Build, SEO Audit > Fix,
   Campaign Launch, Monthly Client Report. "Start a workflow" on the Tasks page creates the whole chain.
 - **Discussion:** comments with @mentions (edit for 15 minutes), watchers, and a timeline of every change.
+
+## 4d. Time tracking & calendar (P3b)
+
+- **Timer:** "Start timer" on any task; the running timer shows in the top bar on every page with a Stop button.
+  Starting another timer stops the first. Minutes round up; a forgotten timer is capped at 12 hours.
+- **Log time:** hours + minutes, date, note, billable flag, from the task page.
+- **My timesheet:** your week by task and day, with billable and approved totals.
+- **Time approvals:** workspace owners/leads approve their team's time (not their own). Approved time is locked
+  and is what invoices (P6) will bill.
+- **Marketing / SEO details** on tasks: channel, campaign, deliverable; target URL, keyword, work type.
+- **Calendar** tab per workspace: tasks by due date, month view.
 
 ## 5. Push to GitHub
 

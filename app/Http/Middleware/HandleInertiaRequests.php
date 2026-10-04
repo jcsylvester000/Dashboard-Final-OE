@@ -4,9 +4,11 @@ namespace App\Http\Middleware;
 
 use App\Domain\Identity\Permissions;
 use App\Models\Department;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -40,12 +42,45 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'roles' => fn () => $user?->getRoleNames()->values()->all() ?? [],
                 'can' => fn () => $this->abilities($user),
+                // True when the user can approve time (owner/lead somewhere, or manages workspaces).
+                'leads' => fn () => $user !== null && (
+                    $user->can(Permissions::WORKSPACES_MANAGE)
+                    || DB::table('workspace_user')->where('user_id', $user->id)->whereIn('role', [Workspace::ROLE_OWNER, Workspace::ROLE_LEAD])->exists()
+                ),
                 'department' => fn () => $user?->primary_department_id
                     ? Department::query()->whereKey($user->primary_department_id)->first(['id', 'name', 'slug'])?->only(['id', 'name', 'slug'])
                     : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'workspaceNav' => fn () => $user ? $this->workspaceNav($request, $user) : null,
+            'runningTimer' => fn () => $user ? $this->runningTimer($user) : null,
+        ];
+    }
+
+    /**
+     * The user's running timer, shown in the header on every page.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function runningTimer(User $user): ?array
+    {
+        $entry = TimeEntry::query()
+            ->with(['task:id,title', 'workspace:id,slug'])
+            ->where('user_id', $user->id)
+            ->whereHas('workspace')
+            ->running()
+            ->latest('id')
+            ->first();
+
+        if ($entry === null || $entry->started_at === null) {
+            return null;
+        }
+
+        return [
+            'id' => $entry->id,
+            'started_at' => $entry->started_at->toIso8601String(),
+            'task' => $entry->task?->only(['id', 'title']),
+            'workspace_slug' => $entry->workspace->slug,
         ];
     }
 

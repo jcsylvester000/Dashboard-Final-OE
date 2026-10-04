@@ -1,5 +1,6 @@
 import type { Directive } from 'vue';
 import type { Auth } from '@/types/auth';
+import type { RunningTimer } from '@/types/time';
 import type { WorkspaceNav } from '@/types/workspace';
 
 // Extend ImportMeta interface for Vite...
@@ -22,6 +23,7 @@ declare module '@inertiajs/core' {
             auth: Auth;
             sidebarOpen: boolean;
             workspaceNav: WorkspaceNav | null;
+            runningTimer: RunningTimer | null;
             [key: string]: unknown;
         };
     }

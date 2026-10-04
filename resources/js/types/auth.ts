@@ -32,6 +32,8 @@ export type Auth = {
     roles: string[];
     /** Display-only. The server authorizes every request. */
     can: Partial<Record<Permission, boolean>>;
+    /** Can approve time entries (workspace owner/lead or workspace manager). */
+    leads: boolean;
     /** The user's primary department, for the department queue link. */
     department: { id: number; name: string; slug: string } | null;
 };

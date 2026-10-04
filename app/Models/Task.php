@@ -31,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $handoff_from_task_id
  * @property string $title
  * @property string|null $description
+ * @property array<string, string|null>|null $work_details
  * @property string $priority
  * @property int|null $assignee_id
  * @property int|null $reporter_id
@@ -43,12 +44,31 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'workspace_id', 'project_id', 'department_id', 'status_id', 'parent_id', 'handoff_from_task_id',
-    'title', 'description', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position',
+    'title', 'description', 'work_details', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position',
 ])]
 class Task extends Model implements Mentionable
 {
     /** @use HasFactory<TaskFactory> */
     use HasFactory, HasLabels, HasMentions, IsLinkable, SoftDeletes;
+
+    /**
+     * Department-specific fields stored in work_details, by department slug.
+     * field => [label, input type, options?]
+     *
+     * @var array<string, array<string, array{0: string, 1: string, 2?: list<string>}>>
+     */
+    public const WORK_DETAIL_FIELDS = [
+        'marketing' => [
+            'channel' => ['Channel', 'select', ['Facebook', 'Instagram', 'TikTok', 'Google Ads', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Other']],
+            'campaign' => ['Campaign', 'text'],
+            'deliverable_type' => ['Deliverable', 'select', ['Ad creative', 'Copy', 'Post', 'Video', 'Landing page', 'Report', 'Other']],
+        ],
+        'seo' => [
+            'target_url' => ['Target URL', 'url'],
+            'keyword' => ['Primary keyword', 'text'],
+            'work_type' => ['Work type', 'select', ['On-page', 'Technical', 'Content', 'Links', 'Local', 'Reporting']],
+        ],
+    ];
 
     /** priority => label */
     public const PRIORITIES = [
@@ -66,6 +86,7 @@ class Task extends Model implements Mentionable
         return [
             'due_on' => 'date',
             'completed_at' => 'datetime',
+            'work_details' => 'array',
             'estimate_minutes' => 'integer',
             'position' => 'integer',
         ];
@@ -153,6 +174,12 @@ class Task extends Model implements Mentionable
     public function watchers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'task_watchers');
+    }
+
+    /** @return HasMany<TimeEntry, $this> */
+    public function timeEntries(): HasMany
+    {
+        return $this->hasMany(TimeEntry::class);
     }
 
     /** @return MorphMany<Comment, $this> */

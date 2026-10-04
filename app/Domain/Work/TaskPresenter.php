@@ -20,7 +20,7 @@ class TaskPresenter
     public const WITH = [
         'status:id,name,slug,category,color',
         'assignee:id,name',
-        'department:id,name,color',
+        'department:id,name,slug,color',
         'project:id,name',
         'labels:id,name,color',
         'workspace:id,name,slug,color',
@@ -38,7 +38,7 @@ class TaskPresenter
             'priority' => $task->priority,
             'status' => $task->status->only(['id', 'name', 'slug', 'category', 'color']),
             'assignee' => $task->assignee?->only(['id', 'name']),
-            'department' => $task->department?->only(['id', 'name', 'color']),
+            'department' => $task->department?->only(['id', 'name', 'slug', 'color']),
             'project' => $task->project?->only(['id', 'name']),
             'labels' => $task->labels->map(fn (Label $l) => ['id' => $l->id, 'name' => $l->name, 'color' => $l->color])->values(),
             'workspace' => $task->workspace->only(['id', 'name', 'slug', 'color']),

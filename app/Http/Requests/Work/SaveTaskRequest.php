@@ -29,6 +29,11 @@ class SaveTaskRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if (is_array($this->input('work_details'))) {
+            // Drop empty values so clearing a field removes it.
+            $this->merge(['work_details' => array_filter((array) $this->input('work_details'), fn ($v) => $v !== null && $v !== '') ?: null]);
+        }
+
         if ($this->has('label_ids')) {
             $this->merge(['label_ids' => array_values(array_filter((array) $this->input('label_ids')))]);
         }
@@ -55,9 +60,45 @@ class SaveTaskRequest extends FormRequest
             'parent_id' => ['sometimes', 'nullable', 'integer', Rule::exists('tasks', 'id')->where('workspace_id', $workspace->id)->whereNull('deleted_at')],
             'due_on' => ['sometimes', 'nullable', 'date'],
             'estimate_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000'],
+            'work_details' => ['sometimes', 'nullable', 'array:'.implode(',', $this->workDetailKeys())],
+            'work_details.*' => ['nullable', 'string', 'max:255'],
+            'work_details.target_url' => ['nullable', 'url:http,https', 'max:255'],
+            ...$this->workDetailSelectRules(),
             'label_ids' => ['sometimes', 'array', 'max:30'],
             'label_ids.*' => ['integer', Rule::exists('labels', 'id')->where('workspace_id', $workspace->id)],
         ];
+    }
+
+    /**
+     * Select-type work detail fields must use one of their listed options.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    private function workDetailSelectRules(): array
+    {
+        $rules = [];
+        foreach (Task::WORK_DETAIL_FIELDS as $fields) {
+            foreach ($fields as $key => $def) {
+                if ($def[1] === 'select') {
+                    $rules['work_details.'.$key] = ['nullable', Rule::in($def[2])];
+                }
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function workDetailKeys(): array
+    {
+        $keys = [];
+        foreach (Task::WORK_DETAIL_FIELDS as $fields) {
+            $keys = [...$keys, ...array_keys($fields)];
+        }
+
+        return $keys;
     }
 
     /**

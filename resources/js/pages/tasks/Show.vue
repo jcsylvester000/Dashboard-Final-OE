@@ -18,9 +18,12 @@ import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
 import TaskMeta from '@/components/work/TaskMeta.vue';
+import TaskTimeCard from '@/components/work/TaskTimeCard.vue';
+import WorkDetailsCard from '@/components/work/WorkDetailsCard.vue';
 import { chipColor, timeAgo } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { index as tasksIndex, show } from '@/routes/workspaces/tasks';
+import type { TaskTime } from '@/types/time';
 import type { LinkRow } from '@/types/workspace';
 import type { TaskDetail, TaskPageShared, TaskRow, TimelineEntry } from '@/types/work';
 
@@ -31,6 +34,8 @@ const props = defineProps<
         links: LinkRow[];
         canDelete: boolean;
         dependencyOptions: { id: number; title: string }[];
+        time: TaskTime | null;
+        workDetailFields: Record<string, Record<string, [string, string, string[]?]>>;
     }
 >();
 
@@ -101,6 +106,7 @@ const actionLabels: Record<string, string> = {
     'task.unblocked': 'unblocked (previous step done)',
     'task.dependency-added': 'added a dependency',
     'task.dependency-removed': 'removed a dependency',
+    'task.time-logged': 'logged time',
 };
 
 function describe(entry: TimelineEntry): string {
@@ -361,6 +367,19 @@ function describe(entry: TimelineEntry): string {
                         <p class="text-xs text-muted-foreground">Watching: {{ task.watchers.map((w) => w.name).join(', ') || 'nobody' }}</p>
                     </CardContent>
                 </Card>
+
+                <TaskTimeCard v-if="time" :workspace-slug="ws" :task-id="task.id" :time="time" :can-log="can" />
+
+                <WorkDetailsCard
+                    :key="`${task.id}-${task.department?.id}`"
+                    :workspace-slug="ws"
+                    :task-id="task.id"
+                    :department-name="task.department?.name ?? null"
+                    :department-slug="task.department?.slug ?? null"
+                    :fields="workDetailFields"
+                    :values="task.work_details"
+                    :can-edit="can"
+                />
 
                 <!-- Dependencies -->
                 <Card>

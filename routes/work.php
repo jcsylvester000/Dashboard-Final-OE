@@ -2,10 +2,12 @@
 
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Admin\WorkflowTemplateController;
+use App\Http\Controllers\Work\CalendarController;
 use App\Http\Controllers\Work\CommentController;
 use App\Http\Controllers\Work\QueueController;
 use App\Http\Controllers\Work\TaskController;
 use App\Http\Controllers\Work\TaskFlowController;
+use App\Http\Controllers\Work\TimeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -14,6 +16,14 @@ use Illuminate\Support\Facades\Route;
 */
 Route::middleware('auth')->group(function () {
     Route::get('my-tasks', [QueueController::class, 'mine'])->name('tasks.mine');
+
+    // Time tracking (P3b)
+    Route::post('timer/stop', [TimeController::class, 'stop'])->name('time.timer.stop');
+    Route::get('timesheet', [TimeController::class, 'timesheet'])->name('time.timesheet');
+    Route::get('approvals', [TimeController::class, 'approvals'])->name('time.approvals');
+    Route::post('approvals', [TimeController::class, 'approve'])->name('time.approve');
+    Route::put('time/{entry}', [TimeController::class, 'update'])->name('time.update');
+    Route::delete('time/{entry}', [TimeController::class, 'destroy'])->name('time.destroy');
     Route::get('departments/{department:slug}/queue', [QueueController::class, 'department'])->name('departments.queue');
 
     Route::prefix('w/{workspace:slug}')->name('workspaces.')->group(function () {
@@ -22,6 +32,9 @@ Route::middleware('auth')->group(function () {
         Route::scopeBindings()->group(function () {
             Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
             Route::get('board', [TaskController::class, 'board'])->name('tasks.board');
+            Route::get('calendar', CalendarController::class)->name('tasks.calendar');
+            Route::post('tasks/{task}/timer', [TimeController::class, 'start'])->name('tasks.timer');
+            Route::post('tasks/{task}/time', [TimeController::class, 'log'])->name('tasks.time.store');
             Route::post('tasks', [TaskController::class, 'store'])->name('tasks.store');
             Route::get('tasks/{task}', [TaskController::class, 'show'])->name('tasks.show');
             Route::put('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');

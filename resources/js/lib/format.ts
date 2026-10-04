@@ -104,3 +104,24 @@ export function isOverdue(date: string | null | undefined): boolean {
 
     return date < new Date().toISOString().slice(0, 10);
 }
+
+/** 95 -> "1h 35m", 45 -> "45m", 0 -> "0m" */
+export function formatMinutes(minutes: number | null | undefined): string {
+    const m = Math.max(0, Math.round(minutes ?? 0));
+    const h = Math.floor(m / 60);
+    const rest = m % 60;
+
+    if (h === 0) {
+        return `${rest}m`;
+    }
+
+    return rest === 0 ? `${h}h` : `${h}h ${rest}m`;
+}
+
+/** Add days to a YYYY-MM-DD date string (timezone-safe). */
+export function addDays(date: string, days: number): string {
+    const [y, m, d] = date.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + days));
+
+    return dt.toISOString().slice(0, 10);
+}

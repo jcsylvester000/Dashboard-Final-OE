@@ -15,7 +15,7 @@ export type TaskRow = {
     priority: 'low' | 'normal' | 'high' | 'urgent';
     status: TaskStatus;
     assignee: { id: number; name: string } | null;
-    department: { id: number; name: string; color: string } | null;
+    department: { id: number; name: string; slug?: string; color: string } | null;
     project: { id: number; name: string } | null;
     labels: LabelOption[];
     workspace: { id: number; name: string; slug: string; color: string };
@@ -37,6 +37,7 @@ export type TaskComment = {
 
 export type TaskDetail = TaskRow & {
     description: string | null;
+    work_details: Record<string, string | null>;
     estimate_minutes: number | null;
     reporter: { id: number; name: string } | null;
     completed_at: string | null;

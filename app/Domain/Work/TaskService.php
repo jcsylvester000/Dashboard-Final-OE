@@ -39,7 +39,7 @@ class TaskService
 
             $task = new Task;
             $task->fill([
-                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes']),
+                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes', 'work_details']),
                 'workspace_id' => $workspace->id,
                 'status_id' => $statusId,
                 'description' => $normalized['text'],
@@ -70,7 +70,7 @@ class TaskService
         return DB::transaction(function () use ($task, $data, $actor) {
             $before = Arr::only($task->getAttributes(), self::TRACKED);
 
-            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes', 'position']);
+            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes', 'position', 'work_details']);
 
             $mentionIds = null;
             if (array_key_exists('description', $data)) {
