@@ -243,6 +243,18 @@ composer dev                    # now also starts reverb:start
 - **Work Summary** (workspace tab, leads and Finance): who worked on what in any date range, by task and person,
   with Marketing / SEO details; filter by department; export CSV or PDF.
 
+## 4i. Files (P8)
+
+- **Files card** on every task and project: attach a file (progress shown), image thumbnails, open or download,
+  delete (uploader or workspace lead).
+- **Private:** files live in `storage/app/private/attachments` (back it up on Forge) and are only reachable through
+  signed links that expire after 10 minutes (`FILES_LINK_MINUTES`); you must also be able to open the workspace.
+- **Checked on the server:** real file type (from the contents) and size. Names are cleaned; the stored file gets a
+  random name. **Admin > File settings** (`system.manage`) sets the size limit (default 25 MB) and allowed types
+  (images, PDF, Office, text/CSV by default; ZIP and video optional).
+- **Thumbnails** need PHP's GD extension (`extension=gd` in php.ini); without it files still upload, just no preview.
+- **UploadThing** storage plugs in later behind the same `FileStore` interface (`FILES_DRIVER`), no other code changes.
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`

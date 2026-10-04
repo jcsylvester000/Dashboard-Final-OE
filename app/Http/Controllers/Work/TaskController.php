@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Work;
 
+use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Work\TaskPresenter;
 use App\Domain\Work\TaskService;
@@ -162,6 +163,8 @@ class TaskController extends Controller
             'workDetailFields' => Task::WORK_DETAIL_FIELDS,
             'links' => $links->linksFor($task, $user),
             'canDelete' => Gate::allows('delete', $task),
+            'attachments' => app(AttachmentPresenter::class)->for($task, $workspace, $user),
+            'fileLimits' => app(AttachmentPresenter::class)->limits(),
             // Same-workspace tasks for the "waiting on" picker.
             'dependencyOptions' => $workspace->tasks()
                 ->whereKeyNot($task->id)

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\DashboardController;
@@ -22,6 +23,11 @@ Route::middleware('auth')->group(function () {
         ->name('password.force.update');
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    // Attachments (P8): uploads, signed downloads, delete.
+    Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:60,1')->name('attachments.store');
+    Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
+    Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
 
     // In-app alerts inbox (P4)
     Route::get('inbox', [InboxController::class, 'index'])->name('inbox.index');

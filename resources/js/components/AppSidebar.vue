@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
     Bell,
+    Paperclip,
     Receipt,
     Gauge,
     Briefcase,
@@ -41,6 +42,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
+import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as inboxIndex } from '@/routes/inbox';
 import { agency, index as reportsIndex } from '@/routes/reports';
@@ -166,6 +168,7 @@ const adminNavItems = computed<NavItem[]>(() => {
     }
 
     if (can.value['system.manage']) {
+        items.push({ title: 'File settings', href: fileSettings(), icon: Paperclip });
         items.push({
             title: 'Failed jobs',
             href: failedJobsIndex(),

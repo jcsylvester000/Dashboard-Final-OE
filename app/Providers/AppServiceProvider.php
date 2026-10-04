@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Domain\Files\FileStore;
+use App\Domain\Files\LocalFileStore;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Notifications\WorkEventSubscriber;
+use App\Domain\Settings\AppSettings;
 use App\Models\Comment;
 use App\Models\Expense;
 use App\Models\Project;
@@ -34,7 +37,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // File storage driver (P8): local private disk today; UploadThing later via FILES_DRIVER.
+        $this->app->bind(FileStore::class, fn () => new LocalFileStore((string) config('files.local_disk', 'local')));
+        $this->app->scoped(AppSettings::class);
     }
 
     public function boot(): void

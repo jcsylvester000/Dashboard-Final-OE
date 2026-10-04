@@ -10,6 +10,7 @@ import LabelBadge from '@/components/LabelBadge.vue';
 import MentionText from '@/components/MentionText.vue';
 import MentionTextarea from '@/components/MentionTextarea.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
+import AttachmentsPanel from '@/components/files/AttachmentsPanel.vue';
 import ReferencePanel from '@/components/ReferencePanel.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,6 +24,7 @@ import WorkDetailsCard from '@/components/work/WorkDetailsCard.vue';
 import { chipColor, timeAgo } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { index as tasksIndex, show } from '@/routes/workspaces/tasks';
+import type { AttachmentRow, FileLimits } from '@/types/files';
 import type { TaskTime } from '@/types/time';
 import type { LinkRow } from '@/types/workspace';
 import type { TaskDetail, TaskPageShared, TaskRow, TimelineEntry } from '@/types/work';
@@ -33,6 +35,8 @@ const props = defineProps<
         timeline: TimelineEntry[];
         links: LinkRow[];
         canDelete: boolean;
+        attachments: AttachmentRow[];
+        fileLimits: FileLimits;
         dependencyOptions: { id: number; title: string }[];
         time: TaskTime | null;
         workDetailFields: Record<string, Record<string, [string, string, string[]?]>>;
@@ -415,6 +419,8 @@ function describe(entry: TimelineEntry): string {
                         </div>
                     </CardContent>
                 </Card>
+
+                <AttachmentsPanel attachable-type="task" :attachable-id="task.id" :attachments="attachments" :limits="fileLimits" :can-upload="can" />
 
                 <Card>
                     <CardHeader>

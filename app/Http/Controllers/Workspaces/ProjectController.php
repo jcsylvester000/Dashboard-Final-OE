@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Workspaces;
 
+use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\MentionService;
@@ -141,6 +142,8 @@ class ProjectController extends Controller
             'labels' => $workspace->labels()->orderBy('name')->get(['id', 'name', 'color']),
             'members' => $this->presenter->memberOptions($workspace),
             'canDelete' => Gate::allows('lead', $workspace),
+            'attachments' => app(AttachmentPresenter::class)->for($project, $workspace, $user),
+            'fileLimits' => app(AttachmentPresenter::class)->limits(),
         ]);
     }
 

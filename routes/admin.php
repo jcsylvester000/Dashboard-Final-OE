@@ -4,6 +4,7 @@ use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\FailedJobController;
+use App\Http\Controllers\Admin\FileSettingsController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -57,5 +58,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::get('failed-jobs', [FailedJobController::class, 'index'])->name('failed-jobs.index');
         Route::post('failed-jobs/retry', [FailedJobController::class, 'retry'])->name('failed-jobs.retry');
         Route::post('failed-jobs/discard', [FailedJobController::class, 'destroy'])->name('failed-jobs.destroy');
+        Route::get('files', [FileSettingsController::class, 'edit'])->name('files.edit');
+        Route::put('files', [FileSettingsController::class, 'update'])->name('files.update');
     });
 });

@@ -5,6 +5,7 @@ import { ref } from 'vue';
 import ProjectController from '@/actions/App/Http/Controllers/Workspaces/ProjectController';
 import LabelBadge from '@/components/LabelBadge.vue';
 import MentionText from '@/components/MentionText.vue';
+import AttachmentsPanel from '@/components/files/AttachmentsPanel.vue';
 import ReferencePanel from '@/components/ReferencePanel.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +14,7 @@ import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import { formatDate, isOverdue, projectStatusColor, timeAgo } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { index as projectsIndex } from '@/routes/workspaces/projects';
+import type { AttachmentRow, FileLimits } from '@/types/files';
 import type {
     LabelOption,
     LinkRow,
@@ -31,6 +33,8 @@ const props = defineProps<{
     labels: LabelOption[];
     members: MemberOption[];
     canDelete: boolean;
+    attachments: AttachmentRow[];
+    fileLimits: FileLimits;
 }>();
 
 defineOptions({
@@ -182,5 +186,13 @@ function destroy(): void {
                 />
             </CardContent>
         </Card>
+
+        <AttachmentsPanel
+            attachable-type="project"
+            :attachable-id="project.id"
+            :attachments="attachments"
+            :limits="fileLimits"
+            :can-upload="workspace.can.contribute"
+        />
     </div>
 </template>
