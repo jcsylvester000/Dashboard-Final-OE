@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -56,6 +57,15 @@ class RoleController extends Controller
         ]);
 
         $before = $role->permissions()->pluck('name')->all();
+
+        // No-escalation rule: only a Super Admin may grant a permission they don't hold themselves.
+        /** @var User $actor */
+        $actor = $request->user();
+        if (! $actor->isSuperAdmin()) {
+            $own = $actor->getAllPermissions()->pluck('name')->all();
+            abort_unless(array_diff(array_diff($data['permissions'], $before), $own) === [], 403, 'You can only grant permissions you have yourself.');
+        }
+
         $role->syncPermissions($data['permissions']);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 

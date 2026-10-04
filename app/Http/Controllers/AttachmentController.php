@@ -83,7 +83,7 @@ class AttachmentController extends Controller
         $user = $request->user();
         $workspace = Workspace::query()->find($attachment->workspace_id);
         abort_unless(
-            $workspace !== null && ($attachment->uploaded_by === $user->id ? Gate::allows('view', $workspace) : Gate::allows('lead', $workspace)),
+            $workspace !== null && ($attachment->uploaded_by === $user->id ? Gate::allows('contribute', $workspace) : Gate::allows('lead', $workspace)),
             403,
         );
 

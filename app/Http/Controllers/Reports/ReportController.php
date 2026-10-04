@@ -91,7 +91,9 @@ class ReportController extends Controller
         }
         $text = (string) $value;
 
-        return $text !== '' && in_array($text[0], ['=', '+', '-', '@', "\t", "\r"], true) ? "'".$text : $text;
+        $first = ltrim($text, " \n")[0] ?? '';
+
+        return in_array($first, ['=', '+', '-', '@', "\t", "\r"], true) ? "'".$text : $text;
     }
 
     /**

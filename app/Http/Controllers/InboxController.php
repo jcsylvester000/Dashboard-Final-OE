@@ -52,8 +52,10 @@ class InboxController extends Controller
 
         $url = (string) ($item->data['url'] ?? '');
 
-        // Only same-site relative paths (no open redirects).
+        // Only same-site relative paths (no open redirects). Browsers read "/\host" as "//host",
+        // so backslashes and control characters are refused too.
         return str_starts_with($url, '/') && ! str_starts_with($url, '//')
+            && ! str_contains($url, '\\') && preg_match('/[\x00-\x1F\x7F]/', $url) !== 1
             ? redirect($url)
             : to_route('inbox.index');
     }

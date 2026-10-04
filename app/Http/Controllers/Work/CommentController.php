@@ -41,6 +41,8 @@ class CommentController extends Controller
         /** @var User $user */
         $user = $request->user();
         abort_unless($comment->editableBy($user), 403, 'Comments can only be edited by their author for 15 minutes.');
+        // The author must still be able to contribute here (not removed or demoted to guest).
+        Gate::authorize('contribute', $workspace);
 
         $body = (string) $request->validate(['body' => ['required', 'string', 'max:10000']])['body'];
         $normalized = $this->mentions->normalize($body, $workspace->id);
@@ -54,7 +56,7 @@ class CommentController extends Controller
     public function destroy(Request $request, Workspace $workspace, Comment $comment): RedirectResponse
     {
         abort_unless(
-            $comment->user_id === $request->user()->id || Gate::allows('lead', $workspace),
+            ($comment->user_id === $request->user()->id && Gate::allows('view', $workspace)) || Gate::allows('lead', $workspace),
             403,
         );
 

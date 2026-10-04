@@ -255,6 +255,15 @@ composer dev                    # now also starts reverb:start
 - **Thumbnails** need PHP's GD extension (`extension=gd` in php.ini); without it files still upload, just no preview.
 - **UploadThing** storage plugs in later behind the same `FileStore` interface (`FILES_DRIVER`), no other code changes.
 
+## 4j. Production (P10)
+
+- Deploy kit: `deploy/forge-deploy.sh` (Forge deploy script) and `.env.production.example` (production settings).
+- Full steps (server, site, daemons, scheduler, backups + restore drill, monitoring, go-live checklist):
+  `6 - Final Documentation/OverEasy Dashboard Launch Kit - 2026-10-05/Forge Deployment & Operations Runbook.md`.
+- Production turns on a Content-Security-Policy (`CSP_ENABLED`), secure + encrypted session cookies and HSTS.
+- `APP_TIMEZONE` sets the team's local time zone (due dates, "today", alerts). Default UTC.
+- CI also runs `composer audit` and `npm audit`; Dependabot watches GitHub Actions, Composer and npm weekly.
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`

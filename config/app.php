@@ -73,7 +73,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------
@@ -130,5 +130,8 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
+
+    // Content-Security-Policy header (SecurityHeaders middleware). On by default in production.
+    'csp_enabled' => (bool) env('CSP_ENABLED', env('APP_ENV') === 'production'),
 
 ];
