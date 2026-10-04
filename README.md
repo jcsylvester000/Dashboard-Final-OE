@@ -262,6 +262,8 @@ composer dev                    # now also starts reverb:start
   `6 - Final Documentation/OverEasy Dashboard Launch Kit - 2026-10-05/Forge Deployment & Operations Runbook.md`.
 - Production turns on a Content-Security-Policy (`CSP_ENABLED`), secure + encrypted session cookies and HSTS.
 - `APP_TIMEZONE` sets the team's local time zone (due dates, "today", alerts). Default UTC.
+- **Demo data for QA / speed checks** (local or staging only, refuses production): `php artisan db:seed --class=DemoDataSeeder`
+  - 12 demo staff (password `password`), 3 demo clients, ~500 tasks, ~5,000 time entries.
 - CI also runs `composer audit` and `npm audit`; Dependabot watches GitHub Actions, Composer and npm weekly.
 
 ## 5. Push to GitHub
