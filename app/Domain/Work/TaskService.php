@@ -4,6 +4,8 @@ namespace App\Domain\Work;
 
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Workspaces\MentionService;
+use App\Events\Work\TaskAssigned;
+use App\Events\Work\TaskStatusChanged;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\Task;
@@ -58,6 +60,10 @@ class TaskService
 
             $this->activity->log('task.created', $task, ['workspace_id' => $workspace->id], $actor);
 
+            if ($task->assignee_id !== null) {
+                TaskAssigned::dispatch($task, $actor);
+            }
+
             return $task;
         });
     }
@@ -103,6 +109,13 @@ class TaskService
                 $this->activity->log('task.updated', $task, ['changes' => $changes], $actor);
             }
 
+            if ($task->wasChanged('assignee_id') && $task->assignee_id !== null) {
+                TaskAssigned::dispatch($task, $actor);
+            }
+            if ($task->wasChanged('status_id')) {
+                TaskStatusChanged::dispatch($task, (int) $before['status_id'], $actor);
+            }
+
             if ($task->wasChanged('status_id') && $task->completed_at !== null) {
                 $this->advanceDependents($task, $actor);
             }
@@ -144,6 +157,7 @@ class TaskService
             if ($next->openDependencyCount() === 0) {
                 $next->forceFill(['status_id' => $todoId])->save();
                 $this->activity->log('task.unblocked', $next, ['after_task_id' => $task->id], $actor);
+                TaskStatusChanged::dispatch($next, $backlogId, $actor, $task);
             }
         }
     }

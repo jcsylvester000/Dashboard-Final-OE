@@ -25,7 +25,8 @@ export type Permission =
     | 'workspaces.view-all'
     | 'workspaces.manage'
     | 'reports.view-all'
-    | 'billing.manage';
+    | 'billing.manage'
+    | 'system.manage';
 
 export type Auth = {
     user: User;

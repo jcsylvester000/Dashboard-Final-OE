@@ -6,6 +6,7 @@ use App\Domain\Identity\Permissions;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Models\ActivityLog;
 use App\Models\Department;
+use App\Models\InboxNotification;
 use App\Models\Mention;
 use App\Models\Project;
 use App\Models\Task;
@@ -60,6 +61,7 @@ class DashboardController extends Controller
                     'openProjects' => $w->open_projects_count,
                 ]),
             'mentions' => $this->recentMentions($user),
+            'digest' => $this->digest($user),
             'myTasks' => [
                 'open' => Task::query()->where('assignee_id', $user->id)
                     ->whereNotIn('status_id', TaskStatus::ordered()->where('category', TaskStatus::CATEGORY_DONE)->pluck('id'))
@@ -84,6 +86,42 @@ class DashboardController extends Controller
                     ])
                 : null,
         ]);
+    }
+
+    /**
+     * In-app daily digest: what needs attention plus the quiet (digest-mode) alerts of the last day.
+     *
+     * @return array<string, mixed>
+     */
+    private function digest(User $user): array
+    {
+        $mine = fn () => InboxNotification::query()->forUser($user);
+        $openTasks = fn () => Task::query()->where('assignee_id', $user->id)
+            ->whereNotIn('status_id', TaskStatus::ordered()->where('category', TaskStatus::CATEGORY_DONE)->pluck('id'))
+            ->whereHas('workspace', fn ($q) => $q->visibleTo($user));
+
+        return [
+            'unread' => $mine()->active()->whereNull('read_at')->count(),
+            'dueToday' => $openTasks()->whereDate('due_on', now()->toDateString())->count(),
+            'overdue' => $openTasks()->whereDate('due_on', '<', now()->toDateString())->count(),
+            'items' => $mine()->active()
+                ->where('created_at', '>=', now()->subDay())
+                ->latest()
+                ->limit(8)
+                ->get()
+                ->map(fn (InboxNotification $n): array => [
+                    'id' => $n->id,
+                    'kind' => $n->kind,
+                    'title' => (string) ($n->data['title'] ?? ''),
+                    'body' => $n->data['body'] ?? null,
+                    'workspace' => $n->data['workspace'] ?? null,
+                    'read' => $n->read_at !== null,
+                    'quiet' => $n->quiet,
+                    'created_at' => $n->created_at->toIso8601String(),
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     /**

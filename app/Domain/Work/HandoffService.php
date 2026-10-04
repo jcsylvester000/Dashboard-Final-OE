@@ -3,6 +3,7 @@
 namespace App\Domain\Work;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Events\Work\HandoffReceived;
 use App\Models\Department;
 use App\Models\Task;
 use App\Models\TaskStatus;
@@ -40,12 +41,16 @@ class HandoffService
                 'status_id' => TaskStatus::idFor($sourceDone ? 'todo' : 'backlog'),
                 'title' => $data['title'] ?? ($department->name.': '.$from->title),
                 'description' => $data['note'] ?? null,
-                'assignee_id' => $data['assignee_id'] ?? null,
                 'due_on' => $data['due_on'] ?? null,
                 'priority' => $from->priority,
             ], $actor);
 
-            $next->forceFill(['handoff_from_task_id' => $from->id])->save();
+            // Assignee is set here (not in create) so the receiver gets one handoff alert, not two.
+            $next->forceFill([
+                'handoff_from_task_id' => $from->id,
+                'assignee_id' => $data['assignee_id'] ?? null,
+            ])->save();
+            $this->tasks->watch($next, [$next->assignee_id]);
 
             // The new task waits on the source until the source is done.
             $next->dependencies()->syncWithoutDetaching([
@@ -61,6 +66,8 @@ class HandoffService
 
             $this->activity->log('task.handoff-sent', $from, ['to_task_id' => $next->id, 'department' => $department->name], $actor);
             $this->activity->log('task.handoff-received', $next, ['from_task_id' => $from->id], $actor);
+
+            HandoffReceived::dispatch($from, $next, $actor);
 
             return $next;
         });

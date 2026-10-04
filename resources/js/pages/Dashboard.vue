@@ -11,12 +11,14 @@ import {
 } from '@/components/ui/card';
 import { departmentDot, roleLabel, timeAgo } from '@/lib/format';
 import { dashboard } from '@/routes';
+import { index as inboxIndex, open as openAlert } from '@/routes/inbox';
 import { mine } from '@/routes/tasks';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { edit as securityEdit } from '@/routes/security';
 import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
 import { show as projectShow } from '@/routes/workspaces/projects';
 import type { DepartmentOption } from '@/types/admin';
+import type { InboxItem } from '@/types/notifications';
 
 defineProps<{
     profile: {
@@ -38,6 +40,12 @@ defineProps<{
         | null;
     workspaces: (DepartmentOption & { slug: string; openProjects: number })[];
     myTasks: { open: number; overdue: number };
+    digest: {
+        unread: number;
+        dueToday: number;
+        overdue: number;
+        items: InboxItem[];
+    };
     mentions: {
         id: number;
         by: string | null;
@@ -108,11 +116,15 @@ defineOptions({
             </Card>
             <Card>
                 <CardHeader>
-                    <CardDescription>Tagged recently</CardDescription>
-                    <CardTitle class="text-2xl">{{ mentions.length }}</CardTitle>
+                    <CardDescription>Unread alerts</CardDescription>
+                    <CardTitle class="text-2xl">{{ digest.unread }}</CardTitle>
                 </CardHeader>
-                <CardContent class="text-xs text-muted-foreground">
-                    Handoff and overdue alerts join this in P4.
+                <CardContent class="text-xs">
+                    <span :class="digest.dueToday ? 'font-medium text-orange-600' : 'text-muted-foreground'"
+                        >{{ digest.dueToday }} due today</span
+                    >
+                    ·
+                    <Link :href="inboxIndex()" class="underline underline-offset-4">Open inbox</Link>
                 </CardContent>
             </Card>
             <Card>
@@ -137,6 +149,33 @@ defineOptions({
                 </CardContent>
             </Card>
         </div>
+
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Daily digest</CardTitle>
+                <CardDescription>
+                    Last 24 hours · {{ digest.overdue }} overdue · {{ digest.dueToday }} due today ·
+                    <Link :href="inboxIndex()" class="underline underline-offset-4">Inbox</Link>
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p v-if="digest.items.length === 0" class="text-sm text-muted-foreground">
+                    All quiet. New assignments, mentions, handoffs and due dates show up here.
+                </p>
+                <ul v-else class="divide-y text-sm">
+                    <li v-for="n in digest.items" :key="n.id" class="flex items-center justify-between gap-3 py-2">
+                        <span class="min-w-0 truncate">
+                            <Link :href="openAlert(n.id)" :class="n.read ? '' : 'font-medium'" class="hover:underline">{{
+                                n.title
+                            }}</Link>
+                            <span v-if="n.body" class="text-muted-foreground"> · {{ n.body }}</span>
+                            <span v-if="n.workspace" class="text-xs text-muted-foreground"> · {{ n.workspace }}</span>
+                        </span>
+                        <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(n.created_at) }}</span>
+                    </li>
+                </ul>
+            </CardContent>
+        </Card>
 
         <div class="grid gap-4 lg:grid-cols-2">
             <Card>

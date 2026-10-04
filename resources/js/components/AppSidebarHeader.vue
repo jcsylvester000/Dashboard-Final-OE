@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
+import NotificationBell from '@/components/NotificationBell.vue';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import RunningTimer from '@/components/work/RunningTimer.vue';
 import type { BreadcrumbItem } from '@/types';
@@ -24,6 +25,9 @@ withDefaults(
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
             </template>
         </div>
-        <RunningTimer class="ml-auto" />
+        <div class="ml-auto flex items-center gap-2">
+            <RunningTimer />
+            <NotificationBell />
+        </div>
     </header>
 </template>

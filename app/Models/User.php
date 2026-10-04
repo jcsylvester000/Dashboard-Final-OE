@@ -35,11 +35,12 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
+ * @property array<string, string>|null $notification_preferences
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable(['name', 'email', 'title', 'primary_department_id', 'password'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'notification_preferences'])]
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
@@ -74,6 +75,7 @@ class User extends Authenticatable implements PasskeyUser
             'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
     }
 

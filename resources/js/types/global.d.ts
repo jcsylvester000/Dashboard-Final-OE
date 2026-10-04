@@ -1,5 +1,6 @@
 import type { Directive } from 'vue';
 import type { Auth } from '@/types/auth';
+import type { NotificationsShared } from '@/types/notifications';
 import type { RunningTimer } from '@/types/time';
 import type { WorkspaceNav } from '@/types/workspace';
 
@@ -24,6 +25,7 @@ declare module '@inertiajs/core' {
             sidebarOpen: boolean;
             workspaceNav: WorkspaceNav | null;
             runningTimer: RunningTimer | null;
+            notifications: NotificationsShared | null;
             [key: string]: unknown;
         };
     }

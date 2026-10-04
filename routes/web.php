@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InboxController;
 use Illuminate\Support\Facades\Route;
 
 // Internal app: there is no public landing page.
@@ -21,6 +22,14 @@ Route::middleware('auth')->group(function () {
         ->name('password.force.update');
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    // In-app alerts inbox (P4)
+    Route::get('inbox', [InboxController::class, 'index'])->name('inbox.index');
+    Route::post('inbox/read', [InboxController::class, 'read'])->name('inbox.read');
+    Route::post('inbox/done', [InboxController::class, 'done'])->name('inbox.done');
+    Route::get('inbox/{notification}/open', [InboxController::class, 'open'])->whereUuid('notification')->name('inbox.open');
+    Route::post('inbox/{notification}/snooze', [InboxController::class, 'snooze'])->whereUuid('notification')->name('inbox.snooze');
+    Route::post('inbox/{notification}/restore', [InboxController::class, 'restore'])->whereUuid('notification')->name('inbox.restore');
 });
 
 require __DIR__.'/workspaces.php';

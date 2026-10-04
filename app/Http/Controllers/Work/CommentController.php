@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Work;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Work\TaskService;
 use App\Domain\Workspaces\MentionService;
+use App\Events\Work\CommentAdded;
 use App\Http\Controllers\Controller;
 use App\Models\Comment;
 use App\Models\Task;
@@ -50,6 +51,8 @@ class CommentController extends Controller
             $tasks->watch($task, [$user->id, ...$normalized['user_ids']]);
 
             $this->activity->log('task.commented', $task, ['comment_id' => $comment->id], $user);
+
+            CommentAdded::dispatch($comment, $task, $user, $normalized['user_ids']);
         });
 
         return back();

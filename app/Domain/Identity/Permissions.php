@@ -27,6 +27,8 @@ final class Permissions
 
     public const BILLING_MANAGE = 'billing.manage';
 
+    public const SYSTEM_MANAGE = 'system.manage';
+
     /**
      * @return array<string, string> permission => human label
      */
@@ -42,6 +44,7 @@ final class Permissions
             self::WORKSPACES_MANAGE => 'Create and archive client workspaces',
             self::REPORTS_VIEW_ALL => 'View agency-wide reports',
             self::BILLING_MANAGE => 'Manage billing, rates and invoices',
+            self::SYSTEM_MANAGE => 'See and retry failed background jobs',
         ];
     }
 
@@ -56,7 +59,7 @@ final class Permissions
             'super-admin' => ['label' => 'Super Admin', 'permissions' => []],
             'admin' => ['label' => 'Admin', 'permissions' => [
                 self::USERS_VIEW, self::USERS_MANAGE, self::DEPARTMENTS_MANAGE, self::ACTIVITY_VIEW,
-                self::WORKSPACES_VIEW_ALL, self::WORKSPACES_MANAGE, self::REPORTS_VIEW_ALL,
+                self::WORKSPACES_VIEW_ALL, self::WORKSPACES_MANAGE, self::REPORTS_VIEW_ALL, self::SYSTEM_MANAGE,
             ]],
             'finance' => ['label' => 'Finance', 'permissions' => [
                 self::USERS_VIEW, self::WORKSPACES_VIEW_ALL, self::REPORTS_VIEW_ALL, self::BILLING_MANAGE,

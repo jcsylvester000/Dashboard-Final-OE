@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Notifications\WorkEventSubscriber;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\Task;
@@ -14,6 +15,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -33,6 +35,21 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureAuthorization();
         $this->configureAuthAuditing();
+        $this->configureNotifications();
+    }
+
+    protected function configureNotifications(): void
+    {
+        // Work events -> in-app alerts (P4). Never email.
+        Event::subscribe(WorkEventSubscriber::class);
+
+        // `composer dev` also runs the scheduler (hourly alerts) and, once installed, Reverb.
+        if ($this->app->runningInConsole()) {
+            DevCommands::artisan('schedule:work', 'scheduler');
+            if (class_exists('Laravel\\Reverb\\ReverbServiceProvider') && config('broadcasting.default') === 'reverb') {
+                DevCommands::artisan('reverb:start', 'reverb');
+            }
+        }
     }
 
     protected function configureDefaults(): void

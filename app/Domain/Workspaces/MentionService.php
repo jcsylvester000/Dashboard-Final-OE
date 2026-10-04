@@ -2,6 +2,7 @@
 
 namespace App\Domain\Workspaces;
 
+use App\Events\Work\UserMentioned;
 use App\Models\Contracts\Mentionable;
 use App\Models\Mention;
 use App\Models\User;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * @mentions use the token  @[Display Name](user:12)  inside plain text.
  * The editor inserts tokens; the server keeps only tokens for active members
  * of the record's workspace (others become plain "@Name") and stores one
- * mentions row per tagged person. P4 turns new rows into notifications.
+ * mentions row per tagged person. Each new mention fires UserMentioned (P4 alerts).
  */
 class MentionService
 {
@@ -78,6 +79,8 @@ class MentionService
                 'mentionable_type' => $record->getMorphClass(),
                 'mentionable_id' => $record->getKey(),
             ]);
+
+            UserMentioned::dispatch($record, $userId, $actor);
         }
 
         return $added;

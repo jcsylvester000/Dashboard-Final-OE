@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Bell,
     Briefcase,
+    AlertTriangle,
     Building2,
     CheckSquare,
     CalendarDays,
@@ -35,6 +37,8 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
+import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
+import { index as inboxIndex } from '@/routes/inbox';
 import { index as departmentsIndex } from '@/routes/admin/departments';
 import { index as rolesIndex } from '@/routes/admin/roles';
 import { index as templatesIndex } from '@/routes/admin/templates';
@@ -58,6 +62,11 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
     {
+        title: 'Inbox',
+        href: inboxIndex(),
+        icon: Bell,
+    },
+    {
         title: 'My tasks',
         href: myTasks(),
         icon: CheckSquare,
@@ -71,13 +80,13 @@ const mainNavItems: NavItem[] = [
 
 const agencyNavItems = computed<NavItem[]>(() => {
     const items = [...mainNavItems];
-    items.splice(2, 0, { title: 'My timesheet', href: timesheet(), icon: Clock });
+    items.splice(3, 0, { title: 'My timesheet', href: timesheet(), icon: Clock });
     if (page.props.auth.leads) {
-        items.splice(3, 0, { title: 'Time approvals', href: approvals(), icon: ClipboardCheck });
+        items.splice(4, 0, { title: 'Time approvals', href: approvals(), icon: ClipboardCheck });
     }
     const dept = page.props.auth.department;
     if (dept) {
-        items.splice(2, 0, { title: `${dept.name} queue`, href: departmentQueue(dept.slug), icon: Inbox });
+        items.splice(3, 0, { title: `${dept.name} queue`, href: departmentQueue(dept.slug), icon: Inbox });
     }
 
     return items;
@@ -138,6 +147,14 @@ const adminNavItems = computed<NavItem[]>(() => {
             title: 'Activity log',
             href: activityIndex(),
             icon: History,
+        });
+    }
+
+    if (can.value['system.manage']) {
+        items.push({
+            title: 'Failed jobs',
+            href: failedJobsIndex(),
+            icon: AlertTriangle,
         });
     }
 

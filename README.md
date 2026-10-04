@@ -155,6 +155,37 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
 - **Marketing / SEO details** on tasks: channel, campaign, deliverable; target URL, keyword, work type.
 - **Calendar** tab per workspace: tasks by due date, month view.
 
+## 4e. Notifications & alerts (P4) - in-app only, never email
+
+- **Alerts for:** assigned to you, @mentions, handoffs (and "ready to start" when the task you wait on is done),
+  comments and status changes on tasks you follow, due within 24h, overdue, and overdue > 2 days escalated to
+  the department lead (or the workspace owners/leads). Never sent to the person who acted, and only to people
+  who can open that workspace. Leaving a workspace hides its old alerts.
+- **Bell** in the top bar (unread count) and **Inbox** in the sidebar: "Needs my attention" keeps assignments,
+  mentions, handoffs and overdue items until you mark them Done or snooze them (1 hour / tomorrow / Monday).
+- **Daily digest** card on the dashboard: unread, due today, overdue, last 24 hours of alerts.
+- **Settings > Notifications:** per alert type choose Real time (inbox + bell + pop-up), Digest (inbox and
+  dashboard only) or Off.
+- **Hourly checks** run from the scheduler (`php artisan work:alerts`). `composer dev` now also runs the scheduler.
+  On Forge: enable the scheduler and a queue worker for the site.
+- **Admin > Failed jobs** (permission `system.manage`): see, retry or discard failed background jobs.
+  Existing installs: run `php artisan db:seed --class=RolesAndPermissionsSeeder`, then tick the permission for
+  Admin in Roles & access (Super Admin always has it).
+- **Live updates (optional, Reverb):** without it the bell refreshes every 60 seconds. To turn it on:
+
+```powershell
+composer require laravel/reverb:^1.12
+# then in .env (no need to run reverb:install - the app is already wired):
+#   BROADCAST_CONNECTION=reverb
+#   REVERB_APP_ID=overeasy
+#   REVERB_APP_KEY=<any long random string>
+#   REVERB_APP_SECRET=<another long random string>
+#   plus the REVERB_HOST/PORT/SCHEME and VITE_REVERB_* lines from .env.example
+php artisan config:clear
+npm run build                   # VITE_REVERB_* are baked into the frontend
+composer dev                    # now also starts reverb:start
+```
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`
