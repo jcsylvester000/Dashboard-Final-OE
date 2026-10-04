@@ -19,6 +19,7 @@ class UserAccessManager
         DB::transaction(function () use ($user) {
             $user->forceFill(['is_active' => false, 'deactivated_at' => now()])->save();
             $user->accessLinks()->open()->update(['revoked_at' => now()]);
+            $user->tokens()->delete(); // API / mobile tokens stop working at once
             $this->signOutEverywhere($user, log: false);
         });
 
@@ -34,7 +35,7 @@ class UserAccessManager
 
     /**
      * Ends all browser sessions and "remember me" cookies for the user.
-     * API tokens (Sanctum, P7) will be revoked here too.
+     * API tokens are kept (revoked on deactivate, or by the user in Settings > API tokens).
      */
     public function signOutEverywhere(User $user, ?User $by = null, bool $log = true): void
     {

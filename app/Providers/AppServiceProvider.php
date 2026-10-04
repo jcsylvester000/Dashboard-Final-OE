@@ -15,15 +15,20 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Foundation\DevCommands;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\PersonalAccessToken;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,6 +43,20 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAuthorization();
         $this->configureAuthAuditing();
         $this->configureNotifications();
+        $this->configureApi();
+    }
+
+    protected function configureApi(): void
+    {
+        // Per token (or user / IP) rate limit with a JSON 429.
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(max(1, (int) config('api.per_minute', 120)))
+            ->by($request->bearerToken() !== null ? 'token:'.sha1($request->bearerToken()) : 'ip:'.$request->ip())
+            ->response(fn (Request $request, array $headers) => response()->json(['message' => 'Too many requests. Slow down and retry shortly.'], 429, $headers)));
+
+        // Tokens of deactivated members stop working immediately.
+        Sanctum::authenticateAccessTokensUsing(
+            fn (PersonalAccessToken $token, bool $isValid): bool => $isValid && $token->tokenable instanceof User && $token->tokenable->is_active,
+        );
     }
 
     protected function configureNotifications(): void

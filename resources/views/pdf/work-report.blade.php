@@ -1,30 +1,28 @@
 @php
-    /** @var \App\Models\Invoice $invoice */
+    /** @var array{title: string, client: string, period: string|null, ref: string} $meta */
     $hours = fn (int $m) => sprintf('%d:%02d', intdiv($m, 60), $m % 60);
 @endphp
 <!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Work report {{ $invoice->displayNumber() }}</title>
+    <title>{{ $meta['title'] }} - {{ $meta['client'] }}</title>
     @include('pdf._style')
 </head>
 <body>
 @if ($draft)<div class="watermark">DRAFT</div>@endif
-<div class="footer">{{ $company['name'] }} · Work report for {{ $invoice->displayNumber() }}</div>
+<div class="footer">{{ $company['name'] }} · {{ $meta['title'] }} · {{ $meta['ref'] }}</div>
 
 <table class="head">
     <tr>
         <td style="width: 60%">
-            <h1>Work report</h1>
-            <div><strong>{{ $invoice->bill_to['name'] ?? $invoice->workspace->name }}</strong></div>
-            @if ($invoice->period_start && $invoice->period_end)
-                <div class="muted">{{ $invoice->period_start->format('M j') }} – {{ $invoice->period_end->format('M j, Y') }}</div>
-            @endif
+            <h1>{{ $meta['title'] }}</h1>
+            <div><strong>{{ $meta['client'] }}</strong></div>
+            @if ($meta['period'])<div class="muted">{{ $meta['period'] }}</div>@endif
         </td>
         <td class="right">
             <div>{{ $company['name'] }}</div>
-            <div class="muted">For invoice {{ $invoice->displayNumber() }}</div>
+            <div class="muted">{{ $meta['ref'] }}</div>
             <div style="font-size: 16px; margin-top: 6px"><strong>{{ $hours($report['total_minutes']) }}</strong> hours</div>
         </td>
     </tr>

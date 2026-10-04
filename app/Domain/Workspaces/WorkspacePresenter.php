@@ -2,6 +2,7 @@
 
 namespace App\Domain\Workspaces;
 
+use App\Domain\Billing\WorkSummaryAccess;
 use App\Domain\Identity\Permissions;
 use App\Models\Department;
 use App\Models\User;
@@ -37,6 +38,7 @@ class WorkspacePresenter
                 'manageMembers' => $this->access->canOwn($user, $workspace) && ! $workspace->isArchived(),
                 'settings' => $this->access->canOwn($user, $workspace) || $this->access->canLead($user, $workspace),
                 'reports' => $this->access->canLead($user, $workspace) || $user->can(Permissions::REPORTS_VIEW_ALL),
+                'workSummary' => WorkSummaryAccess::allows($user, $workspace),
             ],
         ];
     }

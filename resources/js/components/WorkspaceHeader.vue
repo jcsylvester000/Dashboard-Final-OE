@@ -8,6 +8,7 @@ import { edit, show } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
 import { index as projectsIndex } from '@/routes/workspaces/projects';
 import { index as reportsIndex } from '@/routes/workspaces/reports';
+import { index as workSummaryIndex } from '@/routes/workspaces/work-summary';
 import { board as tasksBoard, calendar as tasksCalendar, index as tasksIndex } from '@/routes/workspaces/tasks';
 import type { WorkspaceHeader } from '@/types/workspace';
 
@@ -28,6 +29,10 @@ const tabs = computed(() => {
 
     if (props.workspace.can.reports) {
         items.push({ title: 'Reports', href: reportsIndex(slug) });
+    }
+
+    if (props.workspace.can.workSummary) {
+        items.push({ title: 'Work summary', href: workSummaryIndex(slug) });
     }
 
     if (props.workspace.can.settings) {

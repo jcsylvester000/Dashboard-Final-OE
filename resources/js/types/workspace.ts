@@ -18,6 +18,7 @@ export type WorkspaceHeader = {
         manageMembers: boolean;
         settings: boolean;
         reports: boolean;
+        workSummary: boolean;
     };
 };
 

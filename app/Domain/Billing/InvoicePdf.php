@@ -35,11 +35,28 @@ class InvoicePdf
     {
         $invoice->loadMissing(['workspace' => fn ($q) => $q->withTrashed()]);
 
+        return $this->renderWorkReport([
+            'title' => 'Work report',
+            'client' => $invoice->bill_to['name'] ?? $invoice->workspace->name,
+            'period' => $invoice->period_start !== null && $invoice->period_end !== null
+                ? $invoice->period_start->format('M j').' – '.$invoice->period_end->format('M j, Y') : null,
+            'ref' => 'For invoice '.$invoice->displayNumber(),
+        ], $this->workReport->build($invoice), $invoice->isDraft());
+    }
+
+    /**
+     * Same layout for the invoice work report and the Work Summary export.
+     *
+     * @param  array{title: string, client: string, period: string|null, ref: string}  $meta
+     * @param  array<string, mixed>  $report  WorkReport::build() / forPeriod() result
+     */
+    public function renderWorkReport(array $meta, array $report, bool $draft = false): string
+    {
         return Pdf::loadView('pdf.work-report', [
-            'invoice' => $invoice,
+            'meta' => $meta,
             'company' => config('billing.company'),
-            'report' => $this->workReport->build($invoice),
-            'draft' => $invoice->isDraft(),
+            'report' => $report,
+            'draft' => $draft,
         ])->setPaper('a4')->output();
     }
 

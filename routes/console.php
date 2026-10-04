@@ -31,3 +31,8 @@ Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping(
 
 // Overdue client invoices -> Finance inbox (P6).
 Schedule::command('billing:alerts')->dailyAt('07:00')->withoutOverlapping();
+
+// API housekeeping (P7): expired tokens and old idempotency records.
+Schedule::command('sanctum:prune-expired --hours=24')->daily();
+Schedule::call(fn () => DB::table('api_idempotency_keys')->where('created_at', '<', now()->subDays(2))->delete())
+    ->daily()->name('prune-idempotency-keys');

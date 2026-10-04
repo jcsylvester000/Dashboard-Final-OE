@@ -226,6 +226,23 @@ composer dev                    # now also starts reverb:start
   current rates), profitability by project (needs internal cost rates).
 - Requires `composer require "barryvdh/laravel-dompdf:~3.1.2"` (pure PHP, no Chrome on the server). On Windows use `~`, not `^` (cmd strips `^`; 3.1.0 does not support Laravel 13).
 
+## 4h. API v1 for the mobile app and integrations (P7a)
+
+- **Tokens:** Settings > API tokens. Choose Read only or Read & write and an expiry (max 365 days). The token
+  is shown once. Deactivating a member revokes their tokens. Requires `composer require "laravel/sanctum:~4.3.3"`.
+- **Calls:** `Authorization: Bearer <token>` and `Accept: application/json` to `/api/v1/...`:
+  `GET me`, `GET workspaces`, `GET workspaces/{id}`, `GET workspaces/{id}/members`, `GET workspaces/{id}/projects`,
+  `GET tasks?workspace_id=&assignee=me&status_id=&due=overdue|week&include_done=1&updated_since=&per_page=`,
+  `GET tasks/{id}`, `GET tasks/{id}/comments`, `GET notifications?unread=1`,
+  `GET workspaces/{id}/work-summary?from=YYYY-MM-DD&to=YYYY-MM-DD&department=seo` (leads / Finance),
+  write: `POST workspaces/{id}/tasks`, `PATCH workspaces/{id}/tasks/{task}`, `POST tasks/{id}/comments`,
+  `POST notifications/{id}/read`.
+- **Rules:** same permissions as the web app (other clients' data -> 403). Errors are JSON
+  (`{"message": ..., "errors": {...}}`); 401 without a valid token; 429 when over `API_PER_MINUTE` (default 120/min
+  per token). Send `Idempotency-Key: <unique>` on POSTs so retries never create duplicates.
+- **Work Summary** (workspace tab, leads and Finance): who worked on what in any date range, by task and person,
+  with Marketing / SEO details; filter by department; export CSV or PDF.
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`

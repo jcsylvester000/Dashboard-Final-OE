@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers\Work;
 
-use App\Domain\Identity\ActivityLogger;
-use App\Domain\Work\TaskService;
+use App\Domain\Work\CommentService;
 use App\Domain\Workspaces\MentionService;
-use App\Events\Work\CommentAdded;
 use App\Http\Controllers\Controller;
 use App\Models\Comment;
 use App\Models\Task;
@@ -13,7 +11,6 @@ use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -24,10 +21,9 @@ class CommentController extends Controller
 {
     public function __construct(
         private readonly MentionService $mentions,
-        private readonly ActivityLogger $activity,
     ) {}
 
-    public function store(Request $request, Workspace $workspace, Task $task, TaskService $tasks): RedirectResponse
+    public function store(Request $request, Workspace $workspace, Task $task, CommentService $comments): RedirectResponse
     {
         Gate::authorize('update', $task);
 
@@ -35,25 +31,7 @@ class CommentController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        DB::transaction(function () use ($workspace, $task, $body, $user, $tasks) {
-            $normalized = $this->mentions->normalize($body, $workspace->id);
-
-            $comment = Comment::create([
-                'workspace_id' => $workspace->id,
-                'commentable_type' => $task->getMorphClass(),
-                'commentable_id' => $task->id,
-                'user_id' => $user->id,
-                'body' => (string) $normalized['text'],
-            ]);
-
-            $this->mentions->sync($comment, $normalized['user_ids'], $user);
-            // Commenting or being tagged means you follow the task from now on.
-            $tasks->watch($task, [$user->id, ...$normalized['user_ids']]);
-
-            $this->activity->log('task.commented', $task, ['comment_id' => $comment->id], $user);
-
-            CommentAdded::dispatch($comment, $task, $user, $normalized['user_ids']);
-        });
+        $comments->create($task, $body, $user);
 
         return back();
     }

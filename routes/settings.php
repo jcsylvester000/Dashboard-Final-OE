@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
@@ -26,6 +27,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('notifications.edit');
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('notifications.update');
+
+    Route::get('settings/api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
+    Route::post('settings/api-tokens', [ApiTokenController::class, 'store'])->middleware('throttle:10,1')->name('api-tokens.store');
+    Route::delete('settings/api-tokens/{token}', [ApiTokenController::class, 'destroy'])->whereNumber('token')->name('api-tokens.destroy');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

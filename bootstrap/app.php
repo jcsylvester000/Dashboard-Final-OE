@@ -12,10 +12,14 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
@@ -36,7 +40,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // Guests hitting protected pages go to the login screen; the app has no public pages.
-        $middleware->redirectGuestsTo(fn () => route('login'));
+        // API clients get a 401 JSON instead of a redirect.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : route('login'));
+
+        // Sanctum token abilities (P7): ability = any of, abilities = all of.
+        $middleware->alias([
+            'ability' => CheckForAnyAbility::class,
+            'abilities' => CheckAbilities::class,
+        ]);
         $middleware->redirectUsersTo(fn () => route('dashboard'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -48,6 +59,15 @@ return Application::configure(basePath: dirname(__DIR__))
             Inertia::flash('toast', ['type' => 'error', 'message' => $e->getMessage()]);
 
             return back()->withErrors(['billing' => $e->getMessage()]);
+        });
+
+        // API: don't reveal model names in 404s.
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'Not found.'], 404);
+            }
+
+            return null;
         });
 
         $exceptions->shouldRenderJsonWhen(

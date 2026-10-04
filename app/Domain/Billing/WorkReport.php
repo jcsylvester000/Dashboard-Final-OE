@@ -7,6 +7,7 @@ use App\Models\InvoiceItemSource;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\TimeEntry;
+use Carbon\CarbonImmutable;
 
 /**
  * The work transparency report sent with an invoice: what was done in the
@@ -31,6 +32,36 @@ class WorkReport
                 $minutesByEntry[$s->source_id] = ($minutesByEntry[$s->source_id] ?? 0) + (int) $s->minutes;
             });
 
+        return $this->fromEntries($minutesByEntry, $invoice->workspace_id, $invoice->period_start?->toImmutable(), $invoice->period_end?->toImmutable());
+    }
+
+    /**
+     * Work Summary for any date range (P6-15/16): every finished time entry in the range,
+     * billable or not, organised the same way as the invoice work report.
+     *
+     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>}
+     */
+    public function forPeriod(int $workspaceId, CarbonImmutable $from, CarbonImmutable $to, ?string $departmentSlug = null): array
+    {
+        $minutesByEntry = TimeEntry::query()
+            ->where('workspace_id', $workspaceId)
+            ->where(fn ($q) => $q->whereNull('started_at')->orWhereNotNull('ended_at'))
+            ->whereDate('entry_date', '>=', $from->toDateString())
+            ->whereDate('entry_date', '<=', $to->toDateString())
+            ->when($departmentSlug !== null, fn ($q) => $q->whereHas('department', fn ($d) => $d->where('slug', $departmentSlug)))
+            ->pluck('minutes', 'id')
+            ->map(fn ($m) => (int) $m)
+            ->all();
+
+        return $this->fromEntries($minutesByEntry, $workspaceId, $from, $to);
+    }
+
+    /**
+     * @param  array<int, int>  $minutesByEntry  time entry id => minutes to count
+     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>}
+     */
+    private function fromEntries(array $minutesByEntry, int $workspaceId, ?CarbonImmutable $from, ?CarbonImmutable $to): array
+    {
         $entries = TimeEntry::query()
             ->withTrashed()
             ->with(['user:id,name', 'department:id,name', 'task' => fn ($q) => $q->withTrashed()->with(['department:id,name,slug', 'status:id,name'])])
@@ -97,7 +128,7 @@ class WorkReport
             'departments' => $deptRows,
             'marketing' => $section('marketing', array_keys(Task::WORK_DETAIL_FIELDS['marketing'])),
             'seo' => $section('seo', array_keys(Task::WORK_DETAIL_FIELDS['seo'])),
-            'completed_without_time' => $this->completedWithoutTime($invoice, array_filter(array_column($taskRows, 'id'))),
+            'completed_without_time' => $this->completedWithoutTime($workspaceId, $from, $to, array_filter(array_column($taskRows, 'id'))),
         ];
     }
 
@@ -107,9 +138,9 @@ class WorkReport
      * @param  array<int, int|null>  $exclude
      * @return list<array<string, mixed>>
      */
-    private function completedWithoutTime(Invoice $invoice, array $exclude): array
+    private function completedWithoutTime(int $workspaceId, ?CarbonImmutable $from, ?CarbonImmutable $to, array $exclude): array
     {
-        if ($invoice->period_start === null || $invoice->period_end === null) {
+        if ($from === null || $to === null) {
             return [];
         }
 
@@ -117,10 +148,10 @@ class WorkReport
 
         return Task::query()
             ->with('department:id,name')
-            ->where('workspace_id', $invoice->workspace_id)
+            ->where('workspace_id', $workspaceId)
             ->whereIn('status_id', $done)
-            ->whereDate('completed_at', '>=', $invoice->period_start->toDateString())
-            ->whereDate('completed_at', '<=', $invoice->period_end->toDateString())
+            ->whereDate('completed_at', '>=', $from->toDateString())
+            ->whereDate('completed_at', '<=', $to->toDateString())
             ->whereNotIn('id', $exclude)
             ->orderBy('completed_at')
             ->limit(100)
