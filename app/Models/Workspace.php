@@ -78,6 +78,22 @@ class Workspace extends Model
     }
 
     /**
+     * @return HasMany<Task, $this>
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
+
+    /**
+     * @return HasMany<Comment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class);
+    }
+
+    /**
      * @return HasMany<Label, $this>
      */
     public function labels(): HasMany

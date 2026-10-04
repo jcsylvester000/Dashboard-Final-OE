@@ -3,10 +3,15 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
     Building2,
+    CheckSquare,
+    Columns3,
+    Inbox,
+    Workflow,
     FolderKanban,
     History,
     LayoutDashboard,
     LayoutGrid,
+    ListTodo,
     ShieldCheck,
     Users,
     UsersRound,
@@ -29,10 +34,14 @@ import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as departmentsIndex } from '@/routes/admin/departments';
 import { index as rolesIndex } from '@/routes/admin/roles';
+import { index as templatesIndex } from '@/routes/admin/templates';
 import { index as usersIndex } from '@/routes/admin/users';
+import { queue as departmentQueue } from '@/routes/departments';
+import { mine as myTasks } from '@/routes/tasks';
 import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
 import { index as wsMembers } from '@/routes/workspaces/members';
 import { index as wsProjects } from '@/routes/workspaces/projects';
+import { board as wsBoard, index as wsTasks } from '@/routes/workspaces/tasks';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -45,11 +54,26 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
     {
+        title: 'My tasks',
+        href: myTasks(),
+        icon: CheckSquare,
+    },
+    {
         title: 'All workspaces',
         href: workspacesIndex(),
         icon: Briefcase,
     },
 ];
+
+const agencyNavItems = computed<NavItem[]>(() => {
+    const items = [...mainNavItems];
+    const dept = page.props.auth.department;
+    if (dept) {
+        items.splice(2, 0, { title: `${dept.name} queue`, href: departmentQueue(dept.slug), icon: Inbox });
+    }
+
+    return items;
+});
 
 // Links for the workspace currently in focus (from the switcher).
 const currentWorkspace = computed(() => page.props.workspaceNav?.current ?? null);
@@ -61,6 +85,8 @@ const workspaceNavItems = computed<NavItem[]>(() => {
 
     return [
         { title: 'Overview', href: workspaceShow(ws.slug), icon: LayoutDashboard },
+        { title: 'Tasks', href: wsTasks(ws.slug), icon: ListTodo },
+        { title: 'Board', href: wsBoard(ws.slug), icon: Columns3 },
         { title: 'Projects', href: wsProjects(ws.slug), icon: FolderKanban },
         { title: 'Members', href: wsMembers(ws.slug), icon: UsersRound },
     ];
@@ -79,6 +105,14 @@ const adminNavItems = computed<NavItem[]>(() => {
             title: 'Departments',
             href: departmentsIndex(),
             icon: Building2,
+        });
+    }
+
+    if (can.value['workspaces.manage']) {
+        items.push({
+            title: 'Workflow templates',
+            href: templatesIndex(),
+            icon: Workflow,
         });
     }
 
@@ -118,7 +152,7 @@ const adminNavItems = computed<NavItem[]>(() => {
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" label="Agency" />
+            <NavMain :items="agencyNavItems" label="Agency" />
             <NavMain
                 :items="workspaceNavItems"
                 :label="currentWorkspace?.name ?? 'Workspace'"

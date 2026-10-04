@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Domain\Identity\Permissions;
+use App\Models\Department;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
@@ -39,6 +40,9 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'roles' => fn () => $user?->getRoleNames()->values()->all() ?? [],
                 'can' => fn () => $this->abilities($user),
+                'department' => fn () => $user?->primary_department_id
+                    ? Department::query()->whereKey($user->primary_department_id)->first(['id', 'name', 'slug'])?->only(['id', 'name', 'slug'])
+                    : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'workspaceNav' => fn () => $user ? $this->workspaceNav($request, $user) : null,

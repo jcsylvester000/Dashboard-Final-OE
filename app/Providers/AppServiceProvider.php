@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Models\Comment;
 use App\Models\Project;
+use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use Carbon\CarbonImmutable;
@@ -44,6 +46,8 @@ class AppServiceProvider extends ServiceProvider
         Relation::morphMap([
             'workspace' => Workspace::class,
             'project' => Project::class,
+            'task' => Task::class,
+            'comment' => Comment::class,
         ]);
 
         Model::preventLazyLoading(! app()->isProduction());

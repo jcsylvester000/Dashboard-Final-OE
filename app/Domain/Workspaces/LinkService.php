@@ -4,6 +4,7 @@ namespace App\Domain\Workspaces;
 
 use App\Models\Project;
 use App\Models\RecordLink;
+use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,13 +19,14 @@ use Illuminate\Support\Facades\Gate;
 class LinkService
 {
     /** Morph aliases that can be linked. Tasks join in P3. */
-    public const TYPES = ['workspace', 'project'];
+    public const TYPES = ['workspace', 'project', 'task'];
 
     public function resolve(string $type, int $id): ?Model
     {
         return match ($type) {
             'workspace' => Workspace::find($id),
             'project' => Project::with('workspace')->find($id),
+            'task' => Task::with('workspace')->find($id),
             default => null,
         };
     }
@@ -36,7 +38,7 @@ class LinkService
     {
         return match (true) {
             $record instanceof Workspace => $record,
-            $record instanceof Project => $record->workspace,
+            $record instanceof Project, $record instanceof Task => $record->workspace,
             default => null,
         };
     }
@@ -49,7 +51,7 @@ class LinkService
         $type = $record->getMorphClass();
         $id = $record->getKey();
 
-        $withWorkspace = fn (MorphTo $m) => $m->morphWith([Project::class => ['workspace']]);
+        $withWorkspace = fn (MorphTo $m) => $m->morphWith([Project::class => ['workspace'], Task::class => ['workspace']]);
 
         $outgoing = RecordLink::with(['target' => $withWorkspace])
             ->where('source_type', $type)->where('source_id', $id)
@@ -91,7 +93,13 @@ class LinkService
             ->whereRaw('lower(name) like ?', [$like])
             ->orderBy('name')->limit($limit)->get();
 
-        return $workspaces->concat($projects)
+        $tasks = Task::query()
+            ->with('workspace')
+            ->whereHas('workspace', fn (Builder $q) => $q->visibleTo($user))
+            ->whereRaw('lower(title) like ?', [$like])
+            ->latest('id')->limit($limit)->get();
+
+        return $workspaces->concat($projects)->concat($tasks)
             ->map(fn (Model $m) => $this->describe($m))
             ->take($limit)
             ->values()
@@ -117,6 +125,13 @@ class LinkService
                 'label' => $record->name,
                 'context' => $record->workspace->name.' · '.(Project::TYPES[$record->type] ?? $record->type),
                 'url' => route('workspaces.projects.show', [$record->workspace, $record]),
+            ],
+            $record instanceof Task => [
+                'type' => 'task',
+                'record_id' => $record->id,
+                'label' => $record->title,
+                'context' => $record->workspace->name.' · Task',
+                'url' => route('workspaces.tasks.show', [$record->workspace, $record]),
             ],
             default => [
                 'type' => $record->getMorphClass(),

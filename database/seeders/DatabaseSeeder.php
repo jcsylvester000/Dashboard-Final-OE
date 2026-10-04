@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RolesAndPermissionsSeeder::class,
             DepartmentSeeder::class,
+            WorkflowTemplateSeeder::class,
         ]);
 
         $this->seedFirstSuperAdmin();

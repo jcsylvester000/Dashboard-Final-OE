@@ -7,6 +7,7 @@ import { departmentDot, roleLabel } from '@/lib/format';
 import { edit, show } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
 import { index as projectsIndex } from '@/routes/workspaces/projects';
+import { board as tasksBoard, index as tasksIndex } from '@/routes/workspaces/tasks';
 import type { WorkspaceHeader } from '@/types/workspace';
 
 const props = defineProps<{ workspace: WorkspaceHeader }>();
@@ -17,6 +18,8 @@ const tabs = computed(() => {
     const slug = props.workspace.slug;
     const items = [
         { title: 'Overview', href: show(slug) },
+        { title: 'Tasks', href: tasksIndex(slug) },
+        { title: 'Board', href: tasksBoard(slug) },
         { title: 'Projects', href: projectsIndex(slug) },
         { title: 'Members', href: membersIndex(slug) },
     ];

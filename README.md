@@ -7,7 +7,7 @@ there is no public sign-up and the app never sends email.
 Tailwind CSS 4 + shadcn-vue · PostgreSQL 18 · Valkey (Redis-compatible) · Fortify (login, 2FA, passkeys) ·
 spatie/laravel-permission 8. Deploys to Laravel Forge.
 
-Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** are in place.
+Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** (verified) and **P3a Unified workflow** are in place.
 The phase checklist lives in `6 - Final Documentation/OverEasy Dashboard Build Game Plan - 2026-10-04/`.
 
 ---
@@ -81,6 +81,17 @@ php artisan tinker --execute="echo app(App\Domain\Identity\AccessLinkService::cl
 | `could not find driver` / missing extension | In your `php.ini` enable: `pdo_pgsql`, `pgsql`, `pdo_sqlite`, `sqlite3`, `mbstring`, `openssl`, `fileinfo`, `curl`, `zip`, `intl`. Check with `php -m`. (Herd enables these already.) |
 | `pint is not recognized` / `vendor/autoload.php` missing | `composer install` has not finished yet; fix the error above it first. |
 
+## 2b. Run it locally (every day)
+
+```powershell
+cd "C:\Users\jcsyl\Desktop\Website Enhancement Agency\5 - Final Application\OverEasy Dashboard"
+.\start-local.ps1
+```
+
+The script starts Docker (Postgres + Valkey), installs anything new, runs migrations, then
+`composer dev`. Open http://localhost:8000. Stop with `Ctrl+C`, then `docker compose down` if you want.
+If Windows blocks the script: `powershell -ExecutionPolicy Bypass -File .\start-local.ps1`.
+
 ## 3. Everyday commands
 
 | Task | Command |
@@ -119,6 +130,19 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
 - **Labels:** colour tags per workspace (Settings tab).
 - **References:** link any project/workspace to another (even across clients). The other side shows a backlink.
   You only ever see links to records you are allowed to open.
+
+## 4c. Unified workflow (P3a)
+
+- **Tasks** live in a client workspace and belong to a department (Development, Research, Product, Marketing, SEO).
+  Same statuses for everyone: Backlog, To Do, In Progress, In Review, Blocked, Done.
+- **Views:** Tasks (list + filters), **Board** (drag between columns), **My tasks** (all clients, by due date),
+  **Department queue** (one department's work across all clients you can see).
+- **Send to department (handoff):** creates the next department's task linked to this one. It waits in Backlog
+  and moves to To Do automatically when this task is Done.
+- **Waiting on:** a task cannot be moved to Done while a task it waits on is still open.
+- **Workflow templates** (Admin › Workflow templates): Client Onboarding, Website Build, SEO Audit > Fix,
+  Campaign Launch, Monthly Client Report. "Start a workflow" on the Tasks page creates the whole chain.
+- **Discussion:** comments with @mentions (edit for 15 minutes), watchers, and a timeline of every change.
 
 ## 5. Push to GitHub
 

@@ -13,7 +13,7 @@ import type { LinkRow, ReferenceItem } from '@/types/workspace';
  * and a search box to add a new reference (any workspace you can see).
  */
 const props = defineProps<{
-    sourceType: 'workspace' | 'project';
+    sourceType: 'workspace' | 'project' | 'task';
     sourceId: number;
     links: LinkRow[];
     canEdit: boolean;

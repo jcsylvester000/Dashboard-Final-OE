@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card';
 import { departmentDot, roleLabel, timeAgo } from '@/lib/format';
 import { dashboard } from '@/routes';
+import { mine } from '@/routes/tasks';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { edit as securityEdit } from '@/routes/security';
 import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
@@ -36,6 +37,7 @@ defineProps<{
         | { id: number; action: string; actor: string | null; at: string }[]
         | null;
     workspaces: (DepartmentOption & { slug: string; openProjects: number })[];
+    myTasks: { open: number; overdue: number };
     mentions: {
         id: number;
         by: string | null;
@@ -94,10 +96,14 @@ defineOptions({
             <Card>
                 <CardHeader>
                     <CardDescription>My open tasks</CardDescription>
-                    <CardTitle class="text-2xl">—</CardTitle>
+                    <CardTitle class="text-2xl">{{ myTasks.open }}</CardTitle>
                 </CardHeader>
-                <CardContent class="text-xs text-muted-foreground">
-                    Tasks arrive with workspaces and the shared workflow (P2–P3).
+                <CardContent class="text-xs">
+                    <span :class="myTasks.overdue ? 'font-medium text-rose-600' : 'text-muted-foreground'"
+                        >{{ myTasks.overdue }} overdue</span
+                    >
+                    ·
+                    <Link :href="mine()" class="underline underline-offset-4">Open My tasks</Link>
                 </CardContent>
             </Card>
             <Card>

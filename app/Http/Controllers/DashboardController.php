@@ -8,6 +8,8 @@ use App\Models\ActivityLog;
 use App\Models\Department;
 use App\Models\Mention;
 use App\Models\Project;
+use App\Models\Task;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
@@ -58,6 +60,17 @@ class DashboardController extends Controller
                     'openProjects' => $w->open_projects_count,
                 ]),
             'mentions' => $this->recentMentions($user),
+            'myTasks' => [
+                'open' => Task::query()->where('assignee_id', $user->id)
+                    ->whereNotIn('status_id', TaskStatus::ordered()->where('category', TaskStatus::CATEGORY_DONE)->pluck('id'))
+                    ->whereHas('workspace', fn ($q) => $q->visibleTo($user))
+                    ->count(),
+                'overdue' => Task::query()->where('assignee_id', $user->id)
+                    ->whereNotIn('status_id', TaskStatus::ordered()->where('category', TaskStatus::CATEGORY_DONE)->pluck('id'))
+                    ->whereDate('due_on', '<', now()->toDateString())
+                    ->whereHas('workspace', fn ($q) => $q->visibleTo($user))
+                    ->count(),
+            ],
             'recentActivity' => $user->can(Permissions::ACTIVITY_VIEW)
                 ? ActivityLog::with('actor:id,name')
                     ->latest('id')
@@ -85,6 +98,7 @@ class DashboardController extends Controller
 
         $mentions = Mention::query()
             ->where('mentioned_user_id', $user->id)
+            ->where('mentionable_type', 'project')
             ->with(['author:id,name', 'mentionable' => fn ($m) => $m->morphWith([Project::class => ['workspace:id,name,slug']])])
             ->latest('id')
             ->limit(6)
