@@ -16,9 +16,12 @@ import {
     isOverdue,
     projectStatusColor,
     roleLabel,
+    timeAgo,
+    departmentDot,
 } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
+import { show as taskShow } from '@/routes/workspaces/tasks';
 import {
     index as projectsIndex,
     show as projectShow,
@@ -41,6 +44,21 @@ const props = defineProps<{
     }[];
     members: { id: number; name: string; title: string | null; role: string }[];
     links: LinkRow[];
+    overview: {
+        departments: {
+            id: number | null;
+            name: string;
+            color: string;
+            open: number;
+            active: number;
+            blocked: number;
+            done: number;
+            overdue: number;
+        }[];
+        blocked: { id: number; title: string; assignee: string | null; department: string | null; reason: string; due_on: string | null }[];
+        dueSoon: { id: number; title: string; assignee: string | null; department: string | null; priority: string; due_on: string | null }[];
+        activity: { id: number; action: string; actor: string | null; subject_type: string | null; subject_id: number | null; at: string }[];
+    };
     projectTypes: Record<string, string>;
     projectStatuses: Record<string, string>;
 }>();
@@ -53,6 +71,10 @@ defineOptions({
 
 function count(map: Record<string, number>, key: string): number {
     return Number(map[key] ?? 0);
+}
+
+function actionLabel(action: string): string {
+    return action.replace(/^(task|project)\./, '').replace(/[-_.]/g, ' ');
 }
 
 const openCount = () =>
@@ -79,6 +101,102 @@ const openCount = () =>
                     <CardDescription>{{ projectStatuses[key] }}</CardDescription>
                     <CardTitle class="text-2xl">{{ count(stats.byStatus, key) }}</CardTitle>
                 </CardHeader>
+            </Card>
+        </div>
+
+        <Card v-if="overview.departments.length > 0">
+            <CardHeader>
+                <CardTitle class="text-base">Work by department</CardTitle>
+                <CardDescription>Tasks by status (done = last 30 days)</CardDescription>
+            </CardHeader>
+            <CardContent class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="text-left text-xs text-muted-foreground">
+                        <tr>
+                            <th class="py-2 font-medium">Department</th>
+                            <th class="py-2 text-right font-medium">To do</th>
+                            <th class="py-2 text-right font-medium">In progress</th>
+                            <th class="py-2 text-right font-medium">Blocked</th>
+                            <th class="py-2 text-right font-medium">Overdue</th>
+                            <th class="py-2 text-right font-medium">Done</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="d in overview.departments" :key="d.name">
+                            <td class="py-2">
+                                <span class="flex items-center gap-2">
+                                    <span class="size-2 rounded-full" :class="departmentDot[d.color] ?? 'bg-slate-500'" />
+                                    {{ d.name }}
+                                </span>
+                            </td>
+                            <td class="py-2 text-right tabular-nums">{{ d.open }}</td>
+                            <td class="py-2 text-right tabular-nums">{{ d.active }}</td>
+                            <td class="py-2 text-right tabular-nums" :class="{ 'font-medium text-rose-600': d.blocked }">{{ d.blocked }}</td>
+                            <td class="py-2 text-right tabular-nums" :class="{ 'font-medium text-rose-600': d.overdue }">{{ d.overdue }}</td>
+                            <td class="py-2 text-right tabular-nums">{{ d.done }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </CardContent>
+        </Card>
+
+        <div class="grid gap-4 lg:grid-cols-3">
+            <Card>
+                <CardHeader>
+                    <CardTitle class="text-base">Blocked</CardTitle>
+                    <CardDescription>Blocked or waiting on another task</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p v-if="overview.blocked.length === 0" class="text-sm text-muted-foreground">Nothing blocked.</p>
+                    <ul v-else class="divide-y text-sm">
+                        <li v-for="t in overview.blocked" :key="t.id" class="py-2">
+                            <Link :href="taskShow({ workspace: workspace.slug, task: t.id })" class="font-medium hover:underline">{{ t.title }}</Link>
+                            <p class="text-xs text-muted-foreground">
+                                {{ t.reason }} · {{ t.department ?? 'No department' }} · {{ t.assignee ?? 'unassigned' }}
+                            </p>
+                        </li>
+                    </ul>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle class="text-base">Due in the next 2 weeks</CardTitle>
+                    <CardDescription>Open tasks, overdue first</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p v-if="overview.dueSoon.length === 0" class="text-sm text-muted-foreground">Nothing due.</p>
+                    <ul v-else class="divide-y text-sm">
+                        <li v-for="t in overview.dueSoon" :key="t.id" class="flex items-center justify-between gap-2 py-2">
+                            <Link :href="taskShow({ workspace: workspace.slug, task: t.id })" class="min-w-0 truncate hover:underline">{{ t.title }}</Link>
+                            <span class="shrink-0 text-xs" :class="isOverdue(t.due_on) ? 'font-medium text-rose-600' : 'text-muted-foreground'">{{
+                                formatDate(t.due_on)
+                            }}</span>
+                        </li>
+                    </ul>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle class="text-base">Recent activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p v-if="overview.activity.length === 0" class="text-sm text-muted-foreground">No activity yet.</p>
+                    <ul v-else class="divide-y text-sm">
+                        <li v-for="a in overview.activity" :key="a.id" class="flex items-center justify-between gap-2 py-2">
+                            <span class="min-w-0 truncate">
+                                <span class="font-medium">{{ a.actor ?? 'System' }}</span>
+                                {{ actionLabel(a.action) }}
+                                <Link
+                                    v-if="a.subject_type === 'task' && a.subject_id"
+                                    :href="taskShow({ workspace: workspace.slug, task: a.subject_id })"
+                                    class="text-xs underline underline-offset-4"
+                                    >#{{ a.subject_id }}</Link
+                                >
+                            </span>
+                            <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(a.at) }}</span>
+                        </li>
+                    </ul>
+                </CardContent>
             </Card>
         </div>
 

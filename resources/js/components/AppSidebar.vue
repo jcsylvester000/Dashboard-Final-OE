@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    BarChart3,
     Bell,
+    Gauge,
     Briefcase,
     AlertTriangle,
     Building2,
@@ -39,6 +41,7 @@ import { dashboard } from '@/routes';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { index as inboxIndex } from '@/routes/inbox';
+import { agency, index as reportsIndex } from '@/routes/reports';
 import { index as departmentsIndex } from '@/routes/admin/departments';
 import { index as rolesIndex } from '@/routes/admin/roles';
 import { index as templatesIndex } from '@/routes/admin/templates';
@@ -83,6 +86,12 @@ const agencyNavItems = computed<NavItem[]>(() => {
     items.splice(3, 0, { title: 'My timesheet', href: timesheet(), icon: Clock });
     if (page.props.auth.leads) {
         items.splice(4, 0, { title: 'Time approvals', href: approvals(), icon: ClipboardCheck });
+    }
+    if (page.props.auth.leads || can.value['reports.view-all']) {
+        items.push({ title: 'Reports', href: reportsIndex(), icon: BarChart3 });
+    }
+    if (can.value['reports.view-all']) {
+        items.push({ title: 'Agency overview', href: agency(), icon: Gauge });
     }
     const dept = page.props.auth.department;
     if (dept) {

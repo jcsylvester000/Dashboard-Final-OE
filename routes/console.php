@@ -25,3 +25,6 @@ Schedule::call(function () {
 })->daily()->name('prune-notifications')->withoutOverlapping();
 
 Schedule::command('queue:prune-failed --hours=720')->daily();
+
+// Weekly report snapshots for workspace leads (P5).
+Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping();

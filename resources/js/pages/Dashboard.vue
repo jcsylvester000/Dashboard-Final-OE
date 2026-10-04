@@ -9,14 +9,14 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { departmentDot, roleLabel, timeAgo } from '@/lib/format';
+import { departmentDot, formatDate, isOverdue, roleLabel, timeAgo } from '@/lib/format';
 import { dashboard } from '@/routes';
 import { index as inboxIndex, open as openAlert } from '@/routes/inbox';
 import { mine } from '@/routes/tasks';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { edit as securityEdit } from '@/routes/security';
 import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
-import { show as projectShow } from '@/routes/workspaces/projects';
+import { show as taskShow } from '@/routes/workspaces/tasks';
 import type { DepartmentOption } from '@/types/admin';
 import type { InboxItem } from '@/types/notifications';
 
@@ -38,8 +38,17 @@ defineProps<{
     recentActivity:
         | { id: number; action: string; actor: string | null; at: string }[]
         | null;
-    workspaces: (DepartmentOption & { slug: string; openProjects: number })[];
-    myTasks: { open: number; overdue: number };
+    workspaces: (DepartmentOption & { slug: string; openProjects: number; myOpenTasks: number })[];
+    myTasks: { open: number; overdue: number; dueWeek: number };
+    nextTasks: {
+        id: number;
+        title: string;
+        priority: string;
+        due_on: string | null;
+        status: string;
+        workspace: string;
+        workspaceSlug: string;
+    }[];
     digest: {
         unread: number;
         dueToday: number;
@@ -48,12 +57,12 @@ defineProps<{
     };
     mentions: {
         id: number;
+        kind: 'project' | 'task' | 'comment';
         by: string | null;
         at: string;
-        project: string;
-        projectId: number;
+        label: string;
+        url: string;
         workspace: string;
-        workspaceSlug: string;
     }[];
 }>();
 
@@ -110,7 +119,7 @@ defineOptions({
                     <span :class="myTasks.overdue ? 'font-medium text-rose-600' : 'text-muted-foreground'"
                         >{{ myTasks.overdue }} overdue</span
                     >
-                    ·
+                    · <span class="text-muted-foreground">{{ myTasks.dueWeek }} due this week</span> ·
                     <Link :href="mine()" class="underline underline-offset-4">Open My tasks</Link>
                 </CardContent>
             </Card>
@@ -177,6 +186,29 @@ defineOptions({
             </CardContent>
         </Card>
 
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Up next</CardTitle>
+                <CardDescription>My open tasks by due date</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p v-if="nextTasks.length === 0" class="text-sm text-muted-foreground">Nothing assigned to you.</p>
+                <ul v-else class="divide-y text-sm">
+                    <li v-for="t in nextTasks" :key="t.id" class="flex items-center justify-between gap-3 py-2">
+                        <span class="min-w-0 truncate">
+                            <Link :href="taskShow({ workspace: t.workspaceSlug, task: t.id })" class="font-medium hover:underline">{{
+                                t.title
+                            }}</Link>
+                            <span class="text-xs text-muted-foreground"> · {{ t.workspace }} · {{ t.status }}</span>
+                        </span>
+                        <span class="shrink-0 text-xs" :class="isOverdue(t.due_on) ? 'font-medium text-rose-600' : 'text-muted-foreground'">{{
+                            t.due_on ? formatDate(t.due_on) : 'No due date'
+                        }}</span>
+                    </li>
+                </ul>
+            </CardContent>
+        </Card>
+
         <div class="grid gap-4 lg:grid-cols-2">
             <Card>
                 <CardHeader>
@@ -197,7 +229,9 @@ defineOptions({
                                 <span class="size-2 rounded-full" :class="departmentDot[w.color] ?? 'bg-slate-500'" />
                                 {{ w.name }}
                             </Link>
-                            <span class="text-xs text-muted-foreground">{{ w.openProjects }} open</span>
+                            <span class="text-xs text-muted-foreground"
+                                >{{ w.myOpenTasks }} my tasks · {{ w.openProjects }} open projects</span
+                            >
                         </li>
                     </ul>
                 </CardContent>
@@ -213,13 +247,10 @@ defineOptions({
                     <ul v-else class="divide-y text-sm">
                         <li v-for="m in mentions" :key="m.id" class="flex items-center justify-between gap-3 py-2">
                             <span class="min-w-0 truncate">
-                                <Link
-                                    :href="projectShow({ workspace: m.workspaceSlug, project: m.projectId })"
-                                    class="font-medium hover:underline"
-                                    >{{ m.project }}</Link
-                                >
+                                <Link :href="m.url" class="font-medium hover:underline">{{ m.label }}</Link>
                                 <span class="text-xs text-muted-foreground">
-                                    · {{ m.workspace }} · by {{ m.by ?? 'someone' }}</span
+                                    · {{ m.kind === 'comment' ? 'in a comment' : m.kind }} · {{ m.workspace }} · by
+                                    {{ m.by ?? 'someone' }}</span
                                 >
                             </span>
                             <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(m.at) }}</span>

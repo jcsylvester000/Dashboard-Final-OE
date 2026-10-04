@@ -7,6 +7,7 @@ import { departmentDot, roleLabel } from '@/lib/format';
 import { edit, show } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
 import { index as projectsIndex } from '@/routes/workspaces/projects';
+import { index as reportsIndex } from '@/routes/workspaces/reports';
 import { board as tasksBoard, calendar as tasksCalendar, index as tasksIndex } from '@/routes/workspaces/tasks';
 import type { WorkspaceHeader } from '@/types/workspace';
 
@@ -24,6 +25,10 @@ const tabs = computed(() => {
         { title: 'Projects', href: projectsIndex(slug) },
         { title: 'Members', href: membersIndex(slug) },
     ];
+
+    if (props.workspace.can.reports) {
+        items.push({ title: 'Reports', href: reportsIndex(slug) });
+    }
 
     if (props.workspace.can.settings) {
         items.push({ title: 'Settings', href: edit(slug) });

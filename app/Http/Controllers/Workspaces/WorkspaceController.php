@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Workspaces;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Reports\WorkspaceOverview;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
@@ -129,6 +130,7 @@ class WorkspaceController extends Controller
                     'role' => $m->getRelation('membership')->getAttribute('role'),
                 ]),
             'links' => app(LinkService::class)->linksFor($workspace, $user),
+            'overview' => app(WorkspaceOverview::class)->build($workspace),
             'projectTypes' => Project::TYPES,
             'projectStatuses' => Project::STATUSES,
         ]);

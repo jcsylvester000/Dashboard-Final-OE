@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class TaskStatus extends Model
 {
+    public const CATEGORY_BLOCKED = 'blocked';
+
     public const CATEGORY_DONE = 'done';
 
     /**

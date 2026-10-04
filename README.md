@@ -186,6 +186,19 @@ npm run build                   # VITE_REVERB_* are baked into the frontend
 composer dev                    # now also starts reverb:start
 ```
 
+## 4f. Dashboards & reports (P5)
+
+- **My dashboard:** open / overdue / due-this-week counts, "Up next" (my tasks by due date), my workspaces with my
+  task counts, recent @mentions (tasks, comments, projects), daily digest.
+- **Workspace Overview:** work by department and status, blocked items, due in the next 2 weeks, recent activity.
+- **Reports** (sidebar; workspace owners/leads see their own clients, admins see all): throughput per week, cycle
+  time, overdue by department, workload by person, handoff wait time, time logged (by client / project / task /
+  person / department, billable vs non-billable). Filter by client, department and dates; **Export CSV** opens in Excel.
+- **Agency overview** (admins, `reports.view-all`): every active client's health and team workload, cached 5 minutes
+  (Refresh button). Health: overdue = 5+ overdue tasks or 25%+ of open work overdue; at risk = any overdue or blocked.
+- **Weekly snapshots:** saved every Monday 06:00 for last week (`php artisan reports:snapshot`); leads see them under
+  the workspace **Reports** tab and can save last week on demand.
+
 ## 5. Push to GitHub
 
 Repository: `https://github.com/jcsylvester000/Dashboard-Final-OE.git`
