@@ -18,6 +18,7 @@ class Notifier
     public function __construct(
         private readonly WorkspaceAccess $access,
         private readonly NotificationPreferences $preferences,
+        private readonly AlertBatch $batch,
     ) {}
 
     /**
@@ -39,6 +40,13 @@ class Notifier
             return 0;
         }
 
+        // Inside a bulk action: buffer now, AlertBatch sends one grouped alert per person later.
+        if ($this->batch->collecting()) {
+            $this->batch->add(array_keys($ids), $kind, $workspace, $payload, $actor);
+
+            return count($ids);
+        }
+
         $payload['workspace'] ??= $workspace->name;
         $payload['actor'] ??= $actor?->name;
 
@@ -54,6 +62,35 @@ class Notifier
             }
 
             $user->notify(new WorkNotification($kind, $payload, $workspace->id, $mode === NotificationKind::MODE_DIGEST));
+            $sent++;
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Alerts that belong to no client (leave, HR): same rules except the workspace check.
+     *
+     * @param  iterable<int|null>  $userIds
+     * @param  array{title: string, body?: string|null, url: string, workspace?: string|null, actor?: string|null, task_id?: int|null}  $payload
+     */
+    public function sendPersonal(iterable $userIds, NotificationKind $kind, array $payload, ?User $actor = null): int
+    {
+        $ids = [];
+        foreach ($userIds as $id) {
+            if ($id !== null && (int) $id !== $actor?->id) {
+                $ids[(int) $id] = true;
+            }
+        }
+        $payload['actor'] ??= $actor?->name;
+
+        $sent = 0;
+        foreach (User::query()->active()->whereIn('id', array_keys($ids))->get() as $user) {
+            $mode = $this->preferences->mode($user, $kind);
+            if ($mode === NotificationKind::MODE_OFF) {
+                continue;
+            }
+            $user->notify(new WorkNotification($kind, $payload, null, $mode === NotificationKind::MODE_DIGEST));
             $sent++;
         }
 

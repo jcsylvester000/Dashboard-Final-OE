@@ -8,8 +8,14 @@ import { edit, show } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
 import { index as projectsIndex } from '@/routes/workspaces/projects';
 import { index as reportsIndex } from '@/routes/workspaces/reports';
+import { index as sprintsIndex } from '@/routes/workspaces/sprints';
 import { index as workSummaryIndex } from '@/routes/workspaces/work-summary';
-import { board as tasksBoard, calendar as tasksCalendar, index as tasksIndex } from '@/routes/workspaces/tasks';
+import {
+    board as tasksBoard,
+    calendar as tasksCalendar,
+    index as tasksIndex,
+    timeline as tasksTimeline,
+} from '@/routes/workspaces/tasks';
 import type { WorkspaceHeader } from '@/types/workspace';
 
 const props = defineProps<{ workspace: WorkspaceHeader }>();
@@ -23,6 +29,8 @@ const tabs = computed(() => {
         { title: 'Tasks', href: tasksIndex(slug) },
         { title: 'Board', href: tasksBoard(slug) },
         { title: 'Calendar', href: tasksCalendar(slug) },
+        { title: 'Timeline', href: tasksTimeline(slug) },
+        { title: 'Sprints', href: sprintsIndex(slug) },
         { title: 'Projects', href: projectsIndex(slug) },
         { title: 'Members', href: membersIndex(slug) },
     ];
@@ -63,7 +71,10 @@ const tabs = computed(() => {
                 >
             </span>
         </div>
-        <nav class="flex gap-1 border-b text-sm" aria-label="Workspace sections">
+        <nav
+            class="flex gap-1 border-b text-sm"
+            aria-label="Workspace sections"
+        >
             <Link
                 v-for="tab in tabs"
                 :key="tab.title"

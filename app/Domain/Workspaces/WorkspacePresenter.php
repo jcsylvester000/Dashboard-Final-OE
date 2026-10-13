@@ -46,15 +46,15 @@ class WorkspacePresenter
     /**
      * Active workspace members, for pickers and @mentions.
      *
-     * @return list<array{id: int, name: string, title: string|null}>
+     * @return list<array{id: int, name: string, title: string|null, department_id: int|null}>
      */
     public function memberOptions(Workspace $workspace): array
     {
         return $workspace->members()
             ->where('users.is_active', true)
             ->orderBy('name')
-            ->get(['users.id', 'users.name', 'users.title'])
-            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'title' => $u->title])
+            ->get(['users.id', 'users.name', 'users.title', 'users.primary_department_id'])
+            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'title' => $u->title, 'department_id' => $u->primary_department_id])
             ->values()
             ->all();
     }

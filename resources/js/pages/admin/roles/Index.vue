@@ -65,12 +65,11 @@ function save(role: RoleRow): void {
 
     <div class="flex flex-1 flex-col gap-4 p-4">
         <div>
-            <h1 class="text-xl font-semibold tracking-tight">
-                Roles & access
-            </h1>
+            <h1 class="text-xl font-semibold tracking-tight">Roles & access</h1>
             <p class="text-sm text-muted-foreground">
-                Global permissions per role. Super Admin always has full
-                access. Client-workspace roles are added in P2.
+                Global permissions per role. Super Admin always has full access.
+                Client-workspace roles (Lead, Member, Guest) are set per
+                workspace.
             </p>
         </div>
 
@@ -102,7 +101,9 @@ function save(role: RoleRow): void {
                     <tr v-for="p in permissions" :key="p.name">
                         <td class="px-4 py-2">
                             <div class="font-medium">{{ p.label }}</div>
-                            <div class="font-mono text-xs text-muted-foreground">
+                            <div
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ p.name }}
                             </div>
                         </td>

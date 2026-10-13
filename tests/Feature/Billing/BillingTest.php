@@ -380,4 +380,31 @@ class BillingTest extends TestCase
         $this->assertSame(0, InboxNotification::where('notifiable_id', $this->max->id)->count());
         $this->assertNotNull($invoice->fresh()->overdue_alerted_at);
     }
+
+    public function test_hour_lines_can_be_grouped_by_person_or_project_without_changing_the_total()
+    {
+        $draft = app(InvoiceService::class)->buildDraft($this->october, $this->finance, 'person');
+
+        $this->assertSame('person', $draft->line_grouping);
+        $lines = $draft->items()->where('type', 'hours')->pluck('description')->all();
+        $this->assertContains('Max – Development hours', $lines);
+        $this->assertContains('Lena – SEO hours', $lines);
+        $this->assertSame(394000, $draft->fresh()->subtotal_minor);
+
+        // By project via the page's "Lines by" select; the choice sticks on plain recalculation.
+        $site = Project::factory()->create(['workspace_id' => $this->ws->id, 'name' => 'Arizona launch']);
+        $this->e['e1']->forceFill(['project_id' => $site->id])->save();
+
+        $this->actingAs($this->finance)->post(route('billing.invoices.recalculate', $draft), ['grouping' => 'project'])->assertSessionHasNoErrors();
+        $this->actingAs($this->finance)->post(route('billing.invoices.recalculate', $draft))->assertSessionHasNoErrors();
+
+        $draft->refresh();
+        $this->assertSame('project', $draft->line_grouping);
+        $lines = $draft->items()->where('type', 'hours')->pluck('description')->all();
+        $this->assertContains('Arizona launch – Development hours', $lines);
+        $this->assertContains('Other work – Development hours', $lines);
+        $this->assertSame(394000, $draft->subtotal_minor);
+
+        $this->actingAs($this->finance)->post(route('billing.invoices.recalculate', $draft), ['grouping' => 'planet'])->assertSessionHasErrors('grouping');
+    }
 }

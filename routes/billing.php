@@ -5,6 +5,7 @@ use App\Http\Controllers\Billing\BillingReportController;
 use App\Http\Controllers\Billing\ClientBillingController;
 use App\Http\Controllers\Billing\InvoiceController;
 use App\Http\Controllers\Billing\RateCardController;
+use App\Http\Controllers\Billing\RateTemplateController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -41,6 +42,14 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_MANAGE])->prefix('billing
     Route::get('reports', BillingReportController::class)->name('reports.index');
 
     Route::get('rates', [RateCardController::class, 'index'])->name('rates.index');
+    Route::get('rates/history', [RateCardController::class, 'history'])->name('rates.history');
     Route::post('rates', [RateCardController::class, 'store'])->name('rates.store');
     Route::delete('rates/{rateCard}', [RateCardController::class, 'destroy'])->name('rates.destroy');
+
+    // Rate templates: per-person rates applied to a client as its own copy.
+    Route::post('rate-templates', [RateTemplateController::class, 'store'])->name('rate-templates.store');
+    Route::get('rate-templates/{rateTemplate}', [RateTemplateController::class, 'edit'])->name('rate-templates.edit');
+    Route::put('rate-templates/{rateTemplate}', [RateTemplateController::class, 'update'])->name('rate-templates.update');
+    Route::delete('rate-templates/{rateTemplate}', [RateTemplateController::class, 'destroy'])->name('rate-templates.destroy');
+    Route::post('clients/{workspace:slug}/rate-template', [RateTemplateController::class, 'apply'])->name('clients.rate-template');
 });

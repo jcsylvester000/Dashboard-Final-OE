@@ -12,13 +12,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Work\SaveTaskRequest;
 use App\Models\ActivityLog;
 use App\Models\Comment;
+use App\Models\Project;
+use App\Models\RecordLink;
+use App\Models\SavedView;
 use App\Models\Task;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\WorkflowTemplate;
 use App\Models\Workspace;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +36,16 @@ use Inertia\Response;
  */
 class TaskController extends Controller
 {
+    /** Group-by options for the list: key => column used to keep groups together. */
+    public const GROUPS = [
+        'status' => 'status_id',
+        'assignee' => 'assignee_id',
+        'project' => 'project_id',
+        'department' => 'department_id',
+        'sprint' => 'sprint_id',
+        'priority' => 'priority',
+    ];
+
     public function __construct(
         private readonly TaskService $tasks,
         private readonly TaskPresenter $present,
@@ -43,6 +59,14 @@ class TaskController extends Controller
 
         $query = $workspace->tasks()->getQuery()->with(TaskPresenter::WITH)->whereNull('parent_id');
         $this->present->applyFilters($query, $filters, $request->user()->id);
+
+        // Grouped lists sort by the group first so each group is contiguous across pages.
+        if (isset($filters['group'])) {
+            $column = self::GROUPS[(string) $filters['group']] ?? 'status_id';
+            $column === 'priority'
+                ? $query->orderByRaw("case priority when 'urgent' then 0 when 'high' then 1 when 'normal' then 2 else 3 end")
+                : $query->orderByRaw("{$column} is null")->orderBy($column);
+        }
 
         $page = $query
             ->orderByRaw('due_on is null, due_on asc')
@@ -70,25 +94,94 @@ class TaskController extends Controller
             ->where(fn ($q) => $q->whereNull('completed_at')->orWhere('completed_at', '>=', now()->subDays(14)));
         $this->present->applyFilters($query, $filters, $request->user()->id);
 
-        $tasks = $query->orderBy('position')->limit(400)->get();
+        // B-21: cap each column (most boards fit; "Show more" raises the cap) instead of
+        // shipping up to 400 cards at once. Totals let each column say how many are hidden.
+        $perColumn = max(25, min(500, (int) $request->integer('per_column', 50)));
+        $ranked = (clone $query)->toBase()->select('tasks.id')
+            ->selectRaw('row_number() over (partition by tasks.status_id order by tasks.position, tasks.id) as board_rank');
+        $tasks = Task::query()->with(TaskPresenter::WITH)
+            ->whereIn('id', DB::query()->fromSub($ranked, 'ranked')->where('board_rank', '<=', $perColumn)->select('id'))
+            ->orderBy('position')
+            ->get();
+        $totals = (clone $query)->toBase()->select('tasks.status_id')->selectRaw('count(*) as aggregate')->groupBy('tasks.status_id')
+            ->pluck('aggregate', 'status_id')->map(fn ($n) => (int) $n);
         $open = $this->present->openDependencyMap($tasks->pluck('id')->all());
 
         return Inertia::render('tasks/Board', [
             ...$this->shared($workspace, $request->user()),
             'tasks' => $tasks->map(fn (Task $t): array => $this->present->row($t, $open))->values(),
+            'columnTotals' => $totals,
+            'perColumn' => $perColumn,
             'filters' => $filters,
         ]);
     }
 
     public function store(SaveTaskRequest $request, Workspace $workspace): RedirectResponse
     {
-        $task = $this->tasks->create($workspace, $request->validated(), $request->user());
+        // Optional: link the new task to an existing ticket right away.
+        $link = $request->validate([
+            'link_task_id' => ['nullable', 'integer', Rule::exists('tasks', 'id')->whereNull('deleted_at')],
+            'link_relation' => ['nullable', 'required_with:link_task_id', Rule::in(['relates', 'duplicates', 'follows', 'blocks', 'blocked_by'])],
+        ]);
+        $target = isset($link['link_task_id']) ? Task::query()->findOrFail((int) $link['link_task_id']) : null;
+        if ($target !== null) {
+            Gate::authorize('view', $target);
+            if (in_array($link['link_relation'], ['blocks', 'blocked_by'], true) && $target->workspace_id !== $workspace->id) {
+                throw ValidationException::withMessages(['link_relation' => __('Blocking links only work inside the same client. Use "relates to" for other clients.')]);
+            }
+        }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Task created.')]);
+        /** @var User $user */
+        $user = $request->user();
+        $task = $this->tasks->create($workspace, $request->validated(), $user);
+
+        if ($target !== null) {
+            $relation = (string) $link['link_relation'];
+            if ($relation === 'blocks') {
+                $target->dependencies()->syncWithoutDetaching([$task->id => ['type' => 'blocks', 'created_by' => $user->id]]);
+            } elseif ($relation === 'blocked_by') {
+                $task->dependencies()->syncWithoutDetaching([$target->id => ['type' => 'blocks', 'created_by' => $user->id]]);
+            } else {
+                RecordLink::firstOrCreate(
+                    ['source_type' => 'task', 'source_id' => $task->id, 'target_type' => 'task', 'target_id' => $target->id],
+                    ['relation' => $relation, 'created_by' => $user->id],
+                );
+            }
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Task created: :title', ['title' => $task->title]),
+            'action' => ['label' => __('Open task'), 'url' => route('workspaces.tasks.show', [$workspace, $task], false)],
+        ]);
 
         return $request->boolean('stay')
             ? back()
             : to_route('workspaces.tasks.show', [$workspace, $task]);
+    }
+
+    /**
+     * JSON for the global "New task" dialog: clients I can add work to, and for the
+     * chosen one its projects and people.
+     */
+    public function newOptions(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $workspaces = Workspace::query()->visibleTo($user)->where('status', 'active')->orderBy('name')->get(['id', 'name', 'slug', 'status'])
+            ->filter(fn (Workspace $w) => Gate::forUser($user)->allows('contribute', $w))->values();
+
+        $chosenId = (int) $request->query('workspace', (string) ($user->last_workspace_id ?? 0));
+        $chosen = $workspaces->firstWhere('id', $chosenId) ?? $workspaces->first();
+
+        return response()->json([
+            'workspaces' => $workspaces->map(fn (Workspace $w) => ['id' => $w->id, 'name' => $w->name, 'slug' => $w->slug])->values(),
+            'workspace_id' => $chosen?->id,
+            'projects' => $chosen !== null ? $this->present->formOptions($chosen)['projects'] : [],
+            'members' => $chosen !== null ? $this->workspaces->memberOptions($chosen) : [],
+            'departments' => $this->workspaces->departmentOptions(),
+            'me' => ['id' => $user->id, 'department_id' => $user->primary_department_id],
+        ]);
     }
 
     public function show(Request $request, Workspace $workspace, Task $task, LinkService $links): Response
@@ -130,16 +223,22 @@ class TaskController extends Controller
                 'at' => $log->created_at->toIso8601String(),
             ]);
 
+        $references = $links->linksFor($task, $user);
+
         return Inertia::render('tasks/Show', [
             ...$this->shared($workspace, $user),
             'task' => [
                 ...$this->present->row($task, $open),
                 'description' => $task->description,
                 'work_details' => $task->work_details ?? (object) [],
+                'custom_values' => $task->custom_values ?? (object) [],
                 'estimate_minutes' => $task->estimate_minutes,
                 'reporter' => $task->reporter?->only(['id', 'name']),
                 'completed_at' => $task->completed_at?->toIso8601String(),
                 'created_at' => $task->created_at?->toIso8601String(),
+                'updated_at' => $task->updated_at?->toIso8601String(),
+                'recurrence' => $task->recurrence,
+                'recurrence_until' => $task->recurrence_until?->toDateString(),
                 'parent_id' => $task->parent_id,
                 'handoff_from' => $task->handoffFrom?->only(['id', 'title']),
                 'subtasks' => $task->subtasks->map(fn (Task $t) => $this->present->row($t, $open))->values(),
@@ -157,23 +256,23 @@ class TaskController extends Controller
                     'can_delete' => $c->user_id === $user->id || Gate::allows('lead', $workspace),
                 ])->values(),
             ],
+            'linkedWork' => $this->linkedWork($task, $workspace, $references),
             'timeline' => $timeline,
             // Guests (read-only) don't see who logged what.
             'time' => Gate::allows('update', $task) ? $this->timeSummary($task, $user) : null,
             'workDetailFields' => Task::WORK_DETAIL_FIELDS,
-            'links' => $links->linksFor($task, $user),
+            'customFields' => $workspace->custom_fields ?? [],
+            'links' => $references,
             'canDelete' => Gate::allows('delete', $task),
             'attachments' => app(AttachmentPresenter::class)->for($task, $workspace, $user),
+            // Files from the step that handed this task off (approved first), read-only here.
+            'handoffFiles' => $task->handoffFrom !== null
+                ? app(AttachmentPresenter::class)->for($task->handoffFrom, $workspace, $user, readOnly: true)
+                : [],
+            'canReview' => Gate::allows('review', $task),
+            // S2-13: the project needs a lead's sign-off before Done.
+            'reviewRequired' => $task->project_id !== null && (bool) Project::query()->whereKey($task->project_id)->value('review_required'),
             'fileLimits' => app(AttachmentPresenter::class)->limits(),
-            // Same-workspace tasks for the "waiting on" picker.
-            'dependencyOptions' => $workspace->tasks()
-                ->whereKeyNot($task->id)
-                ->whereNotIn('status_id', $this->present->doneStatusIds())
-                ->latest('id')
-                ->limit(200)
-                ->get(['id', 'title'])
-                ->map(fn (Task $t) => ['id' => $t->id, 'title' => $t->title])
-                ->values(),
         ]);
     }
 
@@ -185,9 +284,68 @@ class TaskController extends Controller
             throw ValidationException::withMessages(['parent_id' => __('A task cannot be its own parent.')]);
         }
 
-        $this->tasks->update($task, $data, $request->user());
+        /** @var User $user */
+        $user = $request->user();
+        $this->guardConflict($task, $data['_seen_at'] ?? null, $user);
+        unset($data['_seen_at']);
+
+        $this->tasks->update($task, $data, $user);
+        // S3-18: say what happened to the time already logged on the task.
+        if (($move = $this->tasks->lastTimeMove) !== null && ($move['moved'] > 0 || $move['kept'] > 0)) {
+            $msg = $move['moved'] > 0 ? __(':h of unbilled time moved with the task.', ['h' => $this->hours($move['moved'])]) : '';
+            if ($move['kept'] > 0) {
+                $msg = trim($msg.' '.__(':h already billed or in a locked period stays on the old project.', ['h' => $this->hours($move['kept'])]));
+            }
+            Inertia::flash('toast', ['type' => 'success', 'message' => $msg]);
+        }
 
         return back();
+    }
+
+    /**
+     * B-11: copy the task (fields, labels, subtasks) and open the copy.
+     */
+    public function duplicate(Request $request, Workspace $workspace, Task $task): RedirectResponse
+    {
+        Gate::authorize('update', $task);
+        /** @var User $user */
+        $user = $request->user();
+        $copy = $this->tasks->duplicate($task, $user);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Task duplicated. You are now on the copy.')]);
+
+        return to_route('workspaces.tasks.show', [$workspace, $copy]);
+    }
+
+    private function hours(int $minutes): string
+    {
+        return sprintf('%dh%s', intdiv($minutes, 60), $minutes % 60 ? sprintf(' %02dm', $minutes % 60) : '');
+    }
+
+    /**
+     * B-12: someone else saved this task after the editor opened it. Refuse instead of
+     * silently overwriting; the editor reloads and sees the other change.
+     */
+    private function guardConflict(Task $task, mixed $seenAt, User $user): void
+    {
+        if (! is_string($seenAt) || $seenAt === '' || $task->updated_at === null) {
+            return;
+        }
+        if ($task->updated_at->lte(CarbonImmutable::parse($seenAt)->addSecond())) {
+            return;
+        }
+
+        $last = ActivityLog::query()->with('actor:id,name')
+            ->where('subject_type', $task->getMorphClass())->where('subject_id', $task->id)
+            ->latest('id')->first();
+        // My own quick successive saves are not a conflict.
+        if ($last === null || $last->actor_id === $user->id) {
+            return;
+        }
+
+        throw ValidationException::withMessages(['conflict' => __(':name changed this task :ago. Reload to see their change, then try again.', [
+            'name' => $last->actor->name ?? __('Someone'),
+            'ago' => $task->updated_at->diffForHumans(),
+        ])]);
     }
 
     /**
@@ -225,6 +383,59 @@ class TaskController extends Controller
         $task->watchers()->toggle([$request->user()->id]);
 
         return back();
+    }
+
+    /**
+     * Everything this task is connected to, in one list (Jira-style "linked work").
+     *
+     * @param  array<int, array<string, mixed>>  $references
+     * @return list<array{relation: string, id: int|null, title: string, status: array<string, mixed>|null, url: string}>
+     */
+    private function linkedWork(Task $task, Workspace $workspace, array $references): array
+    {
+        $row = fn (string $relation, Task $t) => [
+            'relation' => $relation,
+            'id' => $t->id,
+            'title' => $t->title,
+            'status' => $t->status->only(['name', 'color', 'category']),
+            'url' => route('workspaces.tasks.show', [$workspace, $t], false),
+        ];
+        $out = [];
+
+        if ($task->parent_id !== null && ($parent = Task::query()->with('status:id,name,color,category')->find($task->parent_id)) !== null) {
+            $out[] = $row('Subtask of', $parent);
+        }
+        if ($task->handoff_from_task_id !== null && ($from = Task::query()->with('status:id,name,color,category')->find($task->handoff_from_task_id)) !== null) {
+            $out[] = $row('Handed off from', $from);
+        }
+        foreach ($task->dependencies as $d) {
+            $out[] = $row('Waiting on', $d);
+        }
+        foreach ($task->dependents as $d) {
+            $out[] = $row('Blocks', $d);
+        }
+        foreach (Task::query()->with('status:id,name,color,category')->where('handoff_from_task_id', $task->id)->get() as $h) {
+            $out[] = $row('Handed off to', $h);
+        }
+        foreach ($task->subtasks as $sub) {
+            $out[] = $row('Parent of', $sub);
+        }
+        // B-11: linked tasks show their current status too.
+        $refTasks = Task::query()->with('status:id,name,color,category')
+            ->whereIn('id', collect($references)->where('type', 'task')->pluck('record_id')->all())
+            ->get()->keyBy('id');
+        foreach ($references as $ref) {
+            $other = ($ref['type'] ?? null) === 'task' ? $refTasks->get((int) $ref['record_id']) : null;
+            $out[] = [
+                'relation' => (string) ($ref['relation_label'] ?? 'Relates to'),
+                'id' => $other?->id,
+                'title' => (string) $ref['label'],
+                'status' => $other?->status->only(['name', 'color', 'category']),
+                'url' => (string) $ref['url'],
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -284,6 +495,9 @@ class TaskController extends Controller
             'assignee' => ['nullable', 'string', 'max:20'],
             'due' => ['nullable', Rule::in(['overdue', 'week'])],
             'include_done' => ['nullable', 'boolean'],
+            'type' => ['nullable', Rule::in(array_keys(Task::TYPES))],
+            'sprint' => ['nullable', 'string', 'max:20'],
+            'group' => ['nullable', Rule::in(array_keys(self::GROUPS))],
         ]);
     }
 
@@ -301,6 +515,16 @@ class TaskController extends Controller
             'templates' => WorkflowTemplate::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             ...$this->present->formOptions($workspace),
             'doneStatusIds' => $this->present->doneStatusIds(),
+            'views' => $workspace->views()->visibleTo($user)->with('user:id,name')->orderBy('name')->get()
+                ->map(fn (SavedView $v) => [
+                    'id' => $v->id,
+                    'name' => $v->name,
+                    'page' => $v->page,
+                    'filters' => (object) $v->filters,
+                    'shared' => $v->shared,
+                    'owner' => $v->user->name,
+                    'can_delete' => $v->user_id === $user->id || ($v->shared && Gate::forUser($user)->allows('lead', $workspace)),
+                ])->values(),
         ];
     }
 }

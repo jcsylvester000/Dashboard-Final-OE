@@ -26,7 +26,11 @@ defineOptions({
 
     <Form
         v-bind="ForcePasswordChangeController.update.form()"
-        :reset-on-error="['password', 'password_confirmation', 'current_password']"
+        :reset-on-error="[
+            'password',
+            'password_confirmation',
+            'current_password',
+        ]"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"
     >

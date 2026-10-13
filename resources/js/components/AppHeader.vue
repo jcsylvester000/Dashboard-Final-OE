@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/tooltip';
 import UserMenuContent from '@/components/UserMenuContent.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
-import { getInitials } from '@/composables/useInitials';
+import { avatarColor, getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { BreadcrumbItem, NavItem } from '@/types';
@@ -254,7 +254,8 @@ const rightNavItems: NavItem[] = [
                                         :alt="auth.user.name"
                                     />
                                     <AvatarFallback
-                                        class="rounded-lg bg-neutral-200 font-semibold text-black dark:bg-neutral-700 dark:text-white"
+                                        class="rounded-lg font-semibold"
+                                        :class="avatarColor(auth.user?.name)"
                                     >
                                         {{ getInitials(auth.user?.name) }}
                                     </AvatarFallback>

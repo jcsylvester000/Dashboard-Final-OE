@@ -9,6 +9,7 @@ use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -104,6 +105,9 @@ class WorkspaceController extends Controller
                     ->groupBy('status')->pluck('total', 'status'),
                 'byType' => $workspace->projects()->toBase()->select('type', DB::raw('count(*) as total'))
                     ->groupBy('type')->pluck('total', 'type'),
+                // S1-02: the first card counts tasks, not projects.
+                'openTasks' => $workspace->tasks()->whereNull('completed_at')->count(),
+                'overdueTasks' => $workspace->tasks()->whereNull('completed_at')->whereDate('due_on', '<', now()->toDateString())->count(),
             ],
             'upcoming' => $workspace->projects()
                 ->with('lead:id,name')
@@ -143,11 +147,18 @@ class WorkspaceController extends Controller
 
         return Inertia::render('workspaces/Settings', [
             'workspace' => $this->presenter->header($workspace, $request->user()),
-            'details' => $workspace->only(['name', 'industry', 'website', 'status', 'color', 'description', 'primary_contact_name']),
+            'details' => $workspace->only(['name', 'key', 'industry', 'website', 'status', 'color', 'description', 'primary_contact_name']),
             'labels' => $workspace->labels()->withCount('projects')->orderBy('name')->get()
                 ->map(fn ($l) => ['id' => $l->id, 'name' => $l->name, 'color' => $l->color, 'uses' => $l->projects_count]),
             'colors' => Workspace::COLORS,
             'statuses' => Workspace::STATUSES,
+            // B-07: custom task fields and this client's status names.
+            'customFields' => $workspace->custom_fields ?? [],
+            'fieldTypes' => Workspace::CUSTOM_FIELD_TYPES,
+            'maxFields' => Workspace::MAX_CUSTOM_FIELDS,
+            'taskStatuses' => TaskStatus::ordered()->map(fn (TaskStatus $s) => [
+                'id' => $s->id, 'name' => $s->name, 'label' => $workspace->status_labels[$s->id] ?? '',
+            ])->values(),
         ]);
     }
 
@@ -155,10 +166,16 @@ class WorkspaceController extends Controller
     {
         Gate::authorize('update', $workspace);
 
+        if ($request->filled('key')) {
+            $request->merge(['key' => strtoupper(trim((string) $request->input('key')))]);
+        }
+
         $data = $request->validate([
             ...$this->rules(),
             'status' => ['required', Rule::in(Workspace::STATUSES)],
-        ]);
+            // Task key prefix (BRW-24). Changing it renames every key; old short links stop working.
+            'key' => ['sometimes', 'required', 'string', 'regex:/^[A-Z][A-Z0-9]{1,5}$/', Rule::unique('workspaces', 'key')->ignore($workspace->id)],
+        ], ['key.regex' => __('Use 2-6 letters or digits, starting with a letter (e.g. BRW).')]);
 
         $workspace->fill($data)->save();
 

@@ -30,6 +30,7 @@ final class ReportFilters
         public readonly CarbonImmutable $to,
         public readonly ?int $workspaceId = null,
         public readonly ?int $departmentId = null,
+        public readonly ?int $projectId = null,
     ) {}
 
     /**
@@ -69,6 +70,8 @@ final class ReportFilters
         $data = $request->validate([
             'workspace' => ['nullable', 'integer', $allowed === null ? Rule::exists('workspaces', 'id') : Rule::in($allowed)],
             'department' => ['nullable', 'integer', Rule::exists('departments', 'id')],
+            // S1-27: one project or campaign (only inside workspaces the user may report on).
+            'project' => ['nullable', 'integer', $allowed === null ? Rule::exists('projects', 'id') : Rule::exists('projects', 'id')->whereIn('workspace_id', $allowed)],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
         ]);
@@ -88,17 +91,19 @@ final class ReportFilters
             $to->endOfDay(),
             isset($data['workspace']) ? (int) $data['workspace'] : null,
             isset($data['department']) ? (int) $data['department'] : null,
+            isset($data['project']) ? (int) $data['project'] : null,
         );
     }
 
     /**
-     * @return array{workspace: int|null, department: int|null, from: string, to: string}
+     * @return array{workspace: int|null, department: int|null, project: int|null, from: string, to: string}
      */
     public function toArray(): array
     {
         return [
             'workspace' => $this->workspaceId,
             'department' => $this->departmentId,
+            'project' => $this->projectId,
             'from' => $this->from->toDateString(),
             'to' => $this->to->toDateString(),
         ];

@@ -39,11 +39,15 @@ watch(form, () => {
     const query = Object.fromEntries(
         Object.entries(form).filter(([, v]) => v !== ''),
     );
-    router.get(index.url({ query }), {}, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
+    router.get(
+        index.url({ query }),
+        {},
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 });
 
 function details(props: Record<string, unknown> | null): string {
@@ -52,7 +56,10 @@ function details(props: Record<string, unknown> | null): string {
     }
 
     return Object.entries(props)
-        .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+        .map(
+            ([k, v]) =>
+                `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`,
+        )
         .join(' · ');
 }
 </script>
@@ -71,7 +78,9 @@ function details(props: Record<string, unknown> | null): string {
         <div class="grid gap-2 sm:grid-cols-2 lg:max-w-xl">
             <NativeSelect v-model="form.action" aria-label="Action">
                 <option value="">All actions</option>
-                <option v-for="a in actions" :key="a" :value="a">{{ a }}</option>
+                <option v-for="a in actions" :key="a" :value="a">
+                    {{ a }}
+                </option>
             </NativeSelect>
             <NativeSelect v-model="form.actor" aria-label="Who">
                 <option value="">Anyone</option>
@@ -83,7 +92,9 @@ function details(props: Record<string, unknown> | null): string {
 
         <div class="overflow-x-auto rounded-lg border">
             <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50 text-xs text-muted-foreground uppercase">
+                <thead
+                    class="bg-muted/50 text-xs text-muted-foreground uppercase"
+                >
                     <tr>
                         <th class="px-4 py-2 font-medium">When</th>
                         <th class="px-4 py-2 font-medium">Who</th>
@@ -102,7 +113,9 @@ function details(props: Record<string, unknown> | null): string {
                         </td>
                     </tr>
                     <tr v-for="log in logs.data" :key="log.id">
-                        <td class="px-4 py-2 whitespace-nowrap text-muted-foreground">
+                        <td
+                            class="px-4 py-2 whitespace-nowrap text-muted-foreground"
+                        >
                             {{ formatDateTime(log.at) }}
                         </td>
                         <td class="px-4 py-2">{{ log.actor ?? 'System' }}</td>

@@ -15,6 +15,7 @@ use App\Models\Comment;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskStatus;
+use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -135,9 +136,23 @@ class WorkEventSubscriber
             return;
         }
 
-        $status = TaskStatus::ordered()->firstWhere('id', $task->status_id)->name ?? '';
+        $statusModel = TaskStatus::ordered()->firstWhere('id', $task->status_id);
+        $status = $statusModel->name ?? '';
+        $followers = $this->followers($task);
 
-        $this->notifier->send($this->followers($task), NotificationKind::Status, $workspace, [
+        // Ready for review: the reviewers hear about it right away (not only in the digest).
+        if ($statusModel !== null && $statusModel->slug === 'in-review') {
+            $reviewers = $this->reviewersFor($task, $workspace);
+            $this->notifier->send($reviewers, NotificationKind::Review, $workspace, [
+                'title' => __(':name sent work for your review', ['name' => $event->actor->name ?? __('Someone')]),
+                'body' => $task->title,
+                'url' => $this->notifier->taskUrl($task, $workspace),
+                'task_id' => $task->id,
+            ], $event->actor);
+            $followers = array_values(array_diff($followers, $reviewers));
+        }
+
+        $this->notifier->send($followers, NotificationKind::Status, $workspace, [
             'title' => __(':name moved a task to :status', ['name' => $event->actor->name ?? __('Someone'), 'status' => $status]),
             'body' => $task->title,
             'url' => $this->notifier->taskUrl($task, $workspace),
@@ -234,6 +249,24 @@ class WorkEventSubscriber
     }
 
     /**
+     * Who signs off work in review: the project lead and the department lead
+     * (when they can open the workspace), else the workspace owners and leads.
+     *
+     * @return list<int>
+     */
+    private function reviewersFor(Task $task, Workspace $workspace): array
+    {
+        $ids = array_filter([
+            $task->project_id !== null ? (int) DB::table('projects')->where('id', $task->project_id)->value('lead_user_id') : 0,
+            $task->department_id !== null ? (int) DB::table('departments')->where('id', $task->department_id)->value('lead_user_id') : 0,
+        ]);
+        $ids = array_values(array_filter(array_unique($ids), fn (int $id) => $id !== $task->assignee_id
+            && ($u = User::query()->find($id)) !== null && $this->access->canView($u, $workspace)));
+
+        return $ids !== [] ? $ids : $this->leadsFor($task, $workspace);
+    }
+
+    /**
      * The task department's lead if they can open this workspace, else the workspace owners and leads.
      *
      * @return list<int>
@@ -256,6 +289,6 @@ class WorkEventSubscriber
 
     private function excerpt(string $text): string
     {
-        return Str::limit((string) preg_replace(MentionService::TOKEN, '@$1', $text), 140);
+        return Str::limit((string) preg_replace([MentionService::TOKEN, MentionService::DEPARTMENT_TOKEN], '@$1', $text), 140);
     }
 }

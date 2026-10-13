@@ -4,18 +4,26 @@ import type { MemberOption } from '@/types/workspace';
 
 /**
  * Plain <textarea> with @mention autocomplete. Selecting a person inserts
- * the token @[Name](user:ID). Works inside an Inertia <Form> via `name`.
+ * the token @[Name](user:ID); selecting a department inserts @[Name](dept:ID),
+ * which tags everyone in that department on this client. Works inside an
+ * Inertia <Form> via `name`.
  */
 const props = withDefaults(
     defineProps<{
         name: string;
         members: MemberOption[];
+        departments?: { id: number; name: string }[];
         defaultValue?: string | null;
         rows?: number;
         placeholder?: string;
         id?: string;
     }>(),
-    { defaultValue: '', rows: 5, placeholder: 'Type @ to tag a team member' },
+    {
+        defaultValue: '',
+        rows: 5,
+        placeholder: 'Type @ to tag a team member or department',
+        departments: () => [],
+    },
 );
 
 const value = ref(props.defaultValue ?? '');
@@ -24,15 +32,39 @@ const query = ref<string | null>(null);
 const anchor = ref(0);
 const active = ref(0);
 
-const matches = computed(() => {
+type Option = {
+    key: string;
+    id: number;
+    name: string;
+    title?: string | null;
+    team: boolean;
+};
+
+const matches = computed<Option[]>(() => {
     if (query.value === null) {
         return [];
     }
     const q = query.value.toLowerCase();
-
-    return props.members
+    const teams: Option[] = props.departments
+        .filter((d) => d.name.toLowerCase().includes(q))
+        .map((d) => ({
+            key: `d${d.id}`,
+            id: d.id,
+            name: d.name,
+            title: 'Whole department',
+            team: true,
+        }));
+    const people: Option[] = props.members
         .filter((m) => m.name.toLowerCase().includes(q))
-        .slice(0, 6);
+        .map((m) => ({
+            key: `u${m.id}`,
+            id: m.id,
+            name: m.name,
+            title: m.title,
+            team: false,
+        }));
+
+    return [...teams.slice(0, 3), ...people].slice(0, 7);
 });
 
 function onInput(): void {
@@ -54,14 +86,14 @@ function onInput(): void {
     }
 }
 
-async function pick(member: MemberOption): Promise<void> {
+async function pick(member: Option): Promise<void> {
     const textarea = el.value;
     if (!textarea) {
         return;
     }
 
     const caret = textarea.selectionStart;
-    const token = `@[${member.name.replace(/[\]\r\n]/g, '')}](user:${member.id}) `;
+    const token = `@[${member.name.replace(/[\]\r\n]/g, '')}](${member.team ? 'dept' : 'user'}:${member.id}) `;
     value.value =
         value.value.slice(0, anchor.value) + token + value.value.slice(caret);
     query.value = null;
@@ -114,14 +146,16 @@ function onKeydown(event: KeyboardEvent): void {
         >
             <li
                 v-for="(m, i) in matches"
-                :key="m.id"
+                :key="m.key"
                 role="option"
                 :aria-selected="i === active"
                 class="cursor-pointer px-3 py-2"
                 :class="i === active ? 'bg-accent' : ''"
                 @mousedown.prevent="pick(m)"
             >
-                <div class="font-medium">{{ m.name }}</div>
+                <div class="font-medium">
+                    {{ m.team ? `@${m.name} team` : m.name }}
+                </div>
                 <div v-if="m.title" class="text-xs text-muted-foreground">
                     {{ m.title }}
                 </div>

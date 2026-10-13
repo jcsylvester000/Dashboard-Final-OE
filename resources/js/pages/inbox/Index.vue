@@ -88,7 +88,12 @@ function doneAllShown(): void {
                 description="Assignments, mentions, handoffs and due-date alerts. In-app only."
             />
             <div class="flex gap-2">
-                <Button variant="outline" size="sm" :disabled="counts.attention === 0" @click="markAllRead">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="counts.attention === 0"
+                    @click="markAllRead"
+                >
                     <CheckCheck class="size-4" /> Mark all read
                 </Button>
                 <Button
@@ -105,21 +110,37 @@ function doneAllShown(): void {
             </div>
         </div>
 
-        <nav class="flex flex-wrap gap-1 border-b text-sm" aria-label="Inbox filters">
+        <nav
+            class="flex flex-wrap gap-1 border-b text-sm"
+            aria-label="Inbox filters"
+        >
             <Link
                 v-for="t in tabs"
                 :key="t.key"
                 :href="index({ query: { tab: t.key } })"
                 class="-mb-px border-b-2 px-3 py-2"
-                :class="t.key === tab ? 'border-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                :class="
+                    t.key === tab
+                        ? 'border-foreground font-medium'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                "
             >
                 {{ t.label }}
-                <span class="ml-1 text-xs text-muted-foreground">{{ counts[t.key] }}</span>
+                <span class="ml-1 text-xs text-muted-foreground">{{
+                    counts[t.key]
+                }}</span>
             </Link>
         </nav>
 
-        <p v-if="items.data.length === 0" class="py-10 text-center text-sm text-muted-foreground">
-            {{ tab === 'attention' ? 'Nothing needs your attention. Nice.' : 'Nothing here.' }}
+        <p
+            v-if="items.data.length === 0"
+            class="py-10 text-center text-sm text-muted-foreground"
+        >
+            {{
+                tab === 'attention'
+                    ? 'Nothing needs your attention. Nice.'
+                    : 'Nothing here.'
+            }}
         </p>
 
         <ul v-else class="divide-y rounded-lg border">
@@ -129,41 +150,83 @@ function doneAllShown(): void {
                 class="flex items-start gap-3 p-3 text-sm"
                 :class="{ 'bg-muted/40': !item.read }"
             >
-                <span class="mt-1.5 size-2 shrink-0 rounded-full" :class="kindColor[item.kind]" />
+                <span
+                    class="mt-1.5 size-2 shrink-0 rounded-full"
+                    :class="kindColor[item.kind]"
+                />
                 <div class="min-w-0 flex-1">
                     <Link :href="open(item.id)" class="block hover:underline">
-                        <span :class="item.read ? '' : 'font-semibold'">{{ item.title }}</span>
+                        <span :class="item.read ? '' : 'font-semibold'">{{
+                            item.title
+                        }}</span>
                     </Link>
-                    <p v-if="item.body" class="truncate text-muted-foreground">{{ item.body }}</p>
-                    <p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <p v-if="item.body" class="truncate text-muted-foreground">
+                        {{ item.body }}
+                    </p>
+                    <p
+                        class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                    >
                         <Badge variant="outline">{{ kinds[item.kind] }}</Badge>
                         <span v-if="item.workspace">{{ item.workspace }}</span>
-                        <span :title="formatDateTime(item.created_at)">{{ timeAgo(item.created_at) }}</span>
+                        <span :title="formatDateTime(item.created_at)">{{
+                            timeAgo(item.created_at)
+                        }}</span>
                         <span v-if="item.quiet">· digest</span>
-                        <span v-if="item.snoozed_until">· until {{ formatDateTime(item.snoozed_until) }}</span>
+                        <span v-if="item.snoozed_until"
+                            >· until
+                            {{ formatDateTime(item.snoozed_until) }}</span
+                        >
                     </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
                     <template v-if="item.done || item.snoozed_until">
-                        <Button variant="ghost" size="sm" @click="restoreItem(item.id)">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="restoreItem(item.id)"
+                        >
                             <RotateCcw class="size-4" /> Back to inbox
                         </Button>
                     </template>
                     <template v-else>
-                        <Button v-if="!item.read" variant="ghost" size="sm" @click="markRead([item.id])">Mark read</Button>
+                        <Button
+                            v-if="!item.read"
+                            variant="ghost"
+                            size="sm"
+                            @click="markRead([item.id])"
+                            >Mark read</Button
+                        >
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
-                                <Button variant="ghost" size="icon" aria-label="Snooze">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Snooze"
+                                >
                                     <AlarmClock class="size-4" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem @select="snoozeItem(item.id, '1h')">For 1 hour</DropdownMenuItem>
-                                <DropdownMenuItem @select="snoozeItem(item.id, 'tomorrow')">Until tomorrow 9am</DropdownMenuItem>
-                                <DropdownMenuItem @select="snoozeItem(item.id, 'next_week')">Until Monday 9am</DropdownMenuItem>
+                                <DropdownMenuItem
+                                    @select="snoozeItem(item.id, '1h')"
+                                    >For 1 hour</DropdownMenuItem
+                                >
+                                <DropdownMenuItem
+                                    @select="snoozeItem(item.id, 'tomorrow')"
+                                    >Until tomorrow 9am</DropdownMenuItem
+                                >
+                                <DropdownMenuItem
+                                    @select="snoozeItem(item.id, 'next_week')"
+                                    >Until Monday 9am</DropdownMenuItem
+                                >
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <Button variant="ghost" size="icon" aria-label="Done" @click="markDone([item.id])">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Done"
+                            @click="markDone([item.id])"
+                        >
                             <Check class="size-4" />
                         </Button>
                     </template>
@@ -171,6 +234,11 @@ function doneAllShown(): void {
             </li>
         </ul>
 
-        <Pagination :links="items.links" :from="items.from" :to="items.to" :total="items.total" />
+        <Pagination
+            :links="items.links"
+            :from="items.from"
+            :to="items.to"
+            :total="items.total"
+        />
     </div>
 </template>

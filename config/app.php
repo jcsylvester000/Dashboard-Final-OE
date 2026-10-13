@@ -18,6 +18,12 @@ return [
     /*
     | First Super Admin created by `php artisan db:seed` (only if none exists).
     */
+    // Local development sign-in (php artisan dev:admin). Never used in production.
+    'dev_admin' => [
+        'email' => env('DEV_ADMIN_EMAIL', 'admin@overeasy.local'),
+        'password' => env('DEV_ADMIN_PASSWORD'),
+    ],
+
     'seed_admin' => [
         'name' => env('SEED_ADMIN_NAME', 'Agency Admin'),
         'email' => env('SEED_ADMIN_EMAIL', 'admin@overeasy.local'),
@@ -73,7 +79,7 @@ return [
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'UTC'),
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

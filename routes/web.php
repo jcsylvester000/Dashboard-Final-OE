@@ -27,6 +27,8 @@ Route::middleware('auth')->group(function () {
     // Attachments (P8): uploads, signed downloads, delete.
     Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:60,1')->name('attachments.store');
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
+    Route::post('attachments/{attachment}/approve', [AttachmentController::class, 'approve'])->name('attachments.approve');
+    Route::post('attachments/from-drive', [AttachmentController::class, 'fromDrive'])->middleware('throttle:60,1')->name('attachments.from-drive');
     Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
 
     // In-app alerts inbox (P4)
@@ -42,5 +44,6 @@ require __DIR__.'/workspaces.php';
 require __DIR__.'/work.php';
 require __DIR__.'/reports.php';
 require __DIR__.'/billing.php';
+require __DIR__.'/drive.php';
 require __DIR__.'/admin.php';
 require __DIR__.'/settings.php';

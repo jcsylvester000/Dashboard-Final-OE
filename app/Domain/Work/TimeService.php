@@ -5,10 +5,12 @@ namespace App\Domain\Work;
 use App\Domain\Billing\PeriodService;
 use App\Domain\Identity\ActivityLogger;
 use App\Models\Task;
+use App\Models\TaskStatus;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -18,7 +20,10 @@ use Illuminate\Validation\ValidationException;
  */
 class TimeService
 {
-    public function __construct(private readonly ActivityLogger $activity) {}
+    public function __construct(
+        private readonly ActivityLogger $activity,
+        private readonly TaskService $tasks,
+    ) {}
 
     public function running(User $user): ?TimeEntry
     {
@@ -33,7 +38,7 @@ class TimeService
     {
         $this->guardPeriod($task->workspace_id, now()->toDateString());
 
-        return DB::transaction(function () use ($task, $user) {
+        $entry = DB::transaction(function () use ($task, $user) {
             $current = $this->running($user);
             if ($current !== null) {
                 $this->stop($current);
@@ -53,6 +58,28 @@ class TimeService
                 'is_billable' => true,
             ]);
         });
+
+        $this->markStarted($task, $user);
+
+        return $entry;
+    }
+
+    /**
+     * Working on a task means it has started: To Do (or Backlog with nothing to
+     * wait on) moves to In Progress so the board matches reality.
+     */
+    private function markStarted(Task $task, User $user): void
+    {
+        $status = TaskStatus::ordered()->firstWhere('id', $task->status_id);
+        if ($status === null || ! in_array($status->slug, ['todo', 'backlog'], true)) {
+            return;
+        }
+
+        if ($status->slug === 'backlog' && $task->dependencies()->whereNotIn('tasks.status_id', TaskStatus::ordered()->where('category', 'done')->pluck('id'))->exists()) {
+            return;
+        }
+
+        $this->tasks->update($task, ['status_id' => TaskStatus::idFor('in-progress')], $user);
     }
 
     /**
@@ -86,7 +113,7 @@ class TimeService
         $this->guardPeriod($task->workspace_id, $data['entry_date']);
         $this->activity->log('task.time-logged', $task, ['minutes' => $data['minutes']], $user);
 
-        return TimeEntry::create([
+        $entry = TimeEntry::create([
             'user_id' => $user->id,
             'workspace_id' => $task->workspace_id,
             'task_id' => $task->id,
@@ -97,6 +124,10 @@ class TimeService
             'note' => $data['note'] ?? null,
             'is_billable' => $data['is_billable'] ?? true,
         ]);
+
+        $this->markStarted($task, $user);
+
+        return $entry;
     }
 
     /**
@@ -133,13 +164,64 @@ class TimeService
             ->where('user_id', '!=', $approver->id)
             // Manual entries, or timers that have been stopped.
             ->where(fn ($q) => $q->whereNull('started_at')->orWhereNotNull('ended_at'))
-            ->update(['approved_by' => $approver->id, 'approved_at' => now()]);
+            ->update(['approved_by' => $approver->id, 'approved_at' => now(), 'returned_at' => null, 'returned_by' => null, 'return_reason' => null]);
 
         if ($count > 0) {
             $this->activity->log('time.approved', null, ['count' => $count, 'ids' => array_slice($ids, 0, 50)], $approver);
         }
 
         return $count;
+    }
+
+    /**
+     * Submit my week for approval: every finished, unapproved entry in the week
+     * is marked submitted (and any earlier "returned" note is cleared).
+     */
+    public function submitWeek(User $user, CarbonImmutable $weekStart): int
+    {
+        $count = TimeEntry::query()
+            ->where('user_id', $user->id)
+            ->whereDate('entry_date', '>=', $weekStart->toDateString())
+            ->whereDate('entry_date', '<=', $weekStart->addDays(6)->toDateString())
+            ->whereNull('approved_at')
+            ->where(fn ($q) => $q->whereNull('started_at')->orWhereNotNull('ended_at'))
+            ->update(['submitted_at' => now(), 'returned_at' => null, 'returned_by' => null, 'return_reason' => null]);
+
+        if ($count > 0) {
+            $this->activity->log('time.submitted', null, ['week' => $weekStart->toDateString(), 'count' => $count], $user);
+        }
+
+        return $count;
+    }
+
+    /**
+     * Send entries back to their author with a reason (approvers only; never your own).
+     *
+     * @param  list<int>  $ids  already filtered to entries the approver may approve
+     * @return Collection<int, TimeEntry> the returned entries
+     */
+    public function returnEntries(array $ids, User $approver, string $reason): Collection
+    {
+        $entries = TimeEntry::query()->with('workspace')
+            ->whereIn('id', $ids)
+            ->whereNull('approved_at')
+            ->where('user_id', '!=', $approver->id)
+            ->get();
+
+        foreach ($entries as $entry) {
+            $entry->forceFill([
+                'submitted_at' => null,
+                'returned_at' => now(),
+                'returned_by' => $approver->id,
+                'return_reason' => $reason,
+            ])->save();
+        }
+
+        if ($entries->isNotEmpty()) {
+            $this->activity->log('time.returned', null, ['count' => $entries->count(), 'reason' => $reason], $approver);
+        }
+
+        return $entries;
     }
 
     /**
@@ -174,6 +256,11 @@ class TimeService
         if ($entry->isLocked()) {
             throw ValidationException::withMessages([
                 'entry' => __('This entry is approved or billed and can no longer be changed.'),
+            ]);
+        }
+        if ($entry->submitted_at !== null) {
+            throw ValidationException::withMessages([
+                'entry' => __('This entry is submitted and waiting for approval. Ask your lead to return it if it needs a change.'),
             ]);
         }
         $this->guardPeriod($entry->workspace_id, $entry->entry_date->toDateString());

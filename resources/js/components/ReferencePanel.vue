@@ -20,6 +20,7 @@ const props = defineProps<{
 }>();
 
 const term = ref('');
+const relation = ref('relates');
 const results = ref<ReferenceItem[]>([]);
 const loading = ref(false);
 
@@ -37,7 +38,11 @@ const runSearch = useDebounceFn(async () => {
         });
         const json = (await response.json()) as { results: ReferenceItem[] };
         results.value = json.results.filter(
-            (r) => !(r.type === props.sourceType && r.record_id === props.sourceId),
+            (r) =>
+                !(
+                    r.type === props.sourceType &&
+                    r.record_id === props.sourceId
+                ),
         );
     } catch {
         results.value = [];
@@ -56,6 +61,7 @@ function add(item: ReferenceItem): void {
             source_id: props.sourceId,
             target_type: item.type,
             target_id: item.record_id,
+            relation: relation.value,
         },
         {
             preserveScroll: true,
@@ -96,7 +102,15 @@ function remove(link: LinkRow): void {
                         class="size-4 shrink-0 text-muted-foreground"
                         aria-label="Referenced by"
                     />
-                    <Link :href="link.url" class="truncate font-medium hover:underline">
+                    <span
+                        v-if="link.relation_label"
+                        class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                        >{{ link.relation_label }}</span
+                    >
+                    <Link
+                        :href="link.url"
+                        class="truncate font-medium hover:underline"
+                    >
                         {{ link.label }}
                     </Link>
                     <span class="truncate text-xs text-muted-foreground">{{
@@ -116,6 +130,18 @@ function remove(link: LinkRow): void {
         </ul>
 
         <div v-if="canEdit" class="relative">
+            <div class="mb-2 flex items-center gap-2 text-xs">
+                <span class="text-muted-foreground">This</span>
+                <select
+                    v-model="relation"
+                    class="h-7 rounded-md border bg-transparent px-1.5"
+                    aria-label="Link type"
+                >
+                    <option value="relates">relates to</option>
+                    <option value="duplicates">duplicates</option>
+                    <option value="follows">is a follow-up of</option>
+                </select>
+            </div>
             <div class="relative">
                 <Link2
                     class="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground"
@@ -123,7 +149,7 @@ function remove(link: LinkRow): void {
                 <Input
                     v-model="term"
                     class="pl-8"
-                    placeholder="Link a project or workspace…"
+                    placeholder="Search a task, project or workspace to link…"
                     aria-label="Search records to reference"
                 />
             </div>
@@ -141,7 +167,9 @@ function remove(link: LinkRow): void {
                     @click="add(r)"
                 >
                     <div class="font-medium">{{ r.label }}</div>
-                    <div class="text-xs text-muted-foreground">{{ r.context }}</div>
+                    <div class="text-xs text-muted-foreground">
+                        {{ r.context }}
+                    </div>
                 </li>
             </ul>
         </div>

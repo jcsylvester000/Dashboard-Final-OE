@@ -2,6 +2,10 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
+    CalendarOff,
+    Contact,
+    Activity,
+    PartyPopper,
     Bell,
     Paperclip,
     Receipt,
@@ -17,6 +21,7 @@ import {
     Inbox,
     Workflow,
     FolderKanban,
+    FolderOpen,
     History,
     LayoutDashboard,
     LayoutGrid,
@@ -39,24 +44,38 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { dashboard, directory, workload } from '@/routes';
+import { index as holidaysIndex } from '@/routes/admin/holidays';
+import { index as leaveIndex } from '@/routes/leave';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
+import { index as driveIndex } from '@/routes/drive';
 import { index as inboxIndex } from '@/routes/inbox';
-import { agency, index as reportsIndex } from '@/routes/reports';
+import {
+    agency,
+    index as reportsIndex,
+    people as peopleReport,
+} from '@/routes/reports';
 import { index as departmentsIndex } from '@/routes/admin/departments';
 import { index as rolesIndex } from '@/routes/admin/roles';
 import { index as templatesIndex } from '@/routes/admin/templates';
 import { index as usersIndex } from '@/routes/admin/users';
 import { queue as departmentQueue } from '@/routes/departments';
 import { mine as myTasks } from '@/routes/tasks';
-import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
+import {
+    index as workspacesIndex,
+    show as workspaceShow,
+} from '@/routes/workspaces';
 import { index as wsMembers } from '@/routes/workspaces/members';
 import { index as wsProjects } from '@/routes/workspaces/projects';
 import { approvals, timesheet } from '@/routes/time';
-import { board as wsBoard, calendar as wsCalendar, index as wsTasks } from '@/routes/workspaces/tasks';
+import {
+    board as wsBoard,
+    calendar as wsCalendar,
+    index as wsTasks,
+} from '@/routes/workspaces/tasks';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -79,6 +98,11 @@ const mainNavItems: NavItem[] = [
         icon: CheckSquare,
     },
     {
+        title: 'My files',
+        href: driveIndex(),
+        icon: FolderOpen,
+    },
+    {
         title: 'All workspaces',
         href: workspacesIndex(),
         icon: Briefcase,
@@ -87,9 +111,17 @@ const mainNavItems: NavItem[] = [
 
 const agencyNavItems = computed<NavItem[]>(() => {
     const items = [...mainNavItems];
-    items.splice(3, 0, { title: 'My timesheet', href: timesheet(), icon: Clock });
+    items.splice(3, 0, {
+        title: 'My timesheet',
+        href: timesheet(),
+        icon: Clock,
+    });
     if (page.props.auth.leads) {
-        items.splice(4, 0, { title: 'Time approvals', href: approvals(), icon: ClipboardCheck });
+        items.splice(4, 0, {
+            title: 'Time approvals',
+            href: approvals(),
+            icon: ClipboardCheck,
+        });
     }
     if (page.props.auth.leads || can.value['reports.view-all']) {
         items.push({ title: 'Reports', href: reportsIndex(), icon: BarChart3 });
@@ -97,16 +129,35 @@ const agencyNavItems = computed<NavItem[]>(() => {
     if (can.value['reports.view-all']) {
         items.push({ title: 'Agency overview', href: agency(), icon: Gauge });
     }
+    // People (batch 4): everyone files leave and sees the directory; leads see workload; Finance/admins the people report.
+    items.push({ title: 'Leave', href: leaveIndex(), icon: CalendarOff });
+    if (page.props.auth.leadsDepartment || can.value['reports.view-all']) {
+        items.push({ title: 'Workload', href: workload(), icon: Activity });
+    }
+    if (can.value['billing.manage'] || can.value['reports.view-all']) {
+        items.push({
+            title: 'People report',
+            href: peopleReport(),
+            icon: BarChart3,
+        });
+    }
+    items.push({ title: 'Directory', href: directory(), icon: Contact });
     const dept = page.props.auth.department;
     if (dept) {
-        items.splice(3, 0, { title: `${dept.name} queue`, href: departmentQueue(dept.slug), icon: Inbox });
+        items.splice(3, 0, {
+            title: `${dept.name} queue`,
+            href: departmentQueue(dept.slug),
+            icon: Inbox,
+        });
     }
 
     return items;
 });
 
 // Links for the workspace currently in focus (from the switcher).
-const currentWorkspace = computed(() => page.props.workspaceNav?.current ?? null);
+const currentWorkspace = computed(
+    () => page.props.workspaceNav?.current ?? null,
+);
 const workspaceNavItems = computed<NavItem[]>(() => {
     const ws = currentWorkspace.value;
     if (!ws) {
@@ -114,7 +165,11 @@ const workspaceNavItems = computed<NavItem[]>(() => {
     }
 
     return [
-        { title: 'Overview', href: workspaceShow(ws.slug), icon: LayoutDashboard },
+        {
+            title: 'Overview',
+            href: workspaceShow(ws.slug),
+            icon: LayoutDashboard,
+        },
         { title: 'Tasks', href: wsTasks(ws.slug), icon: ListTodo },
         { title: 'Board', href: wsBoard(ws.slug), icon: Columns3 },
         { title: 'Calendar', href: wsCalendar(ws.slug), icon: CalendarDays },
@@ -128,7 +183,11 @@ const adminNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [];
 
     if (can.value['billing.manage']) {
-        items.push({ title: 'Billing', href: billingInvoices(), icon: Receipt });
+        items.push({
+            title: 'Billing',
+            href: billingInvoices(),
+            icon: Receipt,
+        });
     }
 
     if (can.value['users.view']) {
@@ -168,7 +227,16 @@ const adminNavItems = computed<NavItem[]>(() => {
     }
 
     if (can.value['system.manage']) {
-        items.push({ title: 'File settings', href: fileSettings(), icon: Paperclip });
+        items.push({
+            title: 'Holidays',
+            href: holidaysIndex(),
+            icon: PartyPopper,
+        });
+        items.push({
+            title: 'File settings',
+            href: fileSettings(),
+            icon: Paperclip,
+        });
         items.push({
             title: 'Failed jobs',
             href: failedJobsIndex(),

@@ -27,6 +27,7 @@ class ReportService
         'workload' => 'Workload by person',
         'handoffs' => 'Handoff wait time',
         'time' => 'Time logged',
+        'estimates' => 'Estimate vs actual',
     ];
 
     /** time report grouping => label */
@@ -50,6 +51,7 @@ class ReportService
             'workload' => $this->workload($f),
             'handoffs' => $this->handoffs($f),
             'time' => $this->time($f, $group),
+            'estimates' => $this->estimates($f),
             default => abort(404),
         };
     }
@@ -388,6 +390,75 @@ class ReportService
     }
 
     /**
+     * Estimate vs actual (S1-27): estimated hours against all time logged on those tasks,
+     * per project (or per task when one project is selected). Covers tasks finished in the
+     * range plus open tasks, so a running project shows how it is tracking.
+     *
+     * @return array{columns: list<array{key: string, label: string, type: string}>, rows: list<array<string, mixed>>, summary: array<string, mixed>}
+     */
+    public function estimates(ReportFilters $f): array
+    {
+        $byTask = $f->projectId !== null;
+        $tasks = $this->tasks($f)
+            ->where('tasks.estimate_minutes', '>', 0)
+            ->where(fn (Builder $q) => $q->whereNull('tasks.completed_at')
+                ->orWhere(fn (Builder $d) => $d->whereDate('tasks.completed_at', '>=', $f->from->toDateString())->whereDate('tasks.completed_at', '<=', $f->to->toDateString())))
+            ->get(['tasks.id', 'tasks.title', 'tasks.project_id', 'tasks.estimate_minutes', 'tasks.completed_at']);
+
+        $ids = $tasks->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $actual = $ids === [] ? collect() : DB::table('time_entries')->whereNull('deleted_at')->whereIn('task_id', $ids)
+            ->groupBy('task_id')->selectRaw('task_id, sum(minutes) as m')->pluck('m', 'task_id');
+        $projects = DB::table('projects')->whereIn('id', $tasks->pluck('project_id')->filter()->all())->pluck('name', 'id');
+
+        /** @var array<string, array{name: string, tasks: int, done: int, estimate: int, actual: int}> $groups */
+        $groups = [];
+        foreach ($tasks as $t) {
+            $key = $byTask ? 't'.$t->id : 'p'.($t->project_id ?? 0);
+            $name = $byTask ? (string) $t->title : ($t->project_id !== null ? (string) ($projects[(int) $t->project_id] ?? 'Project') : 'No project');
+            $groups[$key] ??= ['name' => $name, 'tasks' => 0, 'done' => 0, 'estimate' => 0, 'actual' => 0];
+            $groups[$key]['tasks']++;
+            $groups[$key]['done'] += $t->completed_at !== null ? 1 : 0;
+            $groups[$key]['estimate'] += (int) $t->estimate_minutes;
+            $groups[$key]['actual'] += (int) ($actual[(int) $t->id] ?? 0);
+        }
+
+        $rows = [];
+        foreach ($groups as $g) {
+            $rows[] = [
+                'name' => $g['name'],
+                'tasks' => $g['tasks'],
+                'done' => $g['done'],
+                'estimate_hours' => round($g['estimate'] / 60, 2),
+                'actual_hours' => round($g['actual'] / 60, 2),
+                'variance_hours' => round(($g['actual'] - $g['estimate']) / 60, 2),
+                'variance_pct' => $g['estimate'] > 0 ? (int) round(($g['actual'] - $g['estimate']) / $g['estimate'] * 100) : 0,
+            ];
+        }
+        usort($rows, fn (array $a, array $b) => $b['variance_hours'] <=> $a['variance_hours'] ?: strcmp($a['name'], $b['name']));
+
+        $est = array_sum(array_column($groups, 'estimate'));
+        $act = array_sum(array_column($groups, 'actual'));
+
+        return [
+            'columns' => [
+                $this->col('name', $byTask ? 'Task' : 'Project', 'text'),
+                $this->col('tasks', 'Tasks', 'number'),
+                $this->col('done', 'Done', 'number'),
+                $this->col('estimate_hours', 'Estimated', 'hours'),
+                $this->col('actual_hours', 'Actual', 'hours'),
+                $this->col('variance_hours', 'Over / under', 'hours'),
+                $this->col('variance_pct', 'Over / under %', 'percent'),
+            ],
+            'rows' => $rows,
+            'summary' => [
+                'Estimated hours' => round($est / 60, 2),
+                'Actual hours' => round($act / 60, 2),
+                'Over / under' => $est > 0 ? sprintf('%+d%%', (int) round(($act - $est) / $est * 100)) : '—',
+            ],
+        ];
+    }
+
+    /**
      * Live tasks in workspaces the filters allow.
      */
     private function tasks(ReportFilters $f): Builder
@@ -398,7 +469,8 @@ class ReportService
             ->whereNull('workspaces.deleted_at')
             ->when($f->allowedWorkspaceIds !== null, fn (Builder $q) => $q->whereIn('tasks.workspace_id', $f->allowedWorkspaceIds ?? []))
             ->when($f->workspaceId !== null, fn (Builder $q) => $q->where('tasks.workspace_id', $f->workspaceId))
-            ->when($f->departmentId !== null, fn (Builder $q) => $q->where('tasks.department_id', $f->departmentId));
+            ->when($f->departmentId !== null, fn (Builder $q) => $q->where('tasks.department_id', $f->departmentId))
+            ->when($f->projectId !== null, fn (Builder $q) => $q->where('tasks.project_id', $f->projectId));
     }
 
     /**
@@ -416,7 +488,8 @@ class ReportService
             ->whereDate('time_entries.entry_date', '<=', $f->to->toDateString())
             ->when($f->allowedWorkspaceIds !== null, fn (Builder $q) => $q->whereIn('time_entries.workspace_id', $f->allowedWorkspaceIds ?? []))
             ->when($f->workspaceId !== null, fn (Builder $q) => $q->where('time_entries.workspace_id', $f->workspaceId))
-            ->when($f->departmentId !== null, fn (Builder $q) => $q->where('time_entries.department_id', $f->departmentId));
+            ->when($f->departmentId !== null, fn (Builder $q) => $q->where('time_entries.department_id', $f->departmentId))
+            ->when($f->projectId !== null, fn (Builder $q) => $q->where('time_entries.project_id', $f->projectId));
     }
 
     /**

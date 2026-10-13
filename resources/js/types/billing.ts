@@ -1,4 +1,9 @@
-export type InvoiceStatus = 'draft' | 'finalized' | 'partially_paid' | 'paid' | 'void';
+export type InvoiceStatus =
+    | 'draft'
+    | 'finalized'
+    | 'partially_paid'
+    | 'paid'
+    | 'void';
 
 export type InvoiceRow = {
     id: number;
@@ -42,6 +47,8 @@ export type InvoiceLine = {
 export type InvoiceDetail = InvoiceRow & {
     subtotal_minor: number;
     tax_rate_bp: number;
+    line_grouping: string;
+    project?: { id: number; name: string } | null;
     tax_minor: number;
     paid_minor: number;
     credited_minor: number;
@@ -49,8 +56,22 @@ export type InvoiceDetail = InvoiceRow & {
     notes: string | null;
     credited_invoice_id: number | null;
     items: InvoiceLine[];
-    history: { id: number; from: string | null; to: string; note: string | null; by: string | null; at: string }[];
-    payments: { id: number; amount_minor: number; method: string; reference: string | null; received_on: string; by: string | null }[];
+    history: {
+        id: number;
+        from: string | null;
+        to: string;
+        note: string | null;
+        by: string | null;
+        at: string;
+    }[];
+    payments: {
+        id: number;
+        amount_minor: number;
+        method: string;
+        reference: string | null;
+        received_on: string;
+        by: string | null;
+    }[];
     credit_notes: InvoiceRow[];
 };
 

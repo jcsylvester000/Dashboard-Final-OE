@@ -54,11 +54,15 @@ const apply = useDebounceFn(() => {
     const query = Object.fromEntries(
         Object.entries(form).filter(([, value]) => value !== ''),
     );
-    router.get(index.url({ query }), {}, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
+    router.get(
+        index.url({ query }),
+        {},
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 }, 300);
 
 watch(form, apply);
@@ -115,7 +119,9 @@ watch(form, apply);
 
         <div class="overflow-x-auto rounded-lg border">
             <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50 text-xs text-muted-foreground uppercase">
+                <thead
+                    class="bg-muted/50 text-xs text-muted-foreground uppercase"
+                >
                     <tr>
                         <th class="px-4 py-2 font-medium">Member</th>
                         <th class="px-4 py-2 font-medium">Role</th>
@@ -140,7 +146,10 @@ watch(form, apply);
                     >
                         <td class="px-4 py-2">
                             <Link
-                                v-if="canManage && (isSuperAdmin || u.role !== 'super-admin')"
+                                v-if="
+                                    canManage &&
+                                    (isSuperAdmin || u.role !== 'super-admin')
+                                "
                                 :href="edit(u.id)"
                                 class="font-medium hover:underline"
                                 >{{ u.name }}</Link
@@ -181,7 +190,9 @@ watch(form, apply);
                             {{ timeAgo(u.last_login_at) }}
                         </td>
                         <td class="px-4 py-2">
-                            <Badge :variant="u.is_active ? 'secondary' : 'outline'">
+                            <Badge
+                                :variant="u.is_active ? 'secondary' : 'outline'"
+                            >
                                 {{ u.is_active ? 'Active' : 'Deactivated' }}
                             </Badge>
                         </td>

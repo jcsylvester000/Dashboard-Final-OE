@@ -6,12 +6,7 @@ import DepartmentController from '@/actions/App/Http/Controllers/Admin/Departmen
 import InputError from '@/components/InputError.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { departmentDot } from '@/lib/format';
@@ -54,8 +49,8 @@ const editing = ref<number | null>(null);
                     Departments
                 </h1>
                 <p class="text-sm text-muted-foreground">
-                    Every task belongs to a department so work can be handed
-                    off between teams.
+                    Every task belongs to a department so work can be handed off
+                    between teams.
                 </p>
             </div>
             <Button v-if="editing !== 0" @click="editing = 0">
@@ -64,7 +59,9 @@ const editing = ref<number | null>(null);
         </div>
 
         <template v-for="d in [null, ...departments]" :key="d?.id ?? 'new'">
-            <Card v-if="(d === null && editing === 0) || (d && editing === d.id)">
+            <Card
+                v-if="(d === null && editing === 0) || (d && editing === d.id)"
+            >
                 <CardHeader>
                     <CardTitle class="text-base">
                         {{ d ? `Edit ${d.name}` : 'New department' }}
@@ -79,7 +76,7 @@ const editing = ref<number | null>(null);
                         "
                         v-slot="{ errors, processing }"
                         class="grid gap-4 sm:grid-cols-2"
-                        preserve-scroll
+                        :options="{ preserveScroll: true }"
                         @success="editing = null"
                     >
                         <div class="grid gap-2">
@@ -93,7 +90,9 @@ const editing = ref<number | null>(null);
                             <InputError :message="errors.name" />
                         </div>
                         <div class="grid gap-2">
-                            <Label :for="`color-${d?.id ?? 'new'}`">Colour</Label>
+                            <Label :for="`color-${d?.id ?? 'new'}`"
+                                >Colour</Label
+                            >
                             <NativeSelect
                                 :id="`color-${d?.id ?? 'new'}`"
                                 name="color"

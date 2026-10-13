@@ -33,36 +33,82 @@ defineOptions({
     <Head title="Client billing" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <Heading title="Billing" description="Each client's billing setup, unbilled approved time and open balance." />
+        <Heading
+            title="Billing"
+            description="Each client's billing setup, unbilled approved time and open balance."
+        />
         <BillingNav />
 
         <div class="overflow-x-auto rounded-lg border">
             <table class="w-full text-sm">
-                <thead class="bg-muted/50 text-left text-xs text-muted-foreground">
+                <thead
+                    class="bg-muted/50 text-left text-xs text-muted-foreground"
+                >
                     <tr>
                         <th class="px-3 py-2 font-medium">Client</th>
                         <th class="px-3 py-2 font-medium">Setup</th>
-                        <th class="px-3 py-2 text-right font-medium">Retainer</th>
-                        <th class="px-3 py-2 text-right font-medium">Unbilled approved time</th>
-                        <th class="px-3 py-2 text-right font-medium">Open balance</th>
+                        <th class="px-3 py-2 text-right font-medium">
+                            Retainer
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium">
+                            Unbilled approved time
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium">
+                            Open balance
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="c in clients" :key="c.id">
                         <td class="px-3 py-2">
-                            <Link :href="show(c.slug)" class="flex items-center gap-2 font-medium hover:underline">
-                                <span class="size-2 rounded-full" :class="departmentDot[c.color] ?? 'bg-slate-500'" />
+                            <Link
+                                :href="show(c.slug)"
+                                class="flex items-center gap-2 font-medium hover:underline"
+                            >
+                                <span
+                                    class="size-2 rounded-full"
+                                    :class="
+                                        departmentDot[c.color] ?? 'bg-slate-500'
+                                    "
+                                />
                                 {{ c.name }}
                             </Link>
                         </td>
                         <td class="px-3 py-2 text-xs">
-                            <span v-if="c.configured" class="text-emerald-700 dark:text-emerald-400">Configured · {{ c.currency }}</span>
-                            <span v-else class="text-amber-700 dark:text-amber-400">Not set up</span>
+                            <span
+                                v-if="c.configured"
+                                class="text-emerald-700 dark:text-emerald-400"
+                                >Configured · {{ c.currency }}</span
+                            >
+                            <span
+                                v-else
+                                class="text-amber-700 dark:text-amber-400"
+                                >Not set up</span
+                            >
                         </td>
-                        <td class="px-3 py-2 text-right tabular-nums">{{ c.retainer_minor ? formatMoney(c.retainer_minor, c.currency) : '—' }}</td>
-                        <td class="px-3 py-2 text-right tabular-nums">{{ c.unbilled_minutes ? formatMinutes(c.unbilled_minutes) : '—' }}</td>
-                        <td class="px-3 py-2 text-right tabular-nums" :class="{ 'font-medium': c.balance_minor }">
-                            {{ c.balance_minor ? formatMoney(c.balance_minor, c.currency) : '—' }}
+                        <td class="px-3 py-2 text-right tabular-nums">
+                            {{
+                                c.retainer_minor
+                                    ? formatMoney(c.retainer_minor, c.currency)
+                                    : '—'
+                            }}
+                        </td>
+                        <td class="px-3 py-2 text-right tabular-nums">
+                            {{
+                                c.unbilled_minutes
+                                    ? formatMinutes(c.unbilled_minutes)
+                                    : '—'
+                            }}
+                        </td>
+                        <td
+                            class="px-3 py-2 text-right tabular-nums"
+                            :class="{ 'font-medium': c.balance_minor }"
+                        >
+                            {{
+                                c.balance_minor
+                                    ? formatMoney(c.balance_minor, c.currency)
+                                    : '—'
+                            }}
                         </td>
                     </tr>
                 </tbody>

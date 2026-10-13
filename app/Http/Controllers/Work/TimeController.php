@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers\Work;
 
+use App\Domain\Notifications\NotificationKind;
+use App\Domain\Notifications\Notifier;
+use App\Domain\People\Capacity;
 use App\Domain\Work\TimeService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Http\Controllers\Controller;
+use App\Models\Department;
+use App\Models\Project;
 use App\Models\Task;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -120,14 +125,34 @@ class TimeController extends Controller
             ->orderBy('entry_date')
             ->get();
 
+        // Tasks I can log against from the grid: assigned to me (open) or already in this week.
+        $taskIds = $entries->pluck('task_id')->filter()->unique()->values()->all();
+        $tasks = Task::query()->with('workspace:id,name,slug')
+            ->where(fn (Builder $q) => $q->where(fn (Builder $q) => $q->where('assignee_id', $user->id)->whereNull('completed_at'))->orWhereIn('id', $taskIds))
+            ->whereHas('workspace', fn (Builder $q) => $q->where('status', 'active'))
+            ->orderBy('title')->limit(200)->get(['id', 'title', 'workspace_id']);
+
+        $open = $entries->filter(fn (TimeEntry $e) => $e->approved_at === null && ! $e->isRunning());
+
         return Inertia::render('time/Timesheet', [
             'week' => ['start' => $start->toDateString(), 'end' => $end->toDateString()],
             'entries' => $entries->map(fn (TimeEntry $e): array => $this->row($e))->values(),
+            // 8h weekdays minus holidays and approved leave (B-14).
+            'capacityMinutes' => app(Capacity::class)->load($start->toDateString(), $end->toDateString(), [$user->id])->minutes($user->id),
+            'holidays' => Capacity::holidays($start->toDateString(), $end->toDateString()),
+            'status' => match (true) {
+                $entries->isEmpty() => 'empty',
+                $entries->contains(fn (TimeEntry $e) => $e->returned_at !== null) => 'returned',
+                $open->isEmpty() => 'approved',
+                $open->every(fn (TimeEntry $e) => $e->submitted_at !== null) => 'submitted',
+                default => 'draft',
+            },
+            'tasks' => $tasks->map(fn (Task $t) => ['id' => $t->id, 'title' => $t->title, 'workspace' => $t->workspace->only(['name', 'slug'])])->values(),
         ]);
     }
 
     /**
-     * Pending time in workspaces the viewer leads, for approval.
+     * Pending time the viewer may approve (workspace lead, or department lead), for approval.
      */
     public function approvals(Request $request): Response
     {
@@ -137,17 +162,19 @@ class TimeController extends Controller
         $filters = $request->validate([
             'week' => ['nullable', 'date'],
             'workspace' => ['nullable', 'integer'],
+            'project' => ['nullable', 'integer'],
             'status' => ['nullable', Rule::in(['pending', 'approved'])],
         ]);
         $start = TimeService::weekStart($filters['week'] ?? null);
         $end = $start->addDays(6);
 
-        $workspaceIds = $this->leadWorkspaceIds($user);
+        $workspaceIds = $this->approvableWorkspaceIds($user);
+        abort_if($workspaceIds === [], 403, 'You don\'t approve time for any client.');
 
-        $entries = TimeEntry::query()
-            ->with(['task:id,title', 'workspace:id,name,slug,color', 'user:id,name', 'approver:id,name'])
-            ->whereIn('workspace_id', $workspaceIds)
+        $entries = $this->approvable($user)
+            ->with(['task:id,title', 'workspace:id,name,slug,color', 'user:id,name', 'approver:id,name', 'department:id,name'])
             ->when($filters['workspace'] ?? null, fn (Builder $q, $id) => $q->where('workspace_id', (int) $id))
+            ->when($filters['project'] ?? null, fn (Builder $q, $id) => $q->where('project_id', (int) $id))
             ->whereDate('entry_date', '>=', $start->toDateString())
             ->whereDate('entry_date', '<=', $end->toDateString())
             ->where(fn (Builder $q) => $q->whereNull('started_at')->orWhereNotNull('ended_at'))
@@ -164,8 +191,15 @@ class TimeController extends Controller
                 'user' => $e->user->only(['id', 'name']),
                 'approver' => $e->approver?->name,
                 'is_mine' => $e->user_id === $user->id,
+                'department' => $e->department?->name,
             ])->values(),
             'workspaces' => Workspace::query()->whereIn('id', $workspaceIds)->orderBy('name')->get(['id', 'name']),
+            'projects' => Project::query()
+                ->whereIn('workspace_id', ($filters['workspace'] ?? null) ? [(int) $filters['workspace']] : $workspaceIds)
+                ->where('status', '!=', 'archived')
+                ->orderBy('name')
+                ->limit(200)
+                ->get(['id', 'name']),
         ]);
     }
 
@@ -173,6 +207,8 @@ class TimeController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
+        // Same rule as the Approvals page: people who approve nobody's time get a 403.
+        abort_if($this->approvableWorkspaceIds($user) === [], 403);
 
         $data = $request->validate([
             'ids' => ['required', 'array', 'max:500'],
@@ -180,10 +216,9 @@ class TimeController extends Controller
             'action' => ['required', Rule::in(['approve', 'unapprove'])],
         ]);
 
-        // Only entries in workspaces this person leads.
-        $ids = TimeEntry::query()
+        // Only entries this person may approve (workspace lead, or department lead for their department).
+        $ids = $this->approvable($user)
             ->whereIn('id', $data['ids'])
-            ->whereIn('workspace_id', $this->leadWorkspaceIds($user))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->values()
@@ -198,6 +233,55 @@ class TimeController extends Controller
         return back();
     }
 
+    /** Submit my week for approval. */
+    public function submitWeek(Request $request): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $week = $request->validate(['week' => ['required', 'date_format:Y-m-d']])['week'];
+        $count = $this->time->submitWeek($user, TimeService::weekStart($week));
+
+        Inertia::flash('toast', ['type' => $count > 0 ? 'success' : 'info', 'message' => $count > 0
+            ? trans_choice(':n entry submitted for approval.|:n entries submitted for approval.', $count, ['n' => $count])
+            : __('Nothing to submit this week.')]);
+
+        return back();
+    }
+
+    /** Send entries back to their author with a reason. */
+    public function returnEntries(Request $request, Notifier $notifier): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        // Same rule as the Approvals page: people who approve nobody's time get a 403.
+        abort_if($this->approvableWorkspaceIds($user) === [], 403);
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'max:500'],
+            'ids.*' => ['integer'],
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $ids = $this->approvable($user)->whereIn('id', $data['ids'])->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        $returned = $this->time->returnEntries($ids, $user, $data['reason']);
+
+        // One alert per person per client.
+        foreach ($returned->groupBy(fn (TimeEntry $e) => $e->user_id.':'.$e->workspace_id) as $group) {
+            $first = $group->first();
+            if ($first === null) {
+                continue;
+            }
+            $notifier->send([$first->user_id], NotificationKind::Timesheet, $first->workspace, [
+                'title' => __(':name returned :n time entries', ['name' => $user->name, 'n' => $group->count()]),
+                'body' => $data['reason'],
+                'url' => route('time.timesheet', ['week' => TimeService::weekStart($first->entry_date->toDateString())->toDateString()], false),
+            ], $user);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice(':n entry returned with your note.|:n entries returned with your note.', $returned->count(), ['n' => $returned->count()])]);
+
+        return back();
+    }
+
     /**
      * Only the author, only while they still contribute to the workspace, never a running timer.
      */
@@ -206,6 +290,44 @@ class TimeController extends Controller
         abort_unless($entry->user_id === $user->id, 403);
         abort_if($entry->isRunning(), 422, 'Stop the timer first.');
         abort_unless($entry->workspace !== null && $this->access->canContribute($user, $entry->workspace), 403);
+    }
+
+    /**
+     * Time entries this person may approve: everything in workspaces they lead, plus
+     * their own department's entries in any workspace they can see (department leads).
+     *
+     * @return Builder<TimeEntry>
+     */
+    private function approvable(User $user): Builder
+    {
+        $leadWorkspaces = $this->leadWorkspaceIds($user);
+        $departments = $this->ledDepartmentIds($user);
+        $visible = $departments === [] ? [] : Workspace::query()->visibleTo($user)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        return TimeEntry::query()->where(fn (Builder $q) => $q
+            ->whereIn('workspace_id', $leadWorkspaces)
+            ->orWhere(fn (Builder $q) => $q->whereIn('department_id', $departments)->whereIn('workspace_id', $visible)));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function approvableWorkspaceIds(User $user): array
+    {
+        $ids = $this->leadWorkspaceIds($user);
+        if ($this->ledDepartmentIds($user) !== []) {
+            $ids = [...$ids, ...Workspace::query()->visibleTo($user)->pluck('id')->map(fn ($id) => (int) $id)->all()];
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function ledDepartmentIds(User $user): array
+    {
+        return Department::query()->where('lead_user_id', $user->id)->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
     }
 
     /**
@@ -235,6 +357,9 @@ class TimeController extends Controller
             'running' => $e->isRunning(),
             'approved' => $e->approved_at !== null,
             'locked' => $e->isLocked(),
+            'submitted' => $e->submitted_at !== null,
+            'returned' => $e->returned_at !== null,
+            'return_reason' => $e->return_reason,
             'task' => $e->task?->only(['id', 'title']),
             'workspace' => $e->workspace->only(['id', 'name', 'slug', 'color']),
         ];

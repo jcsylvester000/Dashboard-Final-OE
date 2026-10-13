@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Work;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Work\CommentService;
 use App\Domain\Work\HandoffService;
+use App\Domain\Work\TaskService;
 use App\Domain\Work\TemplateService;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\WorkflowTemplate;
 use App\Models\Workspace;
@@ -45,6 +48,46 @@ class TaskFlowController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Handed off. The new task waits until this one is done.')]);
 
         return to_route('workspaces.tasks.show', [$workspace, $next]);
+    }
+
+    /**
+     * Reviewer sign-off on a task that is In Review: approve (-> Done) or request
+     * changes (-> In Progress, with a required note posted to the discussion).
+     */
+    public function review(Request $request, Workspace $workspace, Task $task, TaskService $tasks, CommentService $comments): RedirectResponse
+    {
+        Gate::authorize('review', $task);
+
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'changes'])],
+            'note' => ['nullable', 'required_if:decision,changes', 'string', 'max:5000'],
+        ]);
+
+        if ($task->status_id !== TaskStatus::idFor('in-review')) {
+            throw ValidationException::withMessages(['decision' => __('Only tasks that are In Review can be approved or sent back.')]);
+        }
+
+        /** @var User $user */
+        $user = $request->user();
+        $note = trim((string) ($data['note'] ?? ''));
+
+        if ($data['decision'] === 'approve') {
+            $tasks->update($task, ['status_id' => TaskStatus::idFor('done')], $user);
+            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null], $user);
+            if ($note !== '') {
+                $comments->create($task, __('Approved: :note', ['note' => $note]), $user);
+            }
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Approved and marked Done.')]);
+        } else {
+            $tasks->update($task, ['status_id' => TaskStatus::idFor('in-progress')], $user);
+            $this->activity->log('task.changes-requested', $task, [], $user);
+            $assignee = $task->assignee;
+            $tag = $assignee !== null && $assignee->id !== $user->id ? '@['.$assignee->name.'](user:'.$assignee->id.') ' : '';
+            $comments->create($task, $tag.__('Changes requested: :note', ['note' => $note]), $user);
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Sent back with your notes.')]);
+        }
+
+        return back();
     }
 
     public function addDependency(Request $request, Workspace $workspace, Task $task): RedirectResponse

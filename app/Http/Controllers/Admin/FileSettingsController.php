@@ -24,7 +24,9 @@ class FileSettingsController extends Controller
                 ->map(fn (array $g, string $key) => ['key' => $key, 'label' => $g['label'], 'ext' => $g['ext']])
                 ->values(),
             'enabled' => $files->allowedGroups(),
-            'driver' => config('files.driver'),
+            'driver' => $files->usesUploadThing() ? 'UploadThing (private files)' : 'the private server disk',
+            // D-06: tell admins what the drive's UploadThing plan means for privacy.
+            'drivePublicByUrl' => config('services.uploadthing.acl') !== 'private',
         ]);
     }
 

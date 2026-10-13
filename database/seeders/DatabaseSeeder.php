@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             DepartmentSeeder::class,
             WorkflowTemplateSeeder::class,
+            HolidaySeeder::class,
         ]);
 
         $this->seedFirstSuperAdmin();

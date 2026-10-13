@@ -113,6 +113,14 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /**
+     * @return HasMany<TimeEntry, $this>
+     */
+    public function timeEntries(): HasMany
+    {
+        return $this->hasMany(TimeEntry::class);
+    }
+
+    /**
      * @return HasMany<UserAccessLink, $this>
      */
     public function accessLinks(): HasMany

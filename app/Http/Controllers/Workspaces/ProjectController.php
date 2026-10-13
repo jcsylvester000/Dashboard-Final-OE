@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Workspaces;
 
 use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Work\TaskPresenter;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\MentionService;
 use App\Domain\Workspaces\WorkspacePresenter;
@@ -11,6 +12,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Workspaces\SaveProjectRequest;
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\Task;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,6 +21,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,7 +51,12 @@ class ProjectController extends Controller
 
         $projects = $workspace->projects()
             ->with(['lead:id,name', 'labels:id,name,color'])
-            ->withCount('members')
+            ->withCount([
+                'members',
+                // Top-level tasks only, matching the project page progress (S1-05).
+                'tasks as tasks_total' => fn (Builder $q) => $q->whereNull('parent_id'),
+                'tasks as tasks_done' => fn (Builder $q) => $q->whereNull('parent_id')->whereNotNull('completed_at'),
+            ])
             ->when($filters['search'] ?? null, fn (Builder $q, string $t) => $q->whereRaw('lower(name) like ?', ['%'.mb_strtolower($t).'%']))
             ->when($filters['type'] ?? null, fn (Builder $q, string $t) => $q->where('type', $t))
             ->when($filters['status'] ?? null, fn (Builder $q, string $s) => $q->where('status', $s), fn (Builder $q) => $q->where('status', '!=', 'archived'))
@@ -66,6 +75,8 @@ class ProjectController extends Controller
                 'status' => $p->status,
                 'lead' => $p->lead?->name,
                 'members' => $p->members_count,
+                'tasks_total' => (int) $p->getAttribute('tasks_total'),
+                'tasks_done' => (int) $p->getAttribute('tasks_done'),
                 'labels' => $p->labels->map(fn (Label $l) => ['id' => $l->id, 'name' => $l->name, 'color' => $l->color])->values(),
                 'start_on' => $p->start_on?->toDateString(),
                 'due_on' => $p->due_on?->toDateString(),
@@ -78,6 +89,7 @@ class ProjectController extends Controller
             'types' => Project::TYPES,
             'statuses' => Project::STATUSES,
             'labels' => $workspace->labels()->orderBy('name')->get(['id', 'name', 'color']),
+            'departments' => $this->presenter->departmentOptions(),
             'members' => $this->presenter->memberOptions($workspace),
         ]);
     }
@@ -111,7 +123,7 @@ class ProjectController extends Controller
 
         /** @var User $user */
         $user = $request->user();
-        $project->load(['lead:id,name', 'members:id,name,title', 'labels:id,name,color', 'mentions.user:id,name']);
+        $project->load(['lead:id,name', 'members:id,name,title', 'labels:id,name,color', 'mentions.user:id,name', 'departments:id,name,color']);
         $project->setRelation('workspace', $workspace);
 
         if ($user->last_workspace_id !== $workspace->id) {
@@ -127,10 +139,21 @@ class ProjectController extends Controller
                 'status' => $project->status,
                 'description' => $project->description,
                 'lead_user_id' => $project->lead_user_id,
+                'review_required' => $project->review_required,
+                // B-06: client status page (leads see and manage it).
+                'status_link' => Gate::allows('lead', $workspace) && $project->status_token !== null ? [
+                    'url' => route('project-status.show', $project->status_token),
+                    'expires_at' => $project->status_token_expires_at?->toIso8601String(),
+                    'views' => $project->status_views,
+                    'detail' => $project->status_detail,
+                ] : null,
+                'can_share_status' => Gate::allows('lead', $workspace),
                 'lead' => $project->lead?->name,
                 'start_on' => $project->start_on?->toDateString(),
                 'due_on' => $project->due_on?->toDateString(),
                 'members' => $project->members->map(fn (User $m) => ['id' => $m->id, 'name' => $m->name, 'title' => $m->title])->values(),
+                'department_ids' => $project->departments->pluck('id')->map(fn ($id) => (int) $id)->values(),
+                'involved_departments' => $project->departments->map(fn ($d) => $d->only(['id', 'name', 'color']))->values(),
                 'labels' => $project->labels->map(fn (Label $l) => ['id' => $l->id, 'name' => $l->name, 'color' => $l->color])->values(),
                 'mentioned' => $project->mentions->map(fn ($m) => $m->user?->name)->filter()->values(),
                 'created_at' => $project->created_at?->toIso8601String(),
@@ -144,7 +167,54 @@ class ProjectController extends Controller
             'canDelete' => Gate::allows('lead', $workspace),
             'attachments' => app(AttachmentPresenter::class)->for($project, $workspace, $user),
             'fileLimits' => app(AttachmentPresenter::class)->limits(),
+            ...$this->work($workspace, $project),
         ]);
+    }
+
+    /**
+     * The project's tasks, progress and task files (UX simulation 2026-10-06).
+     *
+     * @return array<string, mixed>
+     */
+    private function work(Workspace $workspace, Project $project): array
+    {
+        $present = app(TaskPresenter::class);
+        $tasks = $project->tasks()->getQuery()
+            ->with(TaskPresenter::WITH)
+            ->whereNull('parent_id')
+            ->orderByRaw('due_on is null, due_on asc')
+            ->orderBy('id')
+            ->limit(300)
+            ->get();
+        $open = $present->openDependencyMap($tasks->pluck('id')->all());
+        $doneIds = $present->doneStatusIds();
+
+        $total = $tasks->count();
+        $done = $tasks->filter(fn (Task $t) => in_array($t->status_id, $doneIds, true))->count();
+        $estimate = (int) $tasks->sum('estimate_minutes');
+        $estimateDone = (int) $tasks->filter(fn (Task $t) => in_array($t->status_id, $doneIds, true))->sum('estimate_minutes');
+        $overdue = $tasks->filter(fn (Task $t) => ! in_array($t->status_id, $doneIds, true) && $t->due_on !== null && $t->due_on->isPast() && ! $t->due_on->isToday())->count();
+        $logged = (int) TimeEntry::query()->where('project_id', $project->id)->sum('minutes');
+
+        return [
+            'tasks' => $tasks->map(fn (Task $t): array => [...$present->row($t, $open), 'estimate_minutes' => $t->estimate_minutes])->values(),
+            'progress' => [
+                'total' => $total,
+                'done' => $done,
+                'overdue' => $overdue,
+                'percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                'estimate_minutes' => $estimate,
+                'estimate_done_minutes' => $estimateDone,
+                'logged_minutes' => $logged,
+                'by_status' => $tasks->groupBy('status_id')->map(fn ($group) => [
+                    'name' => $group->first()?->status->name,
+                    'color' => $group->first()?->status->color,
+                    'count' => $group->count(),
+                ])->values(),
+            ],
+            'taskFiles' => app(AttachmentPresenter::class)->forTasks($project->tasks()->pluck('id')->map(fn ($id) => (int) $id)->all()),
+            'departments' => $this->presenter->departmentOptions(),
+        ];
     }
 
     public function update(SaveProjectRequest $request, Workspace $workspace, Project $project): RedirectResponse
@@ -165,6 +235,44 @@ class ProjectController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Project saved.')]);
 
         return to_route('workspaces.projects.show', [$workspace, $project]);
+    }
+
+    /**
+     * B-06: turn on (or replace) the client status link. Leads only. Replacing breaks the old link.
+     */
+    public function statusLink(Request $request, Workspace $workspace, Project $project): RedirectResponse
+    {
+        Gate::authorize('lead', $workspace);
+        $data = $request->validate(['expires_days' => ['nullable', 'integer', 'in:7,30,90']]);
+
+        $project->forceFill([
+            'status_token' => Str::random(40),
+            'status_token_expires_at' => isset($data['expires_days']) ? now()->addDays((int) $data['expires_days']) : null,
+            'status_views' => 0,
+        ])->save();
+        $this->activity->log('project.status-link-created', $project, ['expires_days' => $data['expires_days'] ?? null]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Client status link ready. Copy it below and send it to the client.')]);
+
+        return back();
+    }
+
+    /** R-22: how candid the client status page is (simple wording by default). */
+    public function statusDetail(Request $request, Workspace $workspace, Project $project): RedirectResponse
+    {
+        Gate::authorize('lead', $workspace);
+        $data = $request->validate(['status_detail' => ['required', 'in:simple,detailed']]);
+        $project->forceFill(['status_detail' => $data['status_detail']])->save();
+
+        return back();
+    }
+
+    public function disableStatusLink(Workspace $workspace, Project $project): RedirectResponse
+    {
+        Gate::authorize('lead', $workspace);
+        $project->forceFill(['status_token' => null, 'status_token_expires_at' => null])->save();
+        $this->activity->log('project.status-link-disabled', $project);
+
+        return back();
     }
 
     public function destroy(Workspace $workspace, Project $project): RedirectResponse
@@ -191,6 +299,8 @@ class ProjectController extends Controller
             'lead_user_id' => $data['lead_user_id'] ?? null,
             'start_on' => $data['start_on'] ?? null,
             'due_on' => $data['due_on'] ?? null,
+            // Only when the form sends it, so other callers don't switch sign-off off by accident.
+            ...(array_key_exists('review_required', $data) ? ['review_required' => (bool) $data['review_required']] : []),
         ];
     }
 
@@ -205,6 +315,10 @@ class ProjectController extends Controller
         }
 
         $project->members()->sync(array_values(array_unique($memberIds)));
+        // The form sends an empty department_ids[] so un-ticking everything clears the list (S3-02).
+        if (array_key_exists('department_ids', $data)) {
+            $project->departments()->sync(array_values(array_unique(array_map('intval', array_filter((array) $data['department_ids'])))));
+        }
         $project->labels()->sync(array_map('intval', $data['label_ids'] ?? []));
     }
 }

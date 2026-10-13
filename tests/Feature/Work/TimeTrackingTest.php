@@ -155,9 +155,8 @@ class TimeTrackingTest extends TestCase
         $this->actingAs($otherLead)->post(route('time.approve'), ['ids' => [$memberEntry->id], 'action' => 'approve']);
         $this->assertNull($memberEntry->fresh()->approved_at);
 
-        // Plain members see nothing to approve.
-        $this->actingAs($this->member)->get(route('time.approvals'))
-            ->assertInertia(fn ($page) => $page->has('entries', 0));
+        // Plain members approve nothing, so the page is closed to them.
+        $this->actingAs($this->member)->get(route('time.approvals'))->assertForbidden();
     }
 
     public function test_only_the_author_edits_unapproved_time()

@@ -36,15 +36,24 @@ use Illuminate\Support\Carbon;
  * @property int|null $assignee_id
  * @property int|null $reporter_id
  * @property Carbon|null $due_on
+ * @property Carbon|null $start_on
+ * @property string|null $recurrence weekly | biweekly | monthly
+ * @property Carbon|null $recurrence_until
+ * @property int|null $recurred_from_task_id
  * @property int|null $estimate_minutes
  * @property int $position
+ * @property int|null $number per-client running number (BRW-24)
+ * @property string $type task | story | bug | chore
+ * @property int|null $sprint_id
+ * @property int|null $story_points
  * @property Carbon|null $completed_at
+ * @property array<string, mixed>|null $custom_values B-07: custom field key => value
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable([
     'workspace_id', 'project_id', 'department_id', 'status_id', 'parent_id', 'handoff_from_task_id',
-    'title', 'description', 'work_details', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position',
+    'title', 'description', 'work_details', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position', 'type', 'sprint_id', 'story_points', 'start_on', 'recurrence', 'recurrence_until', 'custom_values',
 ])]
 class Task extends Model implements Mentionable
 {
@@ -59,7 +68,9 @@ class Task extends Model implements Mentionable
      */
     public const WORK_DETAIL_FIELDS = [
         'marketing' => [
-            'channel' => ['Channel', 'select', ['Facebook', 'Instagram', 'TikTok', 'Google Ads', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Other']],
+            // S2-01: one task can run on several channels (stored as "Facebook, Instagram").
+            'channel' => ['Channels', 'multiselect', ['Facebook', 'Instagram', 'TikTok', 'Google Ads', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Other']],
+            // Blank = the project name (reports fill it in), so it isn't typed twice.
             'campaign' => ['Campaign', 'text'],
             'deliverable_type' => ['Deliverable', 'select', ['Ad creative', 'Copy', 'Post', 'Video', 'Landing page', 'Report', 'Other']],
         ],
@@ -68,6 +79,54 @@ class Task extends Model implements Mentionable
             'keyword' => ['Primary keyword', 'text'],
             'work_type' => ['Work type', 'select', ['On-page', 'Technical', 'Content', 'Links', 'Local', 'Reporting']],
         ],
+    ];
+
+    /** type => label (Jira-style issue types) */
+    public const TYPES = [
+        'task' => 'Task',
+        'story' => 'Story',
+        'bug' => 'Bug',
+        'chore' => 'Chore',
+        'milestone' => 'Milestone',
+    ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Task $task) {
+            $task->number ??= Workspace::claimTaskNumber($task->workspace_id);
+        });
+    }
+
+    /**
+     * "BRW-24" when the client has a key (needs workspace loaded with `key`), else "#id".
+     */
+    public function keyLabel(): string
+    {
+        $key = $this->relationLoaded('workspace') ? $this->workspace?->key : null;
+
+        return $key !== null && $this->number !== null ? $key.'-'.$this->number : '#'.$this->id;
+    }
+
+    /**
+     * Find a task by "BRW-24" (case-insensitive). Returns null for anything else.
+     */
+    public static function findByKey(string $key): ?self
+    {
+        if (! preg_match('/^([A-Za-z][A-Za-z0-9]{1,5})-(\d{1,9})$/', trim($key), $m)) {
+            return null;
+        }
+
+        return self::query()
+            ->whereHas('workspace', fn ($q) => $q->where('key', strtoupper($m[1])))
+            ->where('number', (int) $m[2])
+            ->first();
+    }
+
+    /** recurrence => label (B-04) */
+    public const RECURRENCES = [
+        'weekly' => 'Every week',
+        'biweekly' => 'Every 2 weeks',
+        'monthly' => 'Every month',
     ];
 
     /** priority => label */
@@ -85,10 +144,15 @@ class Task extends Model implements Mentionable
     {
         return [
             'due_on' => 'date',
+            'start_on' => 'date',
+            'recurrence_until' => 'date',
             'completed_at' => 'datetime',
             'work_details' => 'array',
+            'custom_values' => 'array',
             'estimate_minutes' => 'integer',
             'position' => 'integer',
+            'number' => 'integer',
+            'story_points' => 'integer',
         ];
     }
 
@@ -102,6 +166,12 @@ class Task extends Model implements Mentionable
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /** @return BelongsTo<Sprint, $this> */
+    public function sprint(): BelongsTo
+    {
+        return $this->belongsTo(Sprint::class);
     }
 
     /** @return BelongsTo<Department, $this> */

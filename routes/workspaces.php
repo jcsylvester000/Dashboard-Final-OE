@@ -3,6 +3,7 @@
 use App\Http\Controllers\Workspaces\LabelController;
 use App\Http\Controllers\Workspaces\ProjectController;
 use App\Http\Controllers\Workspaces\RecordLinkController;
+use App\Http\Controllers\Workspaces\TaskFieldsController;
 use App\Http\Controllers\Workspaces\WorkspaceController;
 use App\Http\Controllers\Workspaces\WorkspaceMemberController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,9 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('w/{workspace:slug}')->name('workspaces.')->group(function () {
         Route::get('/', [WorkspaceController::class, 'show'])->name('show');
+        // B-07: custom task fields and status names (leads).
+        Route::put('settings/task-fields', [TaskFieldsController::class, 'fields'])->name('task-fields.update');
+        Route::put('settings/status-labels', [TaskFieldsController::class, 'statusLabels'])->name('status-labels.update');
         Route::get('settings', [WorkspaceController::class, 'edit'])->name('edit');
         Route::put('/', [WorkspaceController::class, 'update'])->name('update');
 
@@ -36,6 +40,9 @@ Route::middleware('auth')->group(function () {
             Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
             Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
             Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+            Route::post('projects/{project}/status-link', [ProjectController::class, 'statusLink'])->name('projects.status-link');
+            Route::put('projects/{project}/status-detail', [ProjectController::class, 'statusDetail'])->name('projects.status-detail');
+            Route::delete('projects/{project}/status-link', [ProjectController::class, 'disableStatusLink'])->name('projects.status-link.destroy');
         });
     });
 

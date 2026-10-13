@@ -38,7 +38,8 @@ class NotificationSettingsController extends Controller
     {
         $rules = [];
         foreach (NotificationKind::cases() as $kind) {
-            $rules['modes.'.$kind->value] = ['required', Rule::in(NotificationKind::MODES)];
+            // Missing kinds keep their default, so adding a new alert type never breaks an open form.
+            $rules['modes.'.$kind->value] = ['sometimes', Rule::in(NotificationKind::MODES)];
         }
         $data = $request->validate(['modes' => ['required', 'array'], ...$rules]);
 

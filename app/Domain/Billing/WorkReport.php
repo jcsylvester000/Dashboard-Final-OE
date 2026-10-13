@@ -64,7 +64,7 @@ class WorkReport
     {
         $entries = TimeEntry::query()
             ->withTrashed()
-            ->with(['user:id,name', 'department:id,name', 'task' => fn ($q) => $q->withTrashed()->with(['department:id,name,slug', 'status:id,name'])])
+            ->with(['user:id,name', 'department:id,name', 'task' => fn ($q) => $q->withTrashed()->with(['department:id,name,slug', 'status:id,name', 'project:id,name'])])
             ->whereIn('id', array_keys($minutesByEntry))
             ->get();
 
@@ -84,7 +84,11 @@ class WorkReport
                 'department_slug' => $task?->department?->slug,
                 'status' => $task?->status->name,
                 'completed_on' => $task?->completed_at?->toDateString(),
-                'work_details' => $task !== null ? ($task->work_details ?? []) : [],
+                // S2-01: an empty campaign means "the project" for marketing work.
+                'work_details' => $task !== null ? array_filter([
+                    ...($task->work_details ?? []),
+                    'campaign' => ($task->work_details['campaign'] ?? null) ?: ($task->department?->slug === 'marketing' ? $task->project?->name : null),
+                ], fn ($v) => $v !== null && $v !== '') : [],
                 'minutes' => 0,
                 'people' => [],
             ];

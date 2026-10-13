@@ -36,7 +36,12 @@ export type WorkspaceNav = {
 
 export type LabelOption = { id: number; name: string; color: string };
 
-export type MemberOption = { id: number; name: string; title: string | null };
+export type MemberOption = {
+    id: number;
+    name: string;
+    title: string | null;
+    department_id?: number | null;
+};
 
 export type ProjectRow = {
     id: number;
@@ -45,6 +50,8 @@ export type ProjectRow = {
     status: string;
     lead: string | null;
     members: number;
+    tasks_total: number;
+    tasks_done: number;
     labels: LabelOption[];
     start_on: string | null;
     due_on: string | null;
@@ -57,6 +64,16 @@ export type ProjectDetail = {
     status: string;
     description: string | null;
     lead_user_id: number | null;
+    review_required?: boolean;
+    department_ids?: number[];
+    status_link?: {
+        url: string;
+        expires_at: string | null;
+        views: number;
+        detail?: 'simple' | 'detailed';
+    } | null;
+    can_share_status?: boolean;
+    involved_departments?: { id: number; name: string; color: string }[];
     lead: string | null;
     start_on: string | null;
     due_on: string | null;
@@ -78,4 +95,6 @@ export type ReferenceItem = {
 export type LinkRow = ReferenceItem & {
     id: number;
     direction: 'outgoing' | 'incoming';
+    relation?: string;
+    relation_label?: string;
 };

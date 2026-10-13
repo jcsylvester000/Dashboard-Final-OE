@@ -4,11 +4,18 @@ import { RotateCcw, Trash2 } from '@lucide/vue';
 import Heading from '@/components/Heading.vue';
 import Pagination from '@/components/Pagination.vue';
 import { Button } from '@/components/ui/button';
+import { confirmDialog } from '@/composables/useConfirm';
 import { formatDateTime } from '@/lib/format';
 import { destroy, index, retry } from '@/routes/admin/failed-jobs';
 import type { Paginated } from '@/types/admin';
 
-type FailedJob = { uuid: string; job: string; queue: string; error: string; failed_at: string };
+type FailedJob = {
+    uuid: string;
+    job: string;
+    queue: string;
+    error: string;
+    failed_at: string;
+};
 
 defineProps<{ jobs: Paginated<FailedJob> }>();
 
@@ -24,8 +31,11 @@ function retryJobs(ids: string[]): void {
     router.post(retry.url(), { ids }, opts);
 }
 
-function discardJobs(ids: string[]): void {
-    if (ids.length === 0 && !window.confirm('Discard every failed job?')) {
+async function discardJobs(ids: string[]): Promise<void> {
+    if (
+        ids.length === 0 &&
+        !(await confirmDialog('Discard every failed job?'))
+    ) {
         return;
     }
     router.post(destroy.url(), { ids }, opts);
@@ -42,16 +52,27 @@ function discardJobs(ids: string[]): void {
                 description="Background work (alerts, live updates) that failed. Retry after fixing the cause, or discard."
             />
             <div v-if="jobs.total > 0" class="flex gap-2">
-                <Button variant="outline" size="sm" @click="retryJobs([])"><RotateCcw class="size-4" /> Retry all</Button>
-                <Button variant="outline" size="sm" @click="discardJobs([])"><Trash2 class="size-4" /> Discard all</Button>
+                <Button variant="outline" size="sm" @click="retryJobs([])"
+                    ><RotateCcw class="size-4" /> Retry all</Button
+                >
+                <Button variant="outline" size="sm" @click="discardJobs([])"
+                    ><Trash2 class="size-4" /> Discard all</Button
+                >
             </div>
         </div>
 
-        <p v-if="jobs.data.length === 0" class="py-10 text-center text-sm text-muted-foreground">No failed jobs.</p>
+        <p
+            v-if="jobs.data.length === 0"
+            class="py-10 text-center text-sm text-muted-foreground"
+        >
+            No failed jobs.
+        </p>
 
         <div v-else class="overflow-x-auto rounded-lg border">
             <table class="w-full text-sm">
-                <thead class="bg-muted/50 text-left text-xs text-muted-foreground">
+                <thead
+                    class="bg-muted/50 text-left text-xs text-muted-foreground"
+                >
                     <tr>
                         <th class="px-3 py-2 font-medium">Job</th>
                         <th class="px-3 py-2 font-medium">Error</th>
@@ -63,19 +84,42 @@ function discardJobs(ids: string[]): void {
                     <tr v-for="j in jobs.data" :key="j.uuid" class="align-top">
                         <td class="px-3 py-2">
                             <div class="font-medium">{{ j.job }}</div>
-                            <div class="text-xs text-muted-foreground">{{ j.queue }}</div>
+                            <div class="text-xs text-muted-foreground">
+                                {{ j.queue }}
+                            </div>
                         </td>
-                        <td class="max-w-md px-3 py-2 font-mono text-xs break-words">{{ j.error }}</td>
-                        <td class="px-3 py-2 text-xs whitespace-nowrap">{{ formatDateTime(j.failed_at) }}</td>
+                        <td
+                            class="max-w-md px-3 py-2 font-mono text-xs break-words"
+                        >
+                            {{ j.error }}
+                        </td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">
+                            {{ formatDateTime(j.failed_at) }}
+                        </td>
                         <td class="px-3 py-2 whitespace-nowrap">
-                            <Button variant="ghost" size="sm" @click="retryJobs([j.uuid])">Retry</Button>
-                            <Button variant="ghost" size="sm" @click="discardJobs([j.uuid])">Discard</Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="retryJobs([j.uuid])"
+                                >Retry</Button
+                            >
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="discardJobs([j.uuid])"
+                                >Discard</Button
+                            >
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <Pagination :links="jobs.links" :from="jobs.from" :to="jobs.to" :total="jobs.total" />
+        <Pagination
+            :links="jobs.links"
+            :from="jobs.from"
+            :to="jobs.to"
+            :total="jobs.total"
+        />
     </div>
 </template>

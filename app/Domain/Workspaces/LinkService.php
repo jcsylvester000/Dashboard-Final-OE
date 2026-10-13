@@ -44,7 +44,7 @@ class LinkService
     }
 
     /**
-     * @return array<int, array{id: int, direction: string, type: string, record_id: int, label: string, context: string|null, url: string}>
+     * @return array<int, array{id: int, direction: string, relation: string, relation_label: string, type: string, record_id: int, label: string, context: string|null, url: string}>
      */
     public function linksFor(Model $record, User $viewer): array
     {
@@ -68,7 +68,14 @@ class LinkService
             if ($other === null || Gate::forUser($viewer)->denies('view', $other)) {
                 continue;
             }
-            $rows[] = ['id' => $link->id, 'direction' => $direction, ...$this->describe($other)];
+            $labels = RecordLink::RELATIONS[$link->relation] ?? RecordLink::RELATIONS['relates'];
+            $rows[] = [
+                'id' => $link->id,
+                'direction' => $direction,
+                'relation' => $link->relation,
+                'relation_label' => $direction === 'outgoing' ? $labels[0] : $labels[1],
+                ...$this->describe($other),
+            ];
         }
 
         return $rows;

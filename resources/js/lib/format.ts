@@ -67,7 +67,8 @@ export const chipColor: Record<string, string> = {
     slate: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-200',
     violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200',
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200',
+    emerald:
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200',
     amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
     rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200',
     cyan: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-200',
@@ -87,7 +88,14 @@ export function formatDate(date: string | null | undefined): string {
         return '—';
     }
 
-    // Plain YYYY-MM-DD: format without timezone shifts.
+    // Plain YYYY-MM-DD: format without timezone shifts. Full ISO timestamps use the viewer's local date.
+    if (date.includes('T')) {
+        return new Date(date).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    }
     const [y, m, d] = date.split('-').map(Number);
 
     return new Date(y, m - 1, d).toLocaleDateString(undefined, {
@@ -97,12 +105,24 @@ export function formatDate(date: string | null | undefined): string {
     });
 }
 
+/**
+ * Today's date (YYYY-MM-DD) in the viewer's own timezone. Never use
+ * toISOString() for this: that is the UTC date, which is "yesterday" in
+ * Manila until 8am.
+ */
+export function localToday(offsetDays = 0): string {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function isOverdue(date: string | null | undefined): boolean {
     if (!date) {
         return false;
     }
 
-    return date < new Date().toISOString().slice(0, 10);
+    return date < localToday();
 }
 
 /** 95 -> "1h 35m", 45 -> "45m", 0 -> "0m" */
@@ -124,4 +144,18 @@ export function addDays(date: string, days: number): string {
     const dt = new Date(Date.UTC(y, m - 1, d + days));
 
     return dt.toISOString().slice(0, 10);
+}
+
+/** 1536 -> "2 KB", 5_400_000 -> "5.1 MB" (1 MB = 1024 x 1024 bytes, same as the server). */
+export function formatBytes(bytes: number | null | undefined): string {
+    const b = Math.max(0, bytes ?? 0);
+    const mb = 1024 * 1024;
+    if (b === 0) {
+        return '0 MB';
+    }
+    if (b >= mb) {
+        return `${Number((b / mb).toFixed(1))} MB`;
+    }
+
+    return `${Math.max(1, Math.round(b / 1024))} KB`;
 }

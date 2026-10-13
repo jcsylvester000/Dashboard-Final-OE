@@ -6,7 +6,11 @@ import { edit, update } from '@/routes/notifications';
 import type { NotificationKind, NotificationMode } from '@/types/notifications';
 
 const props = defineProps<{
-    kinds: { value: NotificationKind; label: string; default: NotificationMode }[];
+    kinds: {
+        value: NotificationKind;
+        label: string;
+        default: NotificationMode;
+    }[];
     modes: Record<NotificationKind, NotificationMode>;
 }>();
 
@@ -42,31 +46,41 @@ function save(): void {
         />
 
         <form class="space-y-4" @submit.prevent="save">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="text-left text-xs text-muted-foreground">
-                        <th class="py-2 font-medium">Alert</th>
-                        <th v-for="m in modeOptions" :key="m.value" class="py-2 text-center font-medium">
-                            {{ m.label }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="k in kinds" :key="k.value">
-                        <td class="py-2 pr-3">{{ k.label }}</td>
-                        <td v-for="m in modeOptions" :key="m.value" class="py-2 text-center">
-                            <input
-                                v-model="form.modes[k.value]"
-                                type="radio"
-                                class="size-4 accent-foreground"
-                                :name="`mode-${k.value}`"
-                                :value="m.value"
-                                :aria-label="`${k.label}: ${m.label}`"
-                            />
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-muted-foreground">
+                            <th class="py-2 font-medium">Alert</th>
+                            <th
+                                v-for="m in modeOptions"
+                                :key="m.value"
+                                class="py-2 text-center font-medium"
+                            >
+                                {{ m.label }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="k in kinds" :key="k.value">
+                            <td class="py-2 pr-3">{{ k.label }}</td>
+                            <td
+                                v-for="m in modeOptions"
+                                :key="m.value"
+                                class="py-2 text-center"
+                            >
+                                <input
+                                    v-model="form.modes[k.value]"
+                                    type="radio"
+                                    class="size-4 accent-foreground"
+                                    :name="`mode-${k.value}`"
+                                    :value="m.value"
+                                    :aria-label="`${k.label}: ${m.label}`"
+                                />
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
             <Button type="submit" :disabled="form.processing">Save</Button>
         </form>

@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $workspace_id
  * @property int|null $billing_period_id
+ * @property int|null $project_id one project/campaign only; null = whole client
  * @property string $kind
  * @property int|null $credited_invoice_id
  * @property string $series
@@ -28,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $due_date
  * @property int $subtotal_minor
  * @property int $tax_rate_bp
+ * @property string $line_grouping
  * @property int $tax_minor
  * @property int $total_minor
  * @property int $paid_minor
@@ -41,9 +43,12 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property Carbon|null $created_at
  */
-#[Fillable(['workspace_id', 'billing_period_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'bill_to', 'notes', 'created_by'])]
+#[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by'])]
 class Invoice extends Model
 {
+    /** How hour lines are grouped: department, project or person. */
+    public const GROUPINGS = ['department' => 'Department', 'project' => 'Project / campaign', 'person' => 'Team member'];
+
     public const DRAFT = 'draft';
 
     public const FINALIZED = 'finalized';
@@ -108,6 +113,12 @@ class Invoice extends Model
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
+    }
+
+    /** @return BelongsTo<Project, $this> */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     /** @return BelongsTo<BillingPeriod, $this> */

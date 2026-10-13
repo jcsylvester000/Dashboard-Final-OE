@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 /**
- * @mentions use the token  @[Display Name](user:12)  inside plain text.
+ * @mentions use the token  @[Display Name](user:12)  inside plain text, and
+ *
+ * @[Department](dept:3) to tag every member of a department on that client.
  * The editor inserts tokens; the server keeps only tokens for active members
  * of the record's workspace (others become plain "@Name") and stores one
  * mentions row per tagged person. Each new mention fires UserMentioned (P4 alerts).
@@ -18,6 +20,9 @@ use Illuminate\Support\Facades\DB;
 class MentionService
 {
     public const TOKEN = '/@\[([^\]\r\n]{1,80})\]\(user:(\d{1,10})\)/u';
+
+    /** @[SEO](dept:5) tags a whole department. */
+    public const DEPARTMENT_TOKEN = '/@\[([^\]\r\n]{1,80})\]\(dept:(\d{1,10})\)/u';
 
     /**
      * Strip tokens that point to people outside the workspace.
@@ -30,6 +35,7 @@ class MentionService
             return ['text' => $text, 'user_ids' => []];
         }
 
+        $text = $this->linkTypedNames($text, $workspaceId);
         preg_match_all(self::TOKEN, $text, $matches);
         $candidateIds = array_values(array_unique(array_map('intval', $matches[2])));
 
@@ -46,7 +52,93 @@ class MentionService
             return in_array((int) $m[2], $allowed, true) ? $m[0] : '@'.$m[1];
         }, $text);
 
-        return ['text' => $clean, 'user_ids' => array_values(array_intersect($candidateIds, $allowed))];
+        // @Department tokens tag everyone in that department who works on this client.
+        preg_match_all(self::DEPARTMENT_TOKEN, $clean, $deptMatches);
+        $deptIds = array_values(array_unique(array_map('intval', $deptMatches[2])));
+        $validDepts = $deptIds === [] ? [] : DB::table('departments')->whereIn('id', $deptIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $clean = (string) preg_replace_callback(self::DEPARTMENT_TOKEN, function (array $m) use ($validDepts) {
+            return in_array((int) $m[2], $validDepts, true) ? $m[0] : '@'.$m[1];
+        }, $clean);
+
+        $userIds = array_values(array_intersect($candidateIds, $allowed));
+        if ($validDepts !== []) {
+            $userIds = array_values(array_unique([...$userIds, ...$this->departmentMembers($validDepts, $workspaceId)]));
+        }
+
+        return ['text' => $clean, 'user_ids' => $userIds];
+    }
+
+    /**
+     * S3-03: a typed "@Maria Santos" (not picked from the list) becomes a mention when it
+     * matches an active member's full name, or a first name only one member has. "@SEO"
+     * matches a department. Longest names first so "@Ana Cruz" wins over "@Ana".
+     */
+    private function linkTypedNames(string $text, int $workspaceId): string
+    {
+        if (! str_contains($text, '@')) {
+            return $text;
+        }
+
+        /** @var array<string, string> $targets lower-case name => token */
+        $targets = [];
+        $members = DB::table('workspace_user')
+            ->join('users', 'users.id', '=', 'workspace_user.user_id')
+            ->where('workspace_user.workspace_id', $workspaceId)
+            ->where('users.is_active', true)
+            ->get(['users.id', 'users.name']);
+
+        $firstNames = [];
+        foreach ($members as $m) {
+            $name = trim((string) $m->name);
+            if ($name === '') {
+                continue;
+            }
+            $targets[mb_strtolower($name)] = '@['.$name.'](user:'.(int) $m->id.')';
+            $first = mb_strtolower(explode(' ', $name)[0]);
+            $firstNames[$first][] = '@['.$name.'](user:'.(int) $m->id.')';
+        }
+        foreach ($firstNames as $first => $tokens) {
+            if (count($tokens) === 1 && ! isset($targets[$first])) {
+                $targets[$first] = $tokens[0];
+            }
+        }
+        foreach (DB::table('departments')->get(['id', 'name']) as $d) {
+            $targets[mb_strtolower((string) $d->name)] ??= '@['.(string) $d->name.'](dept:'.(int) $d->id.')';
+        }
+
+        uksort($targets, fn (string $a, string $b) => mb_strlen($b) <=> mb_strlen($a));
+        foreach ($targets as $lower => $token) {
+            // Not inside an existing token ("@[") and not part of an e-mail address or longer word.
+            $pattern = '/(?<![\w@\]])@'.preg_quote($lower, '/').'(?![\w])/iu';
+            $text = (string) preg_replace_callback($pattern, fn () => $token, $text);
+        }
+
+        return $text;
+    }
+
+    /**
+     * Active workspace members in the given departments (primary or additional).
+     *
+     * @param  list<int>  $departmentIds
+     * @return list<int>
+     */
+    private function departmentMembers(array $departmentIds, int $workspaceId): array
+    {
+        return DB::table('workspace_user')
+            ->join('users', 'users.id', '=', 'workspace_user.user_id')
+            ->where('workspace_user.workspace_id', $workspaceId)
+            ->where('users.is_active', true)
+            ->where(fn ($q) => $q
+                ->whereIn('users.primary_department_id', $departmentIds)
+                ->orWhereExists(fn ($sub) => $sub->from('department_user')
+                    ->whereColumn('department_user.user_id', 'users.id')
+                    ->whereIn('department_user.department_id', $departmentIds)))
+            ->pluck('users.id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

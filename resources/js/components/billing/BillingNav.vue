@@ -23,7 +23,11 @@ const items = [
             :key="item.title"
             :href="item.href"
             class="-mb-px border-b-2 px-3 py-2"
-            :class="isCurrentOrParentUrl(item.href) ? 'border-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :class="
+                isCurrentOrParentUrl(item.href)
+                    ? 'border-foreground font-medium'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+            "
             >{{ item.title }}</Link
         >
     </nav>

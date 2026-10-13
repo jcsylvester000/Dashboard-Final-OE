@@ -57,7 +57,9 @@ const creating = ref(false);
             </div>
             <div class="flex items-center gap-2">
                 <Link
-                    :href="index({ query: showArchived ? {} : { archived: '1' } })"
+                    :href="
+                        index({ query: showArchived ? {} : { archived: '1' } })
+                    "
                     class="text-sm text-muted-foreground underline underline-offset-4"
                 >
                     {{ showArchived ? 'Hide archived' : 'Show archived' }}
@@ -85,18 +87,33 @@ const creating = ref(false);
                     </div>
                     <div class="grid gap-2">
                         <Label for="ws-industry">Industry</Label>
-                        <Input id="ws-industry" name="industry" placeholder="e.g. Real estate" />
+                        <Input
+                            id="ws-industry"
+                            name="industry"
+                            placeholder="e.g. Real estate"
+                        />
                         <InputError :message="errors.industry" />
                     </div>
                     <div class="grid gap-2">
                         <Label for="ws-website">Website</Label>
-                        <Input id="ws-website" name="website" type="url" placeholder="https://" />
+                        <Input
+                            id="ws-website"
+                            name="website"
+                            type="url"
+                            placeholder="https://"
+                        />
                         <InputError :message="errors.website" />
                     </div>
                     <div class="grid gap-2">
                         <Label for="ws-color">Colour</Label>
-                        <NativeSelect id="ws-color" name="color" model-value="blue">
-                            <option v-for="c in colors" :key="c" :value="c">{{ c }}</option>
+                        <NativeSelect
+                            id="ws-color"
+                            name="color"
+                            model-value="blue"
+                        >
+                            <option v-for="c in colors" :key="c" :value="c">
+                                {{ c }}
+                            </option>
                         </NativeSelect>
                     </div>
                     <div class="grid gap-2">
@@ -113,7 +130,11 @@ const creating = ref(false);
                         <Button type="submit" :disabled="processing">
                             <Spinner v-if="processing" /> Create workspace
                         </Button>
-                        <Button type="button" variant="ghost" @click="creating = false">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            @click="creating = false"
+                        >
                             <X /> Cancel
                         </Button>
                     </div>
@@ -126,7 +147,9 @@ const creating = ref(false);
             class="rounded-lg border p-8 text-center text-sm text-muted-foreground"
         >
             No workspaces yet.
-            <template v-if="!canCreate">Ask an admin to add you to a client workspace.</template>
+            <template v-if="!canCreate"
+                >Ask an admin to add you to a client workspace.</template
+            >
         </p>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -144,15 +167,20 @@ const creating = ref(false);
                         />
                         <span class="font-medium">{{ w.name }}</span>
                     </div>
-                    <Badge v-if="w.status !== 'active'" variant="outline">{{ w.status }}</Badge>
+                    <Badge v-if="w.status !== 'active'" variant="outline">{{
+                        w.status
+                    }}</Badge>
                 </div>
                 <p class="mt-1 text-xs text-muted-foreground">
                     {{ w.industry || 'No industry set' }}
-                    <template v-if="w.myRole"> · {{ roleLabel(w.myRole) }}</template>
+                    <template v-if="w.myRole">
+                        · {{ roleLabel(w.myRole) }}</template
+                    >
                 </p>
                 <div class="mt-4 flex gap-4 text-sm text-muted-foreground">
                     <span class="inline-flex items-center gap-1">
-                        <FolderKanban class="size-4" /> {{ w.openProjects }} open
+                        <FolderKanban class="size-4" />
+                        {{ w.openProjects }} open
                     </span>
                     <span class="inline-flex items-center gap-1">
                         <Users class="size-4" /> {{ w.members }}

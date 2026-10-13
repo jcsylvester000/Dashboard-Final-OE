@@ -35,7 +35,8 @@ const nav = computed(() => page.props.workspaceNav);
                             class="size-2.5 shrink-0 rounded-full"
                             :class="
                                 nav?.current
-                                    ? (departmentDot[nav.current.color] ?? 'bg-slate-500')
+                                    ? (departmentDot[nav.current.color] ??
+                                      'bg-slate-500')
                                     : 'bg-slate-300'
                             "
                         />
@@ -60,10 +61,15 @@ const nav = computed(() => page.props.workspaceNav);
                         :key="w.id"
                         as-child
                     >
-                        <Link :href="show(w.slug)" class="flex w-full items-center gap-2">
+                        <Link
+                            :href="show(w.slug)"
+                            class="flex w-full items-center gap-2"
+                        >
                             <span
                                 class="size-2 rounded-full"
-                                :class="departmentDot[w.color] ?? 'bg-slate-500'"
+                                :class="
+                                    departmentDot[w.color] ?? 'bg-slate-500'
+                                "
                             />
                             <span class="truncate">{{ w.name }}</span>
                             <Check
@@ -74,7 +80,10 @@ const nav = computed(() => page.props.workspaceNav);
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem as-child>
-                        <Link :href="index()" class="flex w-full items-center gap-2">
+                        <Link
+                            :href="index()"
+                            class="flex w-full items-center gap-2"
+                        >
                             <LayoutList class="size-4" /> All workspaces
                         </Link>
                     </DropdownMenuItem>

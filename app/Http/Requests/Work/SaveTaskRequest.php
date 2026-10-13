@@ -4,6 +4,7 @@ namespace App\Http\Requests\Work;
 
 use App\Models\Task;
 use App\Models\Workspace;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -34,6 +35,16 @@ class SaveTaskRequest extends FormRequest
             $this->merge(['work_details' => array_filter((array) $this->input('work_details'), fn ($v) => $v !== null && $v !== '') ?: null]);
         }
 
+        // Estimates are entered in hours (decimals allowed) and stored as minutes.
+        if ($this->has('estimate_hours')) {
+            $hours = $this->input('estimate_hours');
+            $this->merge(['estimate_minutes' => is_numeric($hours) ? (int) round((float) $hours * 60) : null]);
+        }
+
+        if (is_array($this->input('custom_values'))) {
+            $this->merge(['custom_values' => array_filter((array) $this->input('custom_values'), fn ($v) => $v !== null && $v !== '') ?: null]);
+        }
+
         if ($this->has('label_ids')) {
             $this->merge(['label_ids' => array_values(array_filter((array) $this->input('label_ids')))]);
         }
@@ -54,19 +65,58 @@ class SaveTaskRequest extends FormRequest
             'description' => ['sometimes', 'nullable', 'string', 'max:20000'],
             'status_id' => ['sometimes', 'integer', Rule::exists('task_statuses', 'id')],
             'priority' => ['sometimes', Rule::in(array_keys(Task::PRIORITIES))],
+            'type' => ['sometimes', Rule::in(array_keys(Task::TYPES))],
+            'sprint_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('workspace_id', $workspace->id)->whereNot('status', 'closed')],
+            'story_points' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100'],
+            'recurrence' => ['sometimes', 'nullable', Rule::in(array_keys(Task::RECURRENCES))],
+            'recurrence_until' => ['sometimes', 'nullable', 'date'],
+            // B-12: when the editor opened the task; a newer save by someone else is a conflict.
+            '_seen_at' => ['sometimes', 'nullable', 'date'],
             'department_id' => ['sometimes', 'nullable', 'integer', Rule::exists('departments', 'id')],
             'project_id' => ['sometimes', 'nullable', 'integer', Rule::exists('projects', 'id')->where('workspace_id', $workspace->id)->whereNull('deleted_at')],
             'assignee_id' => ['sometimes', 'nullable', 'integer', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
             'parent_id' => ['sometimes', 'nullable', 'integer', Rule::exists('tasks', 'id')->where('workspace_id', $workspace->id)->whereNull('deleted_at')],
             'due_on' => ['sometimes', 'nullable', 'date'],
+            'start_on' => ['sometimes', 'nullable', 'date', function (string $attribute, mixed $value, Closure $fail) {
+                // Compare with the due date being saved, or the one the task already has.
+                $task = $this->route('task');
+                $due = $this->has('due_on') ? $this->input('due_on') : ($task instanceof Task ? $task->due_on?->toDateString() : null);
+                if ($value !== null && is_string($due) && $due !== '' && (string) $value > $due) {
+                    $fail(__('The start date must be on or before the due date.'));
+                }
+            }],
             'estimate_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000'],
             'work_details' => ['sometimes', 'nullable', 'array:'.implode(',', $this->workDetailKeys())],
             'work_details.*' => ['nullable', 'string', 'max:255'],
             'work_details.target_url' => ['nullable', 'url:http,https', 'max:255'],
             ...$this->workDetailSelectRules(),
+            ...$this->customFieldRules($workspace),
             'label_ids' => ['sometimes', 'array', 'max:30'],
             'label_ids.*' => ['integer', Rule::exists('labels', 'id')->where('workspace_id', $workspace->id)],
         ];
+    }
+
+    /**
+     * B-07: values for this client's custom fields, typed per field; unknown keys refused.
+     *
+     * @return array<string, array<int, mixed>|string>
+     */
+    private function customFieldRules(Workspace $workspace): array
+    {
+        $fields = $workspace->custom_fields ?? [];
+        $rules = ['custom_values' => ['sometimes', 'nullable', 'array:'.implode(',', array_column($fields, 'key'))]];
+        foreach ($fields as $f) {
+            $rules['custom_values.'.$f['key']] = match ($f['type']) {
+                'number' => ['nullable', 'numeric', 'between:-999999999,999999999'],
+                'date' => ['nullable', 'date'],
+                'checkbox' => ['nullable', 'boolean'],
+                'url' => ['nullable', 'url:http,https', 'max:500'],
+                'select' => ['nullable', Rule::in($f['options'] ?? [])],
+                default => ['nullable', 'string', 'max:500'],
+            };
+        }
+
+        return $rules;
     }
 
     /**
@@ -81,6 +131,16 @@ class SaveTaskRequest extends FormRequest
             foreach ($fields as $key => $def) {
                 if ($def[1] === 'select') {
                     $rules['work_details.'.$key] = ['nullable', Rule::in($def[2])];
+                }
+                if ($def[1] === 'multiselect') {
+                    $options = $def[2];
+                    $rules['work_details.'.$key] = ['nullable', 'string', function (string $attribute, mixed $value, Closure $fail) use ($options): void {
+                        foreach (array_map('trim', explode(',', (string) $value)) as $part) {
+                            if ($part !== '' && ! in_array($part, $options, true)) {
+                                $fail(__('":value" is not one of the options.', ['value' => $part]));
+                            }
+                        }
+                    }];
                 }
             }
         }
@@ -109,6 +169,7 @@ class SaveTaskRequest extends FormRequest
         return [
             'assignee_id.exists' => __('The assignee must be a member of this workspace.'),
             'project_id.exists' => __('Choose a project from this workspace.'),
+            'sprint_id.exists' => __('Choose a planned or active sprint of this client.'),
         ];
     }
 }

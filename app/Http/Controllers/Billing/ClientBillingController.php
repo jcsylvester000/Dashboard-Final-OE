@@ -6,6 +6,7 @@ use App\Domain\Billing\BillingException;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
 use App\Domain\Billing\PeriodService;
+use App\Domain\Billing\RateTemplateService;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
@@ -14,6 +15,7 @@ use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\RateCard;
+use App\Models\RateTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use Carbon\CarbonImmutable;
@@ -89,7 +91,7 @@ class ClientBillingController extends Controller
                 'bill_to' => $profile->bill_to ?? ['name' => $workspace->name, 'address' => null, 'tax_id' => null, 'contact' => $workspace->primary_contact_name],
                 'payment_instructions' => $profile->payment_instructions,
             ],
-            'periods' => BillingPeriod::query()->with('invoices:id,billing_period_id,status,series,number,total_minor,currency')
+            'periods' => BillingPeriod::query()->with(['invoices:id,billing_period_id,project_id,status,series,number,total_minor,currency', 'invoices.project:id,name'])
                 ->where('workspace_id', $workspace->id)->latest('starts_on')->limit(24)->get()
                 ->map(fn (BillingPeriod $p): array => [
                     'id' => $p->id,
@@ -99,6 +101,7 @@ class ClientBillingController extends Controller
                     'invoices' => $p->invoices->map(fn (Invoice $i): array => [
                         'id' => $i->id, 'number' => $i->displayNumber(), 'status' => $i->status,
                         'total_minor' => $i->total_minor, 'currency' => $i->currency,
+                        'project' => $i->project?->name,
                     ])->values(),
                 ])->values(),
             'rates' => RateCard::query()->with(['department:id,name', 'user:id,name'])
@@ -118,6 +121,12 @@ class ClientBillingController extends Controller
                     'fixed_fee' => $p->fixed_fee_minor !== null ? Money::toDecimal($p->fixed_fee_minor) : '',
                     'billed' => $p->fixed_fee_billed_at !== null,
                 ])->values(),
+            'teamRates' => app(RateTemplateService::class)->teamRates($workspace),
+            'templates' => RateTemplate::query()->orderBy('name')->get(['id', 'name']),
+            'appliedTemplate' => $profile->rate_template_id !== null ? [
+                'name' => RateTemplate::query()->whereKey($profile->rate_template_id)->value('name'),
+                'applied_at' => $profile->rate_template_applied_at?->toDateString(),
+            ] : null,
             'departments' => Department::query()->orderBy('position')->get(['id', 'name']),
             'members' => $workspace->members()->orderBy('name')->get(['users.id', 'users.name'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
@@ -200,7 +209,10 @@ class ClientBillingController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $invoice = $invoices->buildDraft($period, $user);
+        $projectId = $request->validate([
+            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')->where('workspace_id', $period->workspace_id)],
+        ])['project_id'] ?? null;
+        $invoice = $invoices->buildDraft($period, $user, null, $projectId !== null ? Project::query()->findOrFail($projectId) : null);
 
         return to_route('billing.invoices.show', $invoice);
     }

@@ -8,7 +8,7 @@ import {
     UserCheck,
     UserX,
 } from '@lucide/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
+import { confirmDialog } from '@/composables/useConfirm';
 import { formatDateTime, timeAgo } from '@/lib/format';
 import { index } from '@/routes/admin/users';
 import type {
@@ -38,7 +39,17 @@ const props = defineProps<{
     roles: Option[];
     departments: DepartmentOption[];
     issuedSecret: IssuedSecret | null;
+    handover: {
+        open_tasks: number;
+        projects_led: number;
+        departments_led: number;
+        running_timers: number;
+    } | null;
+    handoverTo: { id: number; name: string; title: string | null }[];
 }>();
+
+const offboarding = ref(false);
+const reassignTo = ref<string>('');
 
 defineOptions({
     layout: {
@@ -63,21 +74,73 @@ const confirmations: Partial<Record<Action, string>> = {
         'Turn off two-factor for this member? They can set it up again after logging in.',
     signOut: 'Sign this member out of every browser and device?',
     deactivate:
-        'Deactivate this member? They are signed out immediately and cannot log in until reactivated.',
+        'Deactivate this member? Their open work is handed over, they are signed out immediately and cannot log in until reactivated.',
 };
 
-function run(action: Action): void {
+async function run(action: Action): Promise<void> {
     const message = confirmations[action];
-    if (message && !window.confirm(message)) {
+    if (message && !(await confirmDialog(message))) {
         return;
     }
 
     busy.value = action;
     router.post(
         UserController[action].url(props.member.id),
-        {},
+        action === 'deactivate' && reassignTo.value !== ''
+            ? { reassign_to: Number(reassignTo.value) }
+            : {},
         {
             preserveScroll: true,
+            onFinish: () => (busy.value = null),
+        },
+    );
+}
+
+const confirmName = ref('');
+const anonymised = computed(() =>
+    props.member.email.endsWith('@anonymised.invalid'),
+);
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const handoverSummary = computed(() => {
+    const h = props.handover;
+    if (!h) {
+        return '';
+    }
+    const parts = [plural(h.open_tasks, 'open task')];
+    const leads = [
+        h.projects_led ? plural(h.projects_led, 'project') : '',
+        h.departments_led ? plural(h.departments_led, 'department') : '',
+    ].filter(Boolean);
+    if (leads.length) {
+        parts.push(`leads ${leads.join(' and ')}`);
+    }
+    if (h.running_timers) {
+        parts.push('a timer is running (it will be stopped and saved)');
+    }
+
+    return parts.join(' · ') + '.';
+});
+const anonymiseError = ref<string | null>(null);
+
+async function anonymise(): Promise<void> {
+    if (
+        !(await confirmDialog(
+            `Erase ${props.member.name}'s personal details? This cannot be undone.`,
+        ))
+    ) {
+        return;
+    }
+    busy.value = 'anonymise';
+    anonymiseError.value = null;
+    router.post(
+        UserController.anonymise.url(props.member.id),
+        { confirm_name: confirmName.value },
+        {
+            preserveScroll: true,
+            onSuccess: () => (confirmName.value = ''),
+            onError: (e) =>
+                (anonymiseError.value =
+                    Object.values(e)[0] ?? 'Could not erase.'),
             onFinish: () => (busy.value = null),
         },
     );
@@ -109,7 +172,9 @@ const statusVariant: Record<
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <Badge :variant="member.is_active ? 'secondary' : 'destructive'">
+                <Badge
+                    :variant="member.is_active ? 'secondary' : 'destructive'"
+                >
                     {{ member.is_active ? 'Active' : 'Deactivated' }}
                 </Badge>
                 <Badge variant="outline">
@@ -127,8 +192,8 @@ const statusVariant: Record<
             <CardHeader>
                 <CardTitle class="text-base">Details & access</CardTitle>
                 <CardDescription>
-                    Role controls what they can do across the app. Workspace
-                    roles come later (P2).
+                    Role controls what they can do across the app. Client
+                    workspace roles are set on each workspace's Members page.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -136,7 +201,7 @@ const statusVariant: Record<
                     v-bind="UserController.update.form(member.id)"
                     v-slot="{ errors, processing }"
                     class="flex flex-col gap-6"
-                    preserve-scroll
+                    :options="{ preserveScroll: true }"
                 >
                     <UserFields
                         :member="member"
@@ -204,18 +269,131 @@ const statusVariant: Record<
                         v-if="!member.is_self"
                         variant="destructive"
                         :disabled="busy !== null"
-                        @click="run('deactivate')"
+                        @click="offboarding = !offboarding"
                     >
-                        <UserX /> Deactivate
+                        <UserX /> Deactivate…
                     </Button>
+                    <div
+                        v-if="offboarding && handover"
+                        class="w-full space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+                    >
+                        <p class="font-medium">Offboard {{ member.name }}</p>
+                        <p class="text-muted-foreground">
+                            {{ handoverSummary }} Their logged time, approvals
+                            and files stay on record for billing.
+                        </p>
+                        <label class="grid max-w-sm gap-1">
+                            <span class="text-xs text-muted-foreground"
+                                >Hand open work to</span
+                            >
+                            <select
+                                v-model="reassignTo"
+                                class="h-9 rounded-md border bg-background px-2"
+                            >
+                                <option value="">
+                                    Nobody (leave unassigned in the department
+                                    queue)
+                                </option>
+                                <option
+                                    v-for="p in handoverTo"
+                                    :key="p.id"
+                                    :value="String(p.id)"
+                                >
+                                    {{ p.name
+                                    }}<template v-if="p.title">
+                                        · {{ p.title }}</template
+                                    >
+                                </option>
+                            </select>
+                        </label>
+                        <p class="text-xs text-muted-foreground">
+                            Tasks in clients the new owner isn't a member of are
+                            left unassigned instead.
+                        </p>
+                        <div class="flex gap-2">
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                :disabled="busy !== null"
+                                @click="run('deactivate')"
+                            >
+                                <Spinner v-if="busy === 'deactivate'" /> Hand
+                                over and deactivate
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="offboarding = false"
+                                >Cancel</Button
+                            >
+                        </div>
+                    </div>
                 </template>
                 <Button
-                    v-else
+                    v-else-if="!anonymised"
                     :disabled="busy !== null"
                     @click="run('reactivate')"
                 >
                     <UserCheck /> Reactivate
                 </Button>
+                <p v-else class="text-sm text-muted-foreground">
+                    This account was anonymised and can't be reactivated. Add a
+                    new team member instead.
+                </p>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Personal data</CardTitle>
+                <CardDescription>
+                    Data Privacy Act requests. The export is everything the app
+                    holds about this person. Erasing replaces their name and
+                    email with "Former member #{{ member.id }}" and deletes
+                    sign-ins, alerts and saved views; time, approvals and
+                    invoices are kept for billing records.
+                </CardDescription>
+            </CardHeader>
+            <CardContent class="space-y-3 text-sm">
+                <a
+                    :href="UserController.exportData.url(member.id)"
+                    class="inline-flex items-center gap-1 underline"
+                    download
+                    >Download personal data (JSON)</a
+                >
+                <form
+                    v-if="!member.is_active && !anonymised"
+                    class="flex flex-wrap items-center gap-2"
+                    @submit.prevent="anonymise"
+                >
+                    <input
+                        v-model="confirmName"
+                        class="h-9 w-64 rounded-md border bg-background px-2"
+                        :placeholder="`Type ${member.name} to confirm`"
+                        aria-label="Type the full name to confirm"
+                    />
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        type="submit"
+                        :disabled="confirmName !== member.name || busy !== null"
+                        >Erase personal details</Button
+                    >
+                    <span
+                        v-if="anonymiseError"
+                        class="text-xs text-destructive"
+                        >{{ anonymiseError }}</span
+                    >
+                </form>
+                <p
+                    v-else-if="member.is_active"
+                    class="text-xs text-muted-foreground"
+                >
+                    To erase, deactivate the account first.
+                </p>
+                <p v-else class="text-xs text-muted-foreground">
+                    This account has been anonymised.
+                </p>
             </CardContent>
         </Card>
 

@@ -13,6 +13,7 @@ export type ReportResult = {
 export type ReportFilters = {
     workspace: number | null;
     department: number | null;
+    project?: number | null;
     from: string;
     to: string;
 };

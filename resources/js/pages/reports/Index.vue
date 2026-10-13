@@ -5,10 +5,19 @@ import { computed, reactive } from 'vue';
 import Heading from '@/components/Heading.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { csv, index } from '@/routes/reports';
-import type { ReportColumn, ReportFilters, ReportResult } from '@/types/reports';
+import type {
+    ReportColumn,
+    ReportFilters,
+    ReportResult,
+} from '@/types/reports';
 
 const props = defineProps<{
     report: string;
@@ -19,6 +28,7 @@ const props = defineProps<{
     groups: Record<string, string>;
     workspaces: { id: number; name: string }[];
     departments: { id: number; name: string }[];
+    projects: { id: number; name: string; workspace_id: number }[];
 }>();
 
 defineOptions({
@@ -29,7 +39,10 @@ defineOptions({
 
 const form = reactive({
     workspace: props.filters.workspace ? String(props.filters.workspace) : '',
-    department: props.filters.department ? String(props.filters.department) : '',
+    department: props.filters.department
+        ? String(props.filters.department)
+        : '',
+    project: props.filters.project ? String(props.filters.project) : '',
     from: props.filters.from,
     to: props.filters.to,
 });
@@ -47,6 +60,9 @@ function query(overrides: Record<string, string> = {}): Record<string, string> {
     if (form.department) {
         q.department = form.department;
     }
+    if (form.project) {
+        q.project = form.project;
+    }
     if ((overrides.report ?? props.report) === 'time') {
         q.group = overrides.group ?? props.group;
     }
@@ -55,13 +71,25 @@ function query(overrides: Record<string, string> = {}): Record<string, string> {
 }
 
 function apply(overrides: Record<string, string> = {}): void {
-    router.get(index.url({ query: query(overrides) }), {}, { preserveState: true, preserveScroll: true });
+    router.get(
+        index.url({ query: query(overrides) }),
+        {},
+        { preserveState: true, preserveScroll: true },
+    );
 }
 
 const csvUrl = computed(() => csv.url({ query: query() }));
+// Projects of the chosen client (or all), so the filters can't contradict each other.
+const projectOptions = computed(() =>
+    props.projects.filter(
+        (p) => !form.workspace || String(p.workspace_id) === form.workspace,
+    ),
+);
 
 // Simple bar for the first numeric column, so trends are visible at a glance.
-const barKey = computed(() => props.result.columns.find((c) => c.type !== 'text')?.key ?? null);
+const barKey = computed(
+    () => props.result.columns.find((c) => c.type !== 'text')?.key ?? null,
+);
 const barMax = computed(() => {
     const key = barKey.value;
     if (!key) {
@@ -71,7 +99,10 @@ const barMax = computed(() => {
     return Math.max(0, ...props.result.rows.map((r) => Number(r[key] ?? 0)));
 });
 
-function format(value: string | number | null | undefined, col: ReportColumn): string {
+function format(
+    value: string | number | null | undefined,
+    col: ReportColumn,
+): string {
     if (value === null || value === undefined || value === '') {
         return '—';
     }
@@ -102,7 +133,10 @@ function barWidth(row: Record<string, string | number | null>): string {
 
     <div class="flex flex-1 flex-col gap-4 p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
-            <Heading title="Reports" description="Filter by client, department and dates. Export any report to CSV (opens in Excel)." />
+            <Heading
+                title="Reports"
+                description="Filter by client, department and dates. Export any report to CSV (opens in Excel)."
+            />
             <Button variant="outline" size="sm" as-child>
                 <a :href="csvUrl"><Download class="size-4" /> Export CSV</a>
             </Button>
@@ -114,25 +148,57 @@ function barWidth(row: Record<string, string | number | null>): string {
                 :key="key"
                 :href="index({ query: query({ report: String(key) }) })"
                 class="-mb-px border-b-2 px-3 py-2"
-                :class="key === report ? 'border-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                :class="
+                    key === report
+                        ? 'border-foreground font-medium'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                "
                 preserve-scroll
                 >{{ label }}</Link
             >
         </nav>
 
-        <form class="flex flex-wrap items-end gap-2 text-sm" @submit.prevent="apply()">
+        <form
+            class="flex flex-wrap items-end gap-2 text-sm"
+            @submit.prevent="apply()"
+        >
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Client</span>
                 <NativeSelect v-model="form.workspace" class="w-48">
                     <option value="">All my clients</option>
-                    <option v-for="w in workspaces" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
+                    <option
+                        v-for="w in workspaces"
+                        :key="w.id"
+                        :value="String(w.id)"
+                    >
+                        {{ w.name }}
+                    </option>
+                </NativeSelect>
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Project</span>
+                <NativeSelect v-model="form.project" class="w-52">
+                    <option value="">All projects</option>
+                    <option
+                        v-for="p in projectOptions"
+                        :key="p.id"
+                        :value="String(p.id)"
+                    >
+                        {{ p.name }}
+                    </option>
                 </NativeSelect>
             </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Department</span>
                 <NativeSelect v-model="form.department" class="w-40">
                     <option value="">All departments</option>
-                    <option v-for="d in departments" :key="d.id" :value="String(d.id)">{{ d.name }}</option>
+                    <option
+                        v-for="d in departments"
+                        :key="d.id"
+                        :value="String(d.id)"
+                    >
+                        {{ d.name }}
+                    </option>
                 </NativeSelect>
             </label>
             <label class="grid gap-1">
@@ -145,15 +211,29 @@ function barWidth(row: Record<string, string | number | null>): string {
             </label>
             <label v-if="report === 'time'" class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Group by</span>
-                <NativeSelect :model-value="group" class="w-36" @update:model-value="(v) => apply({ group: String(v) })">
-                    <option v-for="(label, key) in groups" :key="key" :value="key">{{ label }}</option>
+                <NativeSelect
+                    :model-value="group"
+                    class="w-36"
+                    @update:model-value="(v) => apply({ group: String(v) })"
+                >
+                    <option
+                        v-for="(label, key) in groups"
+                        :key="key"
+                        :value="key"
+                    >
+                        {{ label }}
+                    </option>
                 </NativeSelect>
             </label>
             <Button type="submit" size="sm">Apply</Button>
         </form>
 
-        <p v-if="report === 'overdue' || report === 'workload'" class="text-xs text-muted-foreground">
-            Open and overdue counts are as of today; the date range applies to hours logged.
+        <p
+            v-if="report === 'overdue' || report === 'workload'"
+            class="text-xs text-muted-foreground"
+        >
+            Open and overdue counts are as of today; the date range applies to
+            hours logged.
         </p>
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -165,11 +245,18 @@ function barWidth(row: Record<string, string | number | null>): string {
             </Card>
         </div>
 
-        <p v-if="result.rows.length === 0" class="py-10 text-center text-sm text-muted-foreground">No data for these filters.</p>
+        <p
+            v-if="result.rows.length === 0"
+            class="py-10 text-center text-sm text-muted-foreground"
+        >
+            No data for these filters.
+        </p>
 
         <div v-else class="overflow-x-auto rounded-lg border">
             <table class="w-full text-sm">
-                <thead class="bg-muted/50 text-left text-xs text-muted-foreground">
+                <thead
+                    class="bg-muted/50 text-left text-xs text-muted-foreground"
+                >
                     <tr>
                         <th
                             v-for="col in result.columns"
@@ -188,13 +275,18 @@ function barWidth(row: Record<string, string | number | null>): string {
                             v-for="col in result.columns"
                             :key="col.key"
                             class="px-3 py-2"
-                            :class="{ 'text-right tabular-nums': col.type !== 'text' }"
+                            :class="{
+                                'text-right tabular-nums': col.type !== 'text',
+                            }"
                         >
                             {{ format(row[col.key], col) }}
                         </td>
                         <td class="px-3 py-2" aria-hidden="true">
                             <div class="h-2 rounded bg-muted">
-                                <div class="h-2 rounded bg-primary/70" :style="{ width: barWidth(row) }" />
+                                <div
+                                    class="h-2 rounded bg-primary/70"
+                                    :style="{ width: barWidth(row) }"
+                                />
                             </div>
                         </td>
                     </tr>

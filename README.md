@@ -16,12 +16,12 @@ The phase checklist lives in `6 - Final Documentation/OverEasy Dashboard Build G
 
 Install these once:
 
-| Tool | Version | Notes |
-|---|---|---|
-| [Laravel Herd for Windows](https://herd.laravel.com/windows) | latest | PHP 8.5 + Composer. PHP 8.3 also works (minimum for Laravel 13). |
-| [Node.js](https://nodejs.org) | 24 LTS | Switch to 26 LTS after 28 Oct 2026. |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | latest | Runs PostgreSQL 18 and Valkey. |
-| [Git](https://git-scm.com/download/win) | latest | |
+| Tool                                                              | Version | Notes                                                            |
+| ----------------------------------------------------------------- | ------- | ---------------------------------------------------------------- |
+| [Laravel Herd for Windows](https://herd.laravel.com/windows)      | latest  | PHP 8.5 + Composer. PHP 8.3 also works (minimum for Laravel 13). |
+| [Node.js](https://nodejs.org)                                     | 24 LTS  | Switch to 26 LTS after 28 Oct 2026.                              |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | latest  | Runs PostgreSQL 18 and Valkey.                                   |
+| [Git](https://git-scm.com/download/win)                           | latest  |                                                                  |
 
 Check from PowerShell:
 
@@ -74,12 +74,12 @@ php artisan tinker --execute="echo app(App\Domain\Identity\AccessLinkService::cl
 
 ### Troubleshooting first run
 
-| Symptom | Fix |
-|---|---|
-| `ports are not available ... 5432` | Postgres is published on **54320** to avoid this. Make sure `.env` has `DB_PORT=54320`, then `docker compose up -d`. |
-| `requires php ^8.x but your php version ...` | Run `where.exe php` to see which PHP is first on PATH. Herd's PHP must come before `C:\php`, or update `C:\php`. |
-| `could not find driver` / missing extension | In your `php.ini` enable: `pdo_pgsql`, `pgsql`, `pdo_sqlite`, `sqlite3`, `mbstring`, `openssl`, `fileinfo`, `curl`, `zip`, `intl`. Check with `php -m`. (Herd enables these already.) |
-| `pint is not recognized` / `vendor/autoload.php` missing | `composer install` has not finished yet; fix the error above it first. |
+| Symptom                                                  | Fix                                                                                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ports are not available ... 5432`                       | Postgres is published on **54320** to avoid this. Make sure `.env` has `DB_PORT=54320`, then `docker compose up -d`.                                                                  |
+| `requires php ^8.x but your php version ...`             | Run `where.exe php` to see which PHP is first on PATH. Herd's PHP must come before `C:\php`, or update `C:\php`.                                                                      |
+| `could not find driver` / missing extension              | In your `php.ini` enable: `pdo_pgsql`, `pgsql`, `pdo_sqlite`, `sqlite3`, `mbstring`, `openssl`, `fileinfo`, `curl`, `zip`, `intl`. Check with `php -m`. (Herd enables these already.) |
+| `pint is not recognized` / `vendor/autoload.php` missing | `composer install` has not finished yet; fix the error above it first.                                                                                                                |
 
 ## 2b. Run it locally (every day)
 
@@ -94,15 +94,15 @@ If Windows blocks the script: `powershell -ExecutionPolicy Bypass -File .\start-
 
 ## 3. Everyday commands
 
-| Task | Command |
-|---|---|
-| Start DB + cache | `docker compose up -d` |
-| Run the app (server, queue, Vite) | `composer dev` |
-| Format PHP (Pint) | `composer lint` |
-| Full check: style, static analysis, tests | `composer test` |
-| Frontend lint + type check | `npm run check` and `npm run types:check` |
-| Reset the database | `php artisan migrate:fresh --seed` (local only) |
-| Stop services | `docker compose down` (data is kept in Docker volumes) |
+| Task                                      | Command                                                |
+| ----------------------------------------- | ------------------------------------------------------ |
+| Start DB + cache                          | `docker compose up -d`                                 |
+| Run the app (server, queue, Vite)         | `composer dev`                                         |
+| Format PHP (Pint)                         | `composer lint`                                        |
+| Full check: style, static analysis, tests | `composer test`                                        |
+| Frontend lint + type check                | `npm run check` and `npm run types:check`              |
+| Reset the database                        | `php artisan migrate:fresh --seed` (local only)        |
+| Stop services                             | `docker compose down` (data is kept in Docker volumes) |
 
 Tests use an in-memory SQLite database, so they do not touch your local Postgres.
 CI (GitHub Actions) runs the same tests against PostgreSQL 18.
@@ -111,6 +111,7 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
 
 - **No email, ever.** Admins create members in **Admin › Team members**. The app
   shows a one-time **setup link** (72 h) to copy and share privately.
+- **Lost the admin password?** From the app folder: `php artisan user:reset-link admin@overeasy.local | Set-Clipboard`, then paste the link into the browser (single use, 24 h; a newer link cancels older ones).
 - **Forgot password?** An admin opens the member and clicks **Issue reset link** (24 h, single use)
   or **Temporary password** (member must change it at next login).
 - Admins can also **Reset 2FA**, **Sign out everywhere**, and **Deactivate** (immediate sign-out; no deletes).
@@ -253,7 +254,8 @@ composer dev                    # now also starts reverb:start
   random name. **Admin > File settings** (`system.manage`) sets the size limit (default 25 MB) and allowed types
   (images, PDF, Office, text/CSV by default; ZIP and video optional).
 - **Thumbnails** need PHP's GD extension (`extension=gd` in php.ini); without it files still upload, just no preview.
-- **UploadThing** storage plugs in later behind the same `FileStore` interface (`FILES_DRIVER`), no other code changes.
+- **Where files go (`FILES_DRIVER`, default `auto`)**: task/project attachments go to UploadThing only when files there are private (`UPLOADTHING_ACL=private`, paid plan); otherwise they stay on the private server disk. Thumbnails always stay on the server. Force with `uploadthing` or `local`.
+- **My files on the free UploadThing plan** (`UPLOADTHING_ACL=` empty) are public-by-URL, so the app streams them itself and never shows the UploadThing URL; access is checked on every open and revoking a share really revokes it. Keep IDs, contracts and payroll out of My files until the plan allows private files.
 
 ## 4j. Production (P10)
 
@@ -263,7 +265,7 @@ composer dev                    # now also starts reverb:start
 - Production turns on a Content-Security-Policy (`CSP_ENABLED`), secure + encrypted session cookies and HSTS.
 - `APP_TIMEZONE` sets the team's local time zone (due dates, "today", alerts). Default UTC.
 - **Demo data for QA / speed checks** (local or staging only, refuses production): `php artisan db:seed --class=DemoDataSeeder`
-  - 12 demo staff (password `password`), 3 demo clients, ~500 tasks, ~5,000 time entries.
+    - 12 demo staff (password `password`), 3 demo clients, ~500 tasks, ~5,000 time entries.
 - CI also runs `composer audit` and `npm audit`; Dependabot watches GitHub Actions, Composer and npm weekly.
 
 ## 5. Push to GitHub

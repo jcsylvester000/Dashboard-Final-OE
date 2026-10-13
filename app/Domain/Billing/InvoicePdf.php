@@ -19,7 +19,7 @@ class InvoicePdf
     public function invoice(Invoice $invoice): string
     {
         // withTrashed: an archived (soft-deleted) client's invoices must still render.
-        $invoice->loadMissing(['items', 'workspace' => fn ($q) => $q->withTrashed()->with('billingProfile')]);
+        $invoice->loadMissing(['items', 'project:id,name', 'workspace' => fn ($q) => $q->withTrashed()->with('billingProfile')]);
         // The workspace may already be loaded without its profile (lazy loading is off).
         $profile = $invoice->workspace->loadMissing('billingProfile')->billingProfile;
 

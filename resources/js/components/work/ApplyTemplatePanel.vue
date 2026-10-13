@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { DepartmentOption } from '@/types/admin';
 import type { MemberOption } from '@/types/workspace';
+import { localToday } from '@/lib/format';
 
 /**
  * Start a cross-department workflow from a template: one task per step,
@@ -29,7 +30,7 @@ const errors = ref<Record<string, string>>({});
 const form = reactive({
     template: props.templates[0]?.id ? String(props.templates[0].id) : '',
     project_id: '',
-    start_on: new Date().toISOString().slice(0, 10),
+    start_on: localToday(),
     assignees: {} as Record<number, string>,
 });
 
@@ -44,8 +45,15 @@ function submit(): void {
     );
 
     router.post(
-        TaskFlowController.applyTemplate.url({ workspace: props.workspaceSlug, template: Number(form.template) }),
-        { project_id: form.project_id || null, start_on: form.start_on, assignees },
+        TaskFlowController.applyTemplate.url({
+            workspace: props.workspaceSlug,
+            template: Number(form.template),
+        }),
+        {
+            project_id: form.project_id || null,
+            start_on: form.start_on,
+            assignees,
+        },
         {
             onError: (e) => (errors.value = e),
             onSuccess: () => (open.value = false),
@@ -57,14 +65,24 @@ function submit(): void {
 
 <template>
     <div>
-        <Button v-if="!open" variant="outline" :disabled="templates.length === 0" @click="open = true">
+        <Button
+            v-if="!open"
+            variant="outline"
+            :disabled="templates.length === 0"
+            @click="open = true"
+        >
             <Workflow /> Start a workflow
         </Button>
 
         <div v-else class="space-y-4 rounded-lg border p-4">
             <div class="flex items-center justify-between">
                 <h3 class="font-medium">Start a cross-department workflow</h3>
-                <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Close" @click="open = false">
+                <button
+                    type="button"
+                    class="rounded p-1 hover:bg-accent"
+                    aria-label="Close"
+                    @click="open = false"
+                >
                     <X class="size-4" />
                 </button>
             </div>
@@ -72,14 +90,26 @@ function submit(): void {
                 <div class="grid gap-1">
                     <Label for="tpl">Template</Label>
                     <NativeSelect id="tpl" v-model="form.template">
-                        <option v-for="t in templates" :key="t.id" :value="String(t.id)">{{ t.name }}</option>
+                        <option
+                            v-for="t in templates"
+                            :key="t.id"
+                            :value="String(t.id)"
+                        >
+                            {{ t.name }}
+                        </option>
                     </NativeSelect>
                 </div>
                 <div class="grid gap-1">
                     <Label for="tpl-project">Project (optional)</Label>
                     <NativeSelect id="tpl-project" v-model="form.project_id">
                         <option value="">None</option>
-                        <option v-for="p in projects" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+                        <option
+                            v-for="p in projects"
+                            :key="p.id"
+                            :value="String(p.id)"
+                        >
+                            {{ p.name }}
+                        </option>
                     </NativeSelect>
                 </div>
                 <div class="grid gap-1">
@@ -89,18 +119,32 @@ function submit(): void {
                 </div>
             </div>
             <div>
-                <p class="mb-2 text-sm text-muted-foreground">Who owns each department's step? (optional)</p>
+                <p class="mb-2 text-sm text-muted-foreground">
+                    Who owns each department's step? (optional)
+                </p>
                 <div class="grid gap-2 sm:grid-cols-3">
-                    <label v-for="d in departments" :key="d.id" class="grid gap-1 text-sm">
+                    <label
+                        v-for="d in departments"
+                        :key="d.id"
+                        class="grid gap-1 text-sm"
+                    >
                         <span>{{ d.name }}</span>
                         <NativeSelect v-model="form.assignees[d.id]">
                             <option value="">Unassigned</option>
-                            <option v-for="m in members" :key="m.id" :value="String(m.id)">{{ m.name }}</option>
+                            <option
+                                v-for="m in members"
+                                :key="m.id"
+                                :value="String(m.id)"
+                            >
+                                {{ m.name }}
+                            </option>
                         </NativeSelect>
                     </label>
                 </div>
             </div>
-            <Button :disabled="processing || !form.template" @click="submit">Create tasks</Button>
+            <Button :disabled="processing || !form.template" @click="submit"
+                >Create tasks</Button
+            >
         </div>
     </div>
 </template>

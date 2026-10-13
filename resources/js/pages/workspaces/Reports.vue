@@ -2,7 +2,13 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Camera } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
@@ -23,13 +29,28 @@ type SnapshotData = {
     billable_hours: number;
     time_by_department: HoursRow[];
     time_by_person: HoursRow[];
-    completed_tasks: { id: number; title: string; department: string | null; assignee: string | null; completed_on: string | null }[];
+    completed_tasks: {
+        id: number;
+        title: string;
+        department: string | null;
+        assignee: string | null;
+        completed_on: string | null;
+    }[];
 };
 
 const props = defineProps<{
     workspace: Header;
-    snapshots: { id: number; week_start: string; completed: number; hours: number }[];
-    selected: { id: number; data: SnapshotData; saved_at: string | null } | null;
+    snapshots: {
+        id: number;
+        week_start: string;
+        completed: number;
+        hours: number;
+    }[];
+    selected: {
+        id: number;
+        data: SnapshotData;
+        saved_at: string | null;
+    } | null;
     canCapture: boolean;
 }>();
 
@@ -52,14 +73,25 @@ function capture(): void {
 
         <div class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-sm text-muted-foreground">
-                Weekly snapshots are saved every Monday morning for last week. Live numbers are in Reports.
+                Weekly snapshots are saved every Monday morning for last week.
+                Live numbers are in Reports.
             </p>
-            <Button v-if="canCapture" size="sm" variant="outline" @click="capture">
+            <Button
+                v-if="canCapture"
+                size="sm"
+                variant="outline"
+                @click="capture"
+            >
                 <Camera class="size-4" /> Save last week now
             </Button>
         </div>
 
-        <p v-if="snapshots.length === 0" class="py-10 text-center text-sm text-muted-foreground">No snapshots yet.</p>
+        <p
+            v-if="snapshots.length === 0"
+            class="py-10 text-center text-sm text-muted-foreground"
+        >
+            No snapshots yet.
+        </p>
 
         <div v-else class="grid gap-4 lg:grid-cols-4">
             <Card class="lg:col-span-1">
@@ -70,13 +102,22 @@ function capture(): void {
                     <ul class="divide-y text-sm">
                         <li v-for="s in snapshots" :key="s.id">
                             <Link
-                                :href="reportsIndex(workspace.slug, { query: { snapshot: String(s.id) } })"
+                                :href="
+                                    reportsIndex(workspace.slug, {
+                                        query: { snapshot: String(s.id) },
+                                    })
+                                "
                                 class="flex items-center justify-between py-2 hover:underline"
-                                :class="{ 'font-semibold': selected?.id === s.id }"
+                                :class="{
+                                    'font-semibold': selected?.id === s.id,
+                                }"
                                 preserve-scroll
                             >
                                 <span>{{ formatDate(s.week_start) }}</span>
-                                <span class="text-xs text-muted-foreground">{{ s.completed }} done · {{ s.hours }} h</span>
+                                <span class="text-xs text-muted-foreground"
+                                    >{{ s.completed }} done ·
+                                    {{ s.hours }} h</span
+                                >
                             </Link>
                         </li>
                     </ul>
@@ -87,43 +128,91 @@ function capture(): void {
                 <div class="grid gap-3 sm:grid-cols-3">
                     <Card>
                         <CardHeader>
-                            <CardDescription>Week of {{ formatDate(selected.data.week_start) }}</CardDescription>
-                            <CardTitle class="text-2xl">{{ selected.data.completed }} done</CardTitle>
+                            <CardDescription
+                                >Week of
+                                {{
+                                    formatDate(selected.data.week_start)
+                                }}</CardDescription
+                            >
+                            <CardTitle class="text-2xl"
+                                >{{ selected.data.completed }} done</CardTitle
+                            >
                         </CardHeader>
-                        <CardContent class="text-xs text-muted-foreground">{{ selected.data.created }} created</CardContent>
+                        <CardContent class="text-xs text-muted-foreground"
+                            >{{ selected.data.created }} created</CardContent
+                        >
                     </Card>
                     <Card>
                         <CardHeader>
                             <CardDescription>Hours logged</CardDescription>
-                            <CardTitle class="text-2xl">{{ selected.data.hours }}</CardTitle>
+                            <CardTitle class="text-2xl">{{
+                                selected.data.hours
+                            }}</CardTitle>
                         </CardHeader>
-                        <CardContent class="text-xs text-muted-foreground">{{ selected.data.billable_hours }} billable</CardContent>
+                        <CardContent class="text-xs text-muted-foreground"
+                            >{{
+                                selected.data.billable_hours
+                            }}
+                            billable</CardContent
+                        >
                     </Card>
                     <Card>
                         <CardHeader>
                             <CardDescription>Open when saved</CardDescription>
-                            <CardTitle class="text-2xl">{{ selected.data.open }}</CardTitle>
+                            <CardTitle class="text-2xl">{{
+                                selected.data.open
+                            }}</CardTitle>
                         </CardHeader>
                         <CardContent class="text-xs text-muted-foreground">
-                            {{ selected.data.overdue }} overdue · saved {{ formatDateTime(selected.saved_at) }}
+                            {{ selected.data.overdue }} overdue · saved
+                            {{ formatDateTime(selected.saved_at) }}
                         </CardContent>
                     </Card>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
-                    <Card v-for="block in [
-                        { title: 'Hours by department', rows: selected.data.time_by_department },
-                        { title: 'Hours by person', rows: selected.data.time_by_person },
-                    ]" :key="block.title">
+                    <Card
+                        v-for="block in [
+                            {
+                                title: 'Hours by department',
+                                rows: selected.data.time_by_department,
+                            },
+                            {
+                                title: 'Hours by person',
+                                rows: selected.data.time_by_person,
+                            },
+                        ]"
+                        :key="block.title"
+                    >
                         <CardHeader>
-                            <CardTitle class="text-base">{{ block.title }}</CardTitle>
+                            <CardTitle class="text-base">{{
+                                block.title
+                            }}</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p v-if="block.rows.length === 0" class="text-sm text-muted-foreground">No time logged.</p>
+                            <p
+                                v-if="block.rows.length === 0"
+                                class="text-sm text-muted-foreground"
+                            >
+                                No time logged.
+                            </p>
                             <ul v-else class="divide-y text-sm">
-                                <li v-for="r in block.rows" :key="r.name" class="flex justify-between py-1.5">
+                                <li
+                                    v-for="r in block.rows"
+                                    :key="r.name"
+                                    class="flex justify-between py-1.5"
+                                >
                                     <span>{{ r.name }}</span>
-                                    <span class="tabular-nums">{{ r.hours }} h <span class="text-xs text-muted-foreground">({{ r.billable_hours }} billable)</span></span>
+                                    <span class="tabular-nums"
+                                        >{{ r.hours }} h
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                            >({{
+                                                r.billable_hours
+                                            }}
+                                            billable)</span
+                                        ></span
+                                    >
                                 </li>
                             </ul>
                         </CardContent>
@@ -132,15 +221,39 @@ function capture(): void {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle class="text-base">Finished that week</CardTitle>
+                        <CardTitle class="text-base"
+                            >Finished that week</CardTitle
+                        >
                     </CardHeader>
                     <CardContent>
-                        <p v-if="selected.data.completed_tasks.length === 0" class="text-sm text-muted-foreground">Nothing finished.</p>
+                        <p
+                            v-if="selected.data.completed_tasks.length === 0"
+                            class="text-sm text-muted-foreground"
+                        >
+                            Nothing finished.
+                        </p>
                         <ul v-else class="divide-y text-sm">
-                            <li v-for="t in selected.data.completed_tasks" :key="t.id" class="flex justify-between gap-3 py-1.5">
-                                <Link :href="taskShow({ workspace: workspace.slug, task: t.id })" class="truncate hover:underline">{{ t.title }}</Link>
-                                <span class="shrink-0 text-xs text-muted-foreground">
-                                    {{ t.department ?? '—' }} · {{ t.assignee ?? 'unassigned' }} · {{ formatDate(t.completed_on) }}
+                            <li
+                                v-for="t in selected.data.completed_tasks"
+                                :key="t.id"
+                                class="flex justify-between gap-3 py-1.5"
+                            >
+                                <Link
+                                    :href="
+                                        taskShow({
+                                            workspace: workspace.slug,
+                                            task: t.id,
+                                        })
+                                    "
+                                    class="truncate hover:underline"
+                                    >{{ t.title }}</Link
+                                >
+                                <span
+                                    class="shrink-0 text-xs text-muted-foreground"
+                                >
+                                    {{ t.department ?? '—' }} ·
+                                    {{ t.assignee ?? 'unassigned' }} ·
+                                    {{ formatDate(t.completed_on) }}
                                 </span>
                             </li>
                         </ul>

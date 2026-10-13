@@ -44,6 +44,14 @@ class ReportController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn ($w) => ['id' => (int) $w->id, 'name' => (string) $w->name])
                 ->values(),
+            // S1-27: project filter, limited to clients the user may report on.
+            'projects' => DB::table('projects')
+                ->whereNull('deleted_at')->where('status', '!=', 'archived')
+                ->when($allowed !== null, fn ($q) => $q->whereIn('workspace_id', $allowed ?? []))
+                ->orderBy('name')
+                ->get(['id', 'name', 'workspace_id'])
+                ->map(fn ($p) => ['id' => (int) $p->id, 'name' => (string) $p->name, 'workspace_id' => (int) $p->workspace_id])
+                ->values(),
             'departments' => DB::table('departments')->orderBy('position')->get(['id', 'name'])
                 ->map(fn ($d) => ['id' => (int) $d->id, 'name' => (string) $d->name])
                 ->values(),

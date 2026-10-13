@@ -63,6 +63,7 @@ class InvoiceController extends Controller
     {
         $invoice->load([
             'workspace:id,name,slug',
+            'project:id,name',
             'items.department:id,name',
             'items.sources.source' => fn (MorphTo $m) => $m->morphWith([
                 TimeEntry::class => ['user:id,name', 'task:id,title,workspace_id'],
@@ -76,6 +77,8 @@ class InvoiceController extends Controller
                 ...$this->row($invoice),
                 'subtotal_minor' => $invoice->subtotal_minor,
                 'tax_rate_bp' => $invoice->tax_rate_bp,
+                'line_grouping' => $invoice->line_grouping,
+                'project' => $invoice->project?->only(['id', 'name']),
                 'tax_minor' => $invoice->tax_minor,
                 'paid_minor' => $invoice->paid_minor,
                 'credited_minor' => $invoice->credited_minor,
@@ -114,6 +117,7 @@ class InvoiceController extends Controller
                     ->map(fn (Invoice $c): array => $this->row($c))->values(),
             ],
             'methods' => Payment::METHODS,
+            'groupings' => Invoice::GROUPINGS,
         ]);
     }
 
@@ -159,7 +163,9 @@ class InvoiceController extends Controller
         if (! $invoice->isDraft() || ! $period instanceof BillingPeriod) {
             throw new BillingException('Only drafts built from a billing period can be recalculated.');
         }
-        $this->invoices->buildDraft($period, $this->user($request));
+        $grouping = $request->validate(['grouping' => ['nullable', Rule::in(array_keys(Invoice::GROUPINGS))]])['grouping'] ?? null;
+        $invoice->loadMissing('project');
+        $this->invoices->buildDraft($period, $this->user($request), $grouping, $invoice->project);
 
         return back();
     }

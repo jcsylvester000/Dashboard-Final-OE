@@ -6,12 +6,14 @@ use App\Models\Concerns\HasLabels;
 use App\Models\Concerns\HasMentions;
 use App\Models\Concerns\IsLinkable;
 use App\Models\Contracts\Mentionable;
+use Carbon\CarbonInterface;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -19,6 +21,10 @@ use Illuminate\Support\Carbon;
  * A unit of client work inside a workspace: project, campaign, SEO engagement,
  * research study or product release.
  *
+ * @property string|null $status_token client status page token (B-06)
+ * @property CarbonInterface|null $status_token_expires_at
+ * @property int $status_views
+ * @property bool $review_required tasks need a reviewer's sign-off before Done (S2-13)
  * @property int $id
  * @property int $workspace_id
  * @property string $name
@@ -31,10 +37,11 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property int|null $fixed_fee_minor
  * @property Carbon|null $fixed_fee_billed_at
+ * @property string $status_detail simple | detailed (client status page, R-22)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['workspace_id', 'name', 'type', 'status', 'lead_user_id', 'description', 'start_on', 'due_on', 'created_by'])]
+#[Fillable(['workspace_id', 'name', 'type', 'status', 'lead_user_id', 'description', 'start_on', 'due_on', 'created_by', 'review_required', 'status_detail'])]
 class Project extends Model implements Mentionable
 {
     /** @use HasFactory<ProjectFactory> */
@@ -68,6 +75,8 @@ class Project extends Model implements Mentionable
             'due_on' => 'date',
             'fixed_fee_minor' => 'integer',
             'fixed_fee_billed_at' => 'datetime',
+            'review_required' => 'boolean',
+            'status_token_expires_at' => 'datetime',
         ];
     }
 
@@ -88,11 +97,29 @@ class Project extends Model implements Mentionable
     }
 
     /**
+     * Departments involved (S3-02).
+     *
+     * @return BelongsToMany<Department, $this>
+     */
+    public function departments(): BelongsToMany
+    {
+        return $this->belongsToMany(Department::class);
+    }
+
+    /**
      * @return BelongsToMany<User, $this>
      */
     public function members(): BelongsToMany
     {
         return $this->belongsToMany(User::class);
+    }
+
+    /**
+     * @return HasMany<Task, $this>
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
     }
 
     public function mentionWorkspaceId(): int

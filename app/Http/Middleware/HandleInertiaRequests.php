@@ -43,11 +43,14 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'roles' => fn () => $user?->getRoleNames()->values()->all() ?? [],
                 'can' => fn () => $this->abilities($user),
-                // True when the user can approve time (owner/lead somewhere, or manages workspaces).
+                // True when the user can approve time (owner/lead somewhere, a department lead, or manages workspaces).
                 'leads' => fn () => $user !== null && (
                     $user->can(Permissions::WORKSPACES_MANAGE)
                     || DB::table('workspace_user')->where('user_id', $user->id)->whereIn('role', [Workspace::ROLE_OWNER, Workspace::ROLE_LEAD])->exists()
+                    || Department::query()->where('lead_user_id', $user->id)->exists()
                 ),
+                // Department leads see Workload and approve leave for their team (batch 4).
+                'leadsDepartment' => fn () => $user !== null && Department::query()->where('lead_user_id', $user->id)->exists(),
                 'department' => fn () => $user?->primary_department_id
                     ? Department::query()->whereKey($user->primary_department_id)->first(['id', 'name', 'slug'])?->only(['id', 'name', 'slug'])
                     : null,

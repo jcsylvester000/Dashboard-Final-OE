@@ -17,8 +17,9 @@ use Illuminate\Support\Carbon;
  * @property int $rate_minor
  * @property int|null $cost_minor
  * @property Carbon $effective_from
+ * @property int|null $rate_template_id
  */
-#[Fillable(['workspace_id', 'department_id', 'user_id', 'rate_minor', 'cost_minor', 'effective_from'])]
+#[Fillable(['workspace_id', 'department_id', 'user_id', 'rate_minor', 'cost_minor', 'effective_from', 'rate_template_id'])]
 class RateCard extends Model
 {
     /**

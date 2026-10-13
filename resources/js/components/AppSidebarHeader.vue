@@ -2,6 +2,8 @@
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import GlobalSearch from '@/components/work/GlobalSearch.vue';
+import NewTaskDialog from '@/components/work/NewTaskDialog.vue';
 import RunningTimer from '@/components/work/RunningTimer.vue';
 import type { BreadcrumbItem } from '@/types';
 
@@ -26,6 +28,8 @@ withDefaults(
             </template>
         </div>
         <div class="ml-auto flex items-center gap-2">
+            <GlobalSearch />
+            <NewTaskDialog shortcut />
             <RunningTimer />
             <NotificationBell />
         </div>

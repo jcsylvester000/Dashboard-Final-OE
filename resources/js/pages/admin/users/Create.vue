@@ -32,8 +32,7 @@ defineOptions({
             </h1>
             <p class="text-sm text-muted-foreground">
                 After saving you get a one-time setup link (valid 72 hours).
-                Share it with the member directly — the app does not send
-                email.
+                Share it with the member directly — the app does not send email.
             </p>
         </div>
 

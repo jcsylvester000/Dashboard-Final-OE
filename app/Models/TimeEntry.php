@@ -25,6 +25,10 @@ use Illuminate\Support\Carbon;
  * @property int|null $approved_by
  * @property Carbon|null $approved_at
  * @property Carbon|null $locked_at
+ * @property Carbon|null $submitted_at
+ * @property Carbon|null $returned_at
+ * @property int|null $returned_by
+ * @property string|null $return_reason
  * @property Carbon|null $created_at
  */
 #[Fillable(['user_id', 'workspace_id', 'task_id', 'project_id', 'department_id', 'entry_date', 'started_at', 'ended_at', 'minutes', 'note', 'is_billable'])]
@@ -48,6 +52,8 @@ class TimeEntry extends Model
             'is_billable' => 'boolean',
             'approved_at' => 'datetime',
             'locked_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'returned_at' => 'datetime',
         ];
     }
 

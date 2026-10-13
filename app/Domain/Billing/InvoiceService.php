@@ -35,34 +35,51 @@ class InvoiceService
      *
      * Lines:
      *  - retainer (if any); approved billable minutes up to the included hours are attached to it
-     *  - hours over the retainer, grouped by department and rate (unless the overage rule is "absorb")
+     *  - hours over the retainer, grouped by department (or project / person, see Invoice::GROUPINGS)
+     *    and rate (unless the overage rule is "absorb")
      *  - fixed-fee projects that are completed or due by the period end, not yet billed
      *  - billable expenses dated up to the period end, not yet billed
      */
-    public function buildDraft(BillingPeriod $period, User $actor): Invoice
+    public function buildDraft(BillingPeriod $period, User $actor, ?string $grouping = null, ?Project $project = null): Invoice
     {
+        if ($grouping !== null && ! array_key_exists($grouping, Invoice::GROUPINGS)) {
+            throw new BillingException('Unknown line grouping.');
+        }
+
         $period->loadMissing('workspace');
         $workspace = $period->workspace;
 
-        $billed = $period->invoices()->whereNotIn('status', [Invoice::DRAFT, Invoice::VOID])->exists();
-        if ($billed) {
+        if ($project !== null && $project->workspace_id !== $period->workspace_id) {
+            throw new BillingException('That project belongs to another client.');
+        }
+
+        // One whole-client invoice per period; project invoices (S3-14) can sit beside each other,
+        // and work already on another invoice is never billed twice (alreadyOnInvoices).
+        $finalized = fn () => $period->invoices()->whereNotIn('status', [Invoice::DRAFT, Invoice::VOID]);
+        if ($finalized()->whereNull('project_id')->exists()) {
             throw new BillingException('This period already has a finalized invoice.');
+        }
+        if ($project !== null && $finalized()->where('project_id', $project->id)->exists()) {
+            throw new BillingException('This project already has a finalized invoice for this period.');
         }
 
         $profile = BillingProfile::query()->firstOrNew(['workspace_id' => $workspace->id]);
 
-        return DB::transaction(function () use ($period, $workspace, $profile, $actor) {
+        return DB::transaction(function () use ($period, $workspace, $profile, $actor, $grouping, $project) {
             // Inside the transaction: a failed build (e.g. missing rate) leaves the period as it was.
             $this->periods->lock($period, $actor);
-            $invoice = $period->invoices()->where('status', Invoice::DRAFT)->first();
+            $invoice = $period->invoices()->where('status', Invoice::DRAFT)->where('project_id', $project?->id)->first();
             $isNew = $invoice === null;
             if ($invoice === null) {
-                $invoice = new Invoice(['workspace_id' => $workspace->id, 'billing_period_id' => $period->id, 'created_by' => $actor->id]);
+                $invoice = new Invoice(['workspace_id' => $workspace->id, 'billing_period_id' => $period->id, 'project_id' => $project?->id, 'created_by' => $actor->id]);
             } else {
                 $invoice->items()->get()->each->delete();
             }
 
+            $grouping ??= $invoice->line_grouping ?? ($project !== null ? 'person' : 'department');
+
             $invoice->fill([
+                'line_grouping' => $grouping,
                 'series' => $profile->invoice_series,
                 'currency' => $profile->currency,
                 'period_start' => $period->starts_on->toDateString(),
@@ -76,7 +93,8 @@ class InvoiceService
 
             // Retainer and hours.
             $retainer = null;
-            if ($profile->retainer_minor > 0) {
+            // The retainer belongs on the whole-client invoice only.
+            if ($project === null && $profile->retainer_minor > 0) {
                 $retainer = $this->item($invoice, $position++, [
                     'type' => 'retainer',
                     'description' => sprintf('Retainer %s – %s%s', $period->starts_on->format('M j'), $period->ends_on->format('M j, Y'),
@@ -88,7 +106,7 @@ class InvoiceService
             }
 
             $entries = TimeEntry::query()
-                ->with('user:id,name')
+                ->with(['user:id,name', 'project:id,name'])
                 ->where('workspace_id', $workspace->id)
                 ->whereNotNull('approved_at')
                 ->where('is_billable', true)
@@ -97,13 +115,14 @@ class InvoiceService
                 ->whereDate('entry_date', '>=', $from)
                 ->whereDate('entry_date', '<=', $to)
                 ->whereNotIn('id', $this->alreadyOnInvoices('time_entry', $invoice->id))
+                ->when($project !== null, fn ($q) => $q->where('project_id', $project?->id))
                 ->orderBy('entry_date')
                 ->orderBy('id')
                 ->get();
 
             $included = $retainer !== null ? $profile->included_minutes : 0;
             $absorb = $retainer !== null && $profile->overage_rule === 'absorb';
-            /** @var array<string, array{department_id: int|null, rate: int, minutes: int, sources: list<array{0: TimeEntry, 1: int}>}> $groups */
+            /** @var array<string, array{department_id: int|null, label: string|null, rate: int, minutes: int, sources: list<array{0: TimeEntry, 1: int}>}> $groups */
             $groups = [];
 
             foreach ($entries as $entry) {
@@ -127,8 +146,14 @@ class InvoiceService
                     ));
                 }
 
-                $key = ($entry->department_id ?? 0).'|'.$rate->rate_minor;
-                $groups[$key] ??= ['department_id' => $entry->department_id, 'rate' => $rate->rate_minor, 'minutes' => 0, 'sources' => []];
+                // Department stays part of every key so revenue-by-department reports remain exact.
+                [$prefix, $label] = match ($grouping) {
+                    'project' => [$entry->project !== null ? '1'.$entry->project->name : '2', $entry->project !== null ? $entry->project->name : 'Other work'],
+                    'person' => [$entry->user->name ?? '', $entry->user->name ?? 'Former member'],
+                    default => ['', null],
+                };
+                $key = $prefix.'|'.($entry->department_id ?? 0).'|'.$rate->rate_minor;
+                $groups[$key] ??= ['department_id' => $entry->department_id, 'label' => $label, 'rate' => $rate->rate_minor, 'minutes' => 0, 'sources' => []];
                 $groups[$key]['minutes'] += $over;
                 $groups[$key]['sources'][] = [$entry, $over];
             }
@@ -138,8 +163,10 @@ class InvoiceService
             foreach ($groups as $g) {
                 $line = $this->item($invoice, $position++, [
                     'type' => 'hours',
-                    'description' => ($g['department_id'] !== null ? ($departments[$g['department_id']] ?? 'Team') : 'Team')
-                        .($retainer !== null ? ' – hours over retainer' : ' – hours'),
+                    'description' => ($g['label'] !== null ? $g['label'].' – ' : '')
+                        .($g['department_id'] !== null ? ($departments[$g['department_id']] ?? 'Team') : 'Team')
+                        .($g['label'] !== null ? ' hours' : ' – hours')
+                        .($retainer !== null ? ' over retainer' : ''),
                     'department_id' => $g['department_id'],
                     'minutes' => $g['minutes'],
                     'quantity' => $this->hours($g['minutes']),
@@ -158,17 +185,19 @@ class InvoiceService
                 ->whereNull('fixed_fee_billed_at')
                 ->where(fn ($q) => $q->where('status', 'completed')->orWhereDate('due_on', '<=', $to))
                 ->whereNotIn('id', $this->alreadyOnInvoices('project', $invoice->id))
+                ->when($project !== null, fn ($q) => $q->whereKey($project?->id))
                 ->orderBy('id')
                 ->get();
-            foreach ($projects as $project) {
+            // Not $project: that is the "only this project" parameter used by the expenses below.
+            foreach ($projects as $fixed) {
                 $line = $this->item($invoice, $position++, [
                     'type' => 'fixed',
-                    'description' => 'Fixed fee – '.$project->name,
+                    'description' => 'Fixed fee – '.$fixed->name,
                     'quantity' => '1.00',
-                    'unit_minor' => (int) $project->fixed_fee_minor,
-                    'amount_minor' => (int) $project->fixed_fee_minor,
+                    'unit_minor' => (int) $fixed->fixed_fee_minor,
+                    'amount_minor' => (int) $fixed->fixed_fee_minor,
                 ]);
-                $this->source($line, $project, null, (int) $project->fixed_fee_minor);
+                $this->source($line, $fixed, null, (int) $fixed->fixed_fee_minor);
             }
 
             // Expenses.
@@ -178,6 +207,7 @@ class InvoiceService
                 ->whereNull('invoice_item_id')
                 ->whereDate('incurred_on', '<=', $to)
                 ->whereNotIn('id', $this->alreadyOnInvoices('expense', $invoice->id))
+                ->when($project !== null, fn ($q) => $q->where('project_id', $project?->id))
                 ->orderBy('incurred_on')
                 ->orderBy('id')
                 ->get();
@@ -234,7 +264,8 @@ class InvoiceService
 
             $this->markBilled($invoice, true);
 
-            if ($invoice->billing_period_id !== null && $invoice->kind === 'invoice') {
+            // A project invoice leaves the period open for the client's other work.
+            if ($invoice->billing_period_id !== null && $invoice->kind === 'invoice' && $invoice->project_id === null) {
                 BillingPeriod::query()->whereKey($invoice->billing_period_id)->update(['status' => BillingPeriod::INVOICED]);
             }
 

@@ -63,12 +63,7 @@ const primaryDepartment = ref<string | number>(
 
         <div class="grid gap-2">
             <Label for="role">Access role</Label>
-            <NativeSelect
-                id="role"
-                name="role"
-                required
-                v-model="role"
-            >
+            <NativeSelect id="role" name="role" required v-model="role">
                 <option v-for="r in roles" :key="r.value" :value="r.value">
                     {{ r.label }}
                 </option>
@@ -92,9 +87,7 @@ const primaryDepartment = ref<string | number>(
         </div>
 
         <fieldset class="grid gap-2">
-            <legend class="mb-2 text-sm font-medium">
-                Also works with
-            </legend>
+            <legend class="mb-2 text-sm font-medium">Also works with</legend>
             <div class="flex flex-wrap gap-x-4 gap-y-2">
                 <label
                     v-for="d in departments"

@@ -32,7 +32,9 @@ export function getEcho(): Promise<ReverbEcho | null> {
     instance ??= Promise.all([import('laravel-echo'), import('pusher-js')])
         .then(([{ default: EchoClient }, { default: Pusher }]) => {
             const scheme = env('VITE_REVERB_SCHEME') || 'https';
-            const port = Number(env('VITE_REVERB_PORT') || (scheme === 'https' ? 443 : 80));
+            const port = Number(
+                env('VITE_REVERB_PORT') || (scheme === 'https' ? 443 : 80),
+            );
 
             return new EchoClient({
                 broadcaster: 'reverb',

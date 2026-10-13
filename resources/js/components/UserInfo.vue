@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<Props>(), {
     showEmail: false,
 });
 
-const { getInitials } = useInitials();
+const { getInitials, avatarColor } = useInitials();
 
 // Compute whether we should show the avatar image
 const showAvatar = computed(
@@ -24,7 +24,10 @@ const showAvatar = computed(
 <template>
     <Avatar class="h-8 w-8 overflow-hidden rounded-lg">
         <AvatarImage v-if="showAvatar" :src="user.avatar!" :alt="user.name" />
-        <AvatarFallback class="rounded-lg text-black dark:text-white">
+        <AvatarFallback
+            class="rounded-lg font-semibold"
+            :class="avatarColor(user.name)"
+        >
             {{ getInitials(user.name) }}
         </AvatarFallback>
     </Avatar>

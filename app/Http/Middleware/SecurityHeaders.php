@@ -27,8 +27,10 @@ class SecurityHeaders
         $headers = $response->headers;
         $headers->set('X-Frame-Options', 'DENY');
         $headers->set('X-Content-Type-Options', 'nosniff');
-        // no-referrer keeps one-time access-link tokens out of Referer headers.
-        $headers->set('Referrer-Policy', 'no-referrer');
+        // same-origin: other sites never see our URLs, but our own pages send a Referer so
+        // back() returns to the right page after Inertia (XHR) navigation. Access-link pages
+        // and public share links carry a token in the URL, so they send no Referer at all.
+        $headers->set('Referrer-Policy', $request->is('access/*', 's/*', 'p/*') ? 'no-referrer' : 'same-origin');
         $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=()');
         $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
         $headers->set('X-Robots-Tag', 'noindex, nofollow');
@@ -46,7 +48,9 @@ class SecurityHeaders
 
     private function policy(string $nonce): string
     {
-        $connect = ["'self'"];
+        // UploadThing: the browser uploads straight to the ingest servers and shows
+        // images from signed ufs.sh links.
+        $connect = ["'self'", 'https://*.ingest.uploadthing.com'];
         if (config('broadcasting.default') === 'reverb') {
             $host = (string) config('broadcasting.connections.reverb.options.host', '');
             if ($host !== '') {
@@ -59,7 +63,7 @@ class SecurityHeaders
             "default-src 'self'",
             "script-src 'self' 'nonce-{$nonce}'",
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob:",
+            "img-src 'self' data: blob: https://*.ufs.sh https://utfs.io",
             "font-src 'self' data:",
             'connect-src '.implode(' ', $connect),
             "frame-src 'self'",

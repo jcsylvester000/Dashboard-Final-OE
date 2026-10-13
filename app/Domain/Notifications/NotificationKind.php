@@ -15,10 +15,14 @@ enum NotificationKind: string
     case Handoff = 'handoff';
     case Comment = 'comment';
     case Status = 'status';
+    case Review = 'review';
+    case Timesheet = 'timesheet';
+    case Leave = 'leave';
     case DueSoon = 'due_soon';
     case Overdue = 'overdue';
     case Escalation = 'escalation';
     case InvoiceOverdue = 'invoice_overdue';
+    case FileShared = 'file_shared';
 
     public const MODE_REALTIME = 'realtime';
 
@@ -37,17 +41,22 @@ enum NotificationKind: string
             self::Handoff => 'Handoffs and "ready to start"',
             self::Comment => 'Comments on tasks I follow',
             self::Status => 'Status changes on tasks I follow',
+            self::Review => 'Work waiting for my review',
+            self::Timesheet => 'My time returned for changes',
+            self::Leave => 'Leave requests and decisions',
             self::DueSoon => 'Due within 24 hours',
             self::Overdue => 'Overdue',
             self::Escalation => 'Overdue escalations (leads)',
             self::InvoiceOverdue => 'Client invoice overdue (Finance)',
+            self::FileShared => 'Files shared with me',
         };
     }
 
     public function defaultMode(): string
     {
         return match ($this) {
-            self::Status => self::MODE_DIGEST,
+            // Team-wide shares reach many people: quiet by default.
+            self::Status, self::FileShared => self::MODE_DIGEST,
             default => self::MODE_REALTIME,
         };
     }
@@ -55,6 +64,6 @@ enum NotificationKind: string
     /** Kinds listed under "Needs my attention" even after being read. */
     public function needsAction(): bool
     {
-        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Overdue, self::Escalation, self::InvoiceOverdue], true);
+        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue], true);
     }
 }

@@ -2,18 +2,23 @@
 
 namespace App\Domain\Work;
 
+use App\Domain\Billing\PeriodService;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Workspaces\MentionService;
 use App\Events\Work\TaskAssigned;
 use App\Events\Work\TaskStatusChanged;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\Task;
 use App\Models\TaskStatus;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -23,7 +28,10 @@ use Illuminate\Validation\ValidationException;
 class TaskService
 {
     /** Fields whose changes appear on the task timeline. */
-    private const TRACKED = ['title', 'status_id', 'assignee_id', 'department_id', 'project_id', 'due_on', 'priority'];
+    private const TRACKED = ['title', 'status_id', 'assignee_id', 'department_id', 'project_id', 'due_on', 'priority', 'type', 'sprint_id', 'story_points', 'start_on', 'recurrence', 'recurrence_until'];
+
+    /** @var array{moved: int, kept: int}|null set by the last update that changed the project */
+    public ?array $lastTimeMove = null;
 
     public function __construct(
         private readonly MentionService $mentions,
@@ -41,7 +49,7 @@ class TaskService
 
             $task = new Task;
             $task->fill([
-                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes', 'work_details']),
+                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values']),
                 'workspace_id' => $workspace->id,
                 'status_id' => $statusId,
                 'description' => $normalized['text'],
@@ -73,10 +81,12 @@ class TaskService
      */
     public function update(Task $task, array $data, User $actor): Task
     {
+        $this->lastTimeMove = null;
+
         return DB::transaction(function () use ($task, $data, $actor) {
             $before = Arr::only($task->getAttributes(), self::TRACKED);
 
-            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'priority', 'assignee_id', 'due_on', 'estimate_minutes', 'position', 'work_details']);
+            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'position', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values']);
 
             $mentionIds = null;
             if (array_key_exists('description', $data)) {
@@ -89,6 +99,7 @@ class TaskService
 
             if ($task->isDirty('status_id')) {
                 $this->guardFinish($task);
+                $this->guardReview($task, $actor);
                 $this->stampCompletion($task);
             }
 
@@ -102,6 +113,10 @@ class TaskService
             }
             if ($mentionIds !== null) {
                 $this->mentions->sync($task, $mentionIds, $actor);
+            }
+
+            if ($task->wasChanged('project_id')) {
+                $this->moveOpenTime($task, $actor);
             }
 
             $changes = $this->describeChanges($before, Arr::only($task->getAttributes(), self::TRACKED));
@@ -118,6 +133,7 @@ class TaskService
 
             if ($task->wasChanged('status_id') && $task->completed_at !== null) {
                 $this->advanceDependents($task, $actor);
+                $this->repeat($task, $actor);
             }
 
             return $task;
@@ -144,20 +160,21 @@ class TaskService
     }
 
     /**
-     * When a task is finished, waiting tasks that are still in Backlog and have
-     * nothing else open move to To Do - the next department can start.
+     * When a task is finished, waiting tasks that are still in Backlog or Blocked and
+     * have nothing else open move to To Do, and their assignee gets "Ready to start".
      */
     private function advanceDependents(Task $task, User $actor): void
     {
-        $backlogId = TaskStatus::idFor('backlog');
+        $waitingIds = [TaskStatus::idFor('backlog'), TaskStatus::idFor('blocked')];
         $todoId = TaskStatus::idFor('todo');
 
-        $waiting = $task->dependents()->where('tasks.status_id', $backlogId)->get();
+        $waiting = $task->dependents()->whereIn('tasks.status_id', $waitingIds)->get();
         foreach ($waiting as $next) {
             if ($next->openDependencyCount() === 0) {
+                $from = (int) $next->status_id;
                 $next->forceFill(['status_id' => $todoId])->save();
                 $this->activity->log('task.unblocked', $next, ['after_task_id' => $task->id], $actor);
-                TaskStatusChanged::dispatch($next, $backlogId, $actor, $task);
+                TaskStatusChanged::dispatch($next, $from, $actor, $task);
             }
         }
     }
@@ -181,6 +198,163 @@ class TaskService
                 ),
             ]);
         }
+    }
+
+    /**
+     * S2-13: in projects that need sign-off, only a reviewer (client, project or
+     * department lead) can mark work Done. Everyone else moves it to In Review.
+     */
+    private function guardReview(Task $task, User $actor): void
+    {
+        $status = TaskStatus::ordered()->firstWhere('id', $task->status_id);
+        if ($status === null || ! $status->isDone() || $task->project_id === null) {
+            return;
+        }
+        if (! Project::query()->whereKey($task->project_id)->value('review_required')) {
+            return;
+        }
+        if (Gate::forUser($actor)->allows('review', $task)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'status_id' => __('This project needs a lead\'s sign-off. Move the task to In Review and a lead will approve it.'),
+        ]);
+    }
+
+    /**
+     * B-04: finishing a recurring task creates the next one (once), shifted by the interval.
+     * Stops after recurrence_until. Labels, owner, estimate and project carry over.
+     */
+    public function repeat(Task $task, User $actor): ?Task
+    {
+        if ($task->recurrence === null || $task->due_on === null
+            || Task::query()->where('recurred_from_task_id', $task->id)->exists()) {
+            return null;
+        }
+
+        $shift = fn (CarbonInterface $d): CarbonInterface => match ($task->recurrence) {
+            'weekly' => $d->copy()->addWeek(),
+            'biweekly' => $d->copy()->addWeeks(2),
+            default => $d->copy()->addMonthNoOverflow(),
+        };
+        $due = $shift($task->due_on);
+        if ($task->recurrence_until !== null && $due->toDateString() > $task->recurrence_until->toDateString()) {
+            return null;
+        }
+
+        $workspace = Workspace::query()->findOrFail($task->workspace_id);
+        $next = $this->create($workspace, [
+            'title' => $this->nextTitle($task->title, $task->due_on, $due),
+            'description' => $task->description,
+            'project_id' => $task->project_id,
+            'department_id' => $task->department_id,
+            'assignee_id' => $task->assignee_id,
+            'priority' => $task->priority,
+            'type' => $task->type,
+            'estimate_minutes' => $task->estimate_minutes,
+            'work_details' => $task->work_details,
+            'due_on' => $due->toDateString(),
+            'start_on' => $task->start_on !== null ? $shift($task->start_on)->toDateString() : null,
+            'recurrence' => $task->recurrence,
+            'recurrence_until' => $task->recurrence_until?->toDateString(),
+            'label_ids' => $task->labels()->pluck('labels.id')->all(),
+        ], $actor);
+        $next->forceFill(['recurred_from_task_id' => $task->id])->save();
+
+        return $next;
+    }
+
+    /**
+     * S3-18: time logged on a task follows it to its new project, unless it is already
+     * billed or sits in a locked/invoiced period (those stay where they were invoiced).
+     *
+     * @return array{moved: int, kept: int}
+     */
+    public function moveOpenTime(Task $task, User $actor): array
+    {
+        $entries = TimeEntry::query()->where('task_id', $task->id)->where('workspace_id', $task->workspace_id)->get();
+        $moved = 0;
+        $kept = 0;
+        foreach ($entries as $entry) {
+            if ($entry->project_id === $task->project_id) {
+                continue;
+            }
+            if ($entry->locked_at !== null || PeriodService::isLocked($task->workspace_id, $entry->entry_date->toDateString())) {
+                $kept += $entry->minutes;
+
+                continue;
+            }
+            $entry->forceFill(['project_id' => $task->project_id])->save();
+            $moved += $entry->minutes;
+        }
+
+        if ($moved > 0 || $kept > 0) {
+            $this->activity->log('task.time-moved', $task, ['moved_minutes' => $moved, 'kept_minutes' => $kept, 'project_id' => $task->project_id], $actor);
+        }
+        $this->lastTimeMove = ['moved' => $moved, 'kept' => $kept];
+
+        return $this->lastTimeMove;
+    }
+
+    /**
+     * R-23: carry a running number or date forward so each repeat is distinguishable:
+     * "Report – week 1" -> "Report – week 2", "Post #7" -> "Post #8",
+     * "Audit 2026-10-16" -> "Audit 2026-10-23", "SEO report Oct 16" -> "SEO report Oct 23".
+     * Titles without either stay as they are (the due date tells them apart).
+     */
+    public function nextTitle(string $title, CarbonInterface $oldDue, CarbonInterface $newDue): string
+    {
+        foreach ([[$oldDue->toDateString(), $newDue->toDateString()], [$oldDue->format('M j'), $newDue->format('M j')], [$oldDue->format('F j'), $newDue->format('F j')]] as [$from, $to]) {
+            $pattern = '/(?<![\\d])'.preg_quote($from, '/').'(?!\\d)/u';
+            if (preg_match($pattern, $title) === 1) {
+                return (string) preg_replace($pattern, $to, $title, 1);
+            }
+        }
+
+        $bumped = preg_replace_callback(
+            '/\b(week|wk|sprint|issue|part|round|batch|no\.?)(\s*)(\d{1,4})(?!.*\b(?:week|wk|sprint|issue|part|round|batch|no\.?)\s*\d)/iu',
+            fn (array $m) => $m[1].$m[2].((int) $m[3] + 1),
+            $title,
+            1,
+        );
+        if (is_string($bumped) && $bumped !== $title) {
+            return $bumped;
+        }
+
+        $hashed = preg_replace_callback('/#(\d{1,5})(?!.*#\d)/u', fn (array $m) => '#'.((int) $m[1] + 1), $title, 1);
+
+        return is_string($hashed) ? $hashed : $title;
+    }
+
+    /**
+     * B-11: copy a task (fields, labels, open checklist of subtasks) as a fresh To Do.
+     */
+    public function duplicate(Task $task, User $actor): Task
+    {
+        $workspace = Workspace::query()->findOrFail($task->workspace_id);
+        $copy = $this->create($workspace, [
+            'title' => __('Copy of :title', ['title' => $task->title]),
+            'description' => $task->description,
+            'project_id' => $task->project_id,
+            'department_id' => $task->department_id,
+            'assignee_id' => $task->assignee_id,
+            'priority' => $task->priority,
+            'type' => $task->type,
+            'estimate_minutes' => $task->estimate_minutes,
+            'work_details' => $task->work_details,
+            'due_on' => $task->due_on?->toDateString(),
+            'start_on' => $task->start_on?->toDateString(),
+            'label_ids' => $task->labels()->pluck('labels.id')->all(),
+        ], $actor);
+
+        foreach ($task->subtasks()->get() as $sub) {
+            $this->create($workspace, ['title' => $sub->title, 'department_id' => $sub->department_id, 'parent_id' => $copy->id], $actor);
+        }
+
+        $this->activity->log('task.duplicated', $copy, ['from_task_id' => $task->id], $actor);
+
+        return $copy;
     }
 
     private function stampCompletion(Task $task): void
@@ -228,7 +402,9 @@ class TaskService
             'assignee_id' => User::whereKey((int) $value)->value('name'),
             'department_id' => Department::whereKey((int) $value)->value('name'),
             'project_id' => Project::whereKey((int) $value)->value('name'),
-            'due_on' => substr((string) $value, 0, 10),
+            'sprint_id' => Sprint::whereKey((int) $value)->value('name'),
+            'due_on', 'start_on', 'recurrence_until' => substr((string) $value, 0, 10),
+            'recurrence' => Task::RECURRENCES[(string) $value] ?? $value,
             default => $value,
         };
     }

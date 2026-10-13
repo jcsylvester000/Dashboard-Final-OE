@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Identity\AccessLinkService;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Identity\Offboarding;
 use App\Domain\Identity\Permissions;
+use App\Domain\Identity\PersonalData;
 use App\Domain\Identity\UserAccessManager;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveUserRequest;
@@ -12,6 +14,7 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\UserAccessLink;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +31,7 @@ class UserController extends Controller
         private readonly AccessLinkService $links,
         private readonly UserAccessManager $access,
         private readonly ActivityLogger $activity,
+        private readonly Offboarding $offboarding,
     ) {}
 
     public function index(Request $request): Response
@@ -164,6 +168,14 @@ class UserController extends Controller
                 ]),
             'roles' => $this->roleOptions(),
             'departments' => $this->departmentOptions(),
+            'handover' => $user->is_active ? $this->offboarding->summary($user) : null,
+            'handoverTo' => $user->is_active ? User::query()
+                ->where('is_active', true)
+                ->whereKeyNot($user->id)
+                ->orderBy('name')
+                ->get(['id', 'name', 'title'])
+                ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'title' => $u->title])
+                ->values() : [],
             // Shown once, right after it was generated. Never stored in plain text.
             'issuedSecret' => $request->session()->get('issuedSecret'),
         ]);
@@ -207,9 +219,53 @@ class UserController extends Controller
         abort_if($user->is($request->user()), 422, 'You cannot deactivate your own account.');
         Gate::authorize('deactivate', $user);
 
+        $data = $request->validate([
+            'reassign_to' => ['nullable', 'integer', Rule::exists('users', 'id')->where('is_active', true)->whereNot('id', $user->id)],
+        ]);
+        $to = isset($data['reassign_to']) ? User::query()->findOrFail($data['reassign_to']) : null;
+
+        // Hand over first: running timers are stopped and saved before sign-out.
+        $moved = $this->offboarding->handOver($user, $to, $request->user());
         $this->access->deactivate($user, $request->user());
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __(':name was deactivated and signed out.', ['name' => $user->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __(':name was deactivated and signed out. :tasks open tasks moved, :unassigned left unassigned, :timers timers stopped.', [
+            'name' => $user->name,
+            'tasks' => $moved['tasks_reassigned'],
+            'unassigned' => $moved['tasks_unassigned'],
+            'timers' => $moved['timers_stopped'],
+        ])]);
+
+        return back();
+    }
+
+    /**
+     * Data Privacy Act access request: everything held about the person, as a JSON download.
+     */
+    public function exportData(Request $request, User $user, PersonalData $data): JsonResponse
+    {
+        Gate::authorize('update', $user);
+
+        $filename = 'personal-data-'.$user->id.'-'.now()->format('Y-m-d').'.json';
+
+        return response()->json($data->export($user, $request->user()), 200, [
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store',
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Erasure request for a deactivated person. The admin retypes the name to confirm.
+     */
+    public function anonymise(Request $request, User $user, PersonalData $data): RedirectResponse
+    {
+        Gate::authorize('update', $user);
+        $request->validate(['confirm_name' => ['required', 'string', Rule::in([$user->name])]], [
+            'confirm_name.in' => __('Type the person\'s full name exactly to confirm.'),
+        ]);
+
+        $data->anonymise($user, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Personal details erased. Work records stay under "Former member #:id".', ['id' => $user->id])]);
 
         return back();
     }
@@ -217,6 +273,7 @@ class UserController extends Controller
     public function reactivate(Request $request, User $user): RedirectResponse
     {
         Gate::authorize('update', $user);
+        abort_if(str_ends_with($user->email, '@anonymised.invalid'), 422, 'This account was anonymised and cannot be reactivated.');
 
         $this->access->reactivate($user, $request->user());
 

@@ -6,9 +6,8 @@ use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Where attachment bytes live. LocalFileStore today (private disk); an
- * UploadThing driver (REST v7) plugs in later behind the same interface,
- * chosen by FILES_DRIVER - no code changes elsewhere.
+ * The private local disk (attachments when UploadThing is off or public, and all
+ * thumbnails). UploadThing uploads go through UploadThingClient in AttachmentService.
  */
 interface FileStore
 {

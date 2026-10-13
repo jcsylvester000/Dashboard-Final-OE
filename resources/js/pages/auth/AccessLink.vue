@@ -41,8 +41,8 @@ const heading = computed(() =>
     <div v-if="!valid" class="space-y-4 text-center">
         <p class="font-medium">This link is invalid or has expired.</p>
         <p class="text-sm text-muted-foreground">
-            Links work once and expire after a set time. Ask an admin to issue
-            a new one.
+            Links work once and expire after a set time. Ask an admin to issue a
+            new one.
         </p>
         <Link :href="login()" class="text-sm underline underline-offset-4">
             Back to log in

@@ -2,6 +2,8 @@
 
 namespace App\Domain\Files;
 
+use App\Domain\Files\UploadThing\UploadThingClient;
+use App\Domain\Files\UploadThing\UploadThingException;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Settings\AppSettings;
 use App\Models\Attachment;
@@ -21,7 +23,23 @@ class AttachmentService
         private readonly FileStore $store,
         private readonly AppSettings $settings,
         private readonly ActivityLogger $activity,
+        private readonly UploadThingClient $uploadThing,
     ) {}
+
+    /**
+     * R-03 / D-06: attachments go to UploadThing only when files there are private,
+     * unless FILES_DRIVER forces a choice. Client briefs and contracts must never be
+     * public-by-URL by default.
+     */
+    public function usesUploadThing(): bool
+    {
+        $driver = (string) config('files.driver', 'auto');
+        if ($driver === 'local' || ! $this->uploadThing->configured()) {
+            return false;
+        }
+
+        return $driver === 'uploadthing' || config('services.uploadthing.acl') === 'private';
+    }
 
     public function maxMb(): int
     {
@@ -63,17 +81,32 @@ class AttachmentService
 
     public function attach(Model $attachable, int $workspaceId, UploadedFile $file, User $by): Attachment
     {
-        $key = $this->store->put($file, 'attachments/'.$workspaceId);
         $mime = (string) ($file->getMimeType() ?: 'application/octet-stream');
+        $name = self::sanitiseName($file->getClientOriginalName(), $file->guessExtension());
+        if ($this->usesUploadThing()) {
+            try {
+                $acl = config('services.uploadthing.acl');
+                $key = $this->uploadThing->uploadFile((string) $file->getRealPath(), $name, (int) $file->getSize(), $mime, 'att-'.Str::uuid()->toString(), is_string($acl) && $acl !== '' ? $acl : null);
+                $disk = 'uploadthing';
+            } catch (UploadThingException $e) {
+                // Never lose the upload: fall back to the private local disk.
+                report($e);
+                $key = $this->store->put($file, 'attachments/'.$workspaceId);
+                $disk = $this->store->name();
+            }
+        } else {
+            $key = $this->store->put($file, 'attachments/'.$workspaceId);
+            $disk = $this->store->name();
+        }
 
         $attachment = Attachment::create([
             'workspace_id' => $workspaceId,
             'attachable_type' => $attachable->getMorphClass(),
             'attachable_id' => $attachable->getKey(),
             'uploaded_by' => $by->id,
-            'disk' => $this->store->name(),
+            'disk' => $disk,
             'key' => $key,
-            'original_name' => self::sanitiseName($file->getClientOriginalName(), $file->guessExtension()),
+            'original_name' => $name,
             'mime' => $mime,
             'size' => (int) $file->getSize(),
         ]);
@@ -89,7 +122,17 @@ class AttachmentService
 
     public function delete(Attachment $attachment, User $by): void
     {
-        $this->store->delete($attachment->key);
+        // Linked from someone's drive: the bytes belong to that drive file, keep them.
+        if ($attachment->drive_file_id === null && $attachment->disk === $this->store->name()) {
+            $this->store->delete($attachment->key);
+        }
+        if ($attachment->drive_file_id === null && $attachment->disk === 'uploadthing') {
+            try {
+                $this->uploadThing->deleteFiles([$attachment->key]);
+            } catch (UploadThingException $e) {
+                report($e); // the row goes anyway; an orphaned remote file is cleaned up by hand
+            }
+        }
         if ($attachment->thumbnail_key !== null) {
             $this->store->delete($attachment->thumbnail_key);
         }

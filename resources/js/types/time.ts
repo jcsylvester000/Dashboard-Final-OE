@@ -14,6 +14,9 @@ export type TimeRow = {
     running: boolean;
     approved: boolean;
     locked: boolean;
+    submitted?: boolean;
+    returned?: boolean;
+    return_reason?: string | null;
     task: { id: number; title: string } | null;
     workspace: { id: number; name: string; slug: string; color: string };
 };

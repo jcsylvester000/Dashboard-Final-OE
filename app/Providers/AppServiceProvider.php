@@ -4,10 +4,13 @@ namespace App\Providers;
 
 use App\Domain\Files\FileStore;
 use App\Domain\Files\LocalFileStore;
+use App\Domain\Files\UploadThing\UploadThingClient;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Notifications\AlertBatch;
 use App\Domain\Notifications\WorkEventSubscriber;
 use App\Domain\Settings\AppSettings;
 use App\Models\Comment;
+use App\Models\DriveFile;
 use App\Models\Expense;
 use App\Models\Project;
 use App\Models\Task;
@@ -37,9 +40,16 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // File storage driver (P8): local private disk today; UploadThing later via FILES_DRIVER.
+        // Local private disk for attachment bytes and thumbnails; AttachmentService sends
+        // originals to UploadThing instead when FILES_DRIVER allows it (R-03).
         $this->app->bind(FileStore::class, fn () => new LocalFileStore((string) config('files.local_disk', 'local')));
         $this->app->scoped(AppSettings::class);
+        $this->app->scoped(AlertBatch::class);
+        // Team file drive (My files) on UploadThing.
+        $this->app->singleton(UploadThingClient::class, fn () => new UploadThingClient(
+            config('services.uploadthing.token'),
+            (string) config('services.uploadthing.api_url', 'https://api.uploadthing.com'),
+        ));
     }
 
     public function boot(): void
@@ -93,6 +103,7 @@ class AppServiceProvider extends ServiceProvider
             'comment' => Comment::class,
             'time_entry' => TimeEntry::class,
             'expense' => Expense::class,
+            'drive_file' => DriveFile::class,
         ]);
 
         Model::preventLazyLoading(! app()->isProduction());

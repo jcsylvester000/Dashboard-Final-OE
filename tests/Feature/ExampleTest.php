@@ -24,6 +24,9 @@ class ExampleTest extends TestCase
         $this->get(route('login'))
             ->assertHeader('X-Frame-Options', 'DENY')
             ->assertHeader('X-Content-Type-Options', 'nosniff')
-            ->assertHeader('Referrer-Policy', 'no-referrer');
+            ->assertHeader('Referrer-Policy', 'same-origin');
+
+        // One-time access links never leak their token in a Referer.
+        $this->get('/access/not-a-real-token')->assertHeader('Referrer-Policy', 'no-referrer');
     }
 }

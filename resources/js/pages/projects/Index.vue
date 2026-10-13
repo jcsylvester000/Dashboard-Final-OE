@@ -27,11 +27,18 @@ import ProjectFields from './partials/ProjectFields.vue';
 const props = defineProps<{
     workspace: Header;
     projects: Paginated<ProjectRow>;
-    filters: { search?: string; type?: string; status?: string; label?: number | string; mine?: boolean | string };
+    filters: {
+        search?: string;
+        type?: string;
+        status?: string;
+        label?: number | string;
+        mine?: boolean | string;
+    };
     types: Record<string, string>;
     statuses: Record<string, string>;
     labels: LabelOption[];
     members: MemberOption[];
+    departments?: { id: number; name: string }[];
 }>();
 
 defineOptions({
@@ -51,12 +58,18 @@ const form = reactive({
 });
 
 const apply = useDebounceFn(() => {
-    const query = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== ''));
-    router.get(index.url(props.workspace.slug, { query }), {}, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
+    const query = Object.fromEntries(
+        Object.entries(form).filter(([, v]) => v !== ''),
+    );
+    router.get(
+        index.url(props.workspace.slug, { query }),
+        {},
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 }, 300);
 
 watch(form, apply);
@@ -69,24 +82,59 @@ watch(form, apply);
         <WorkspaceHeader :workspace="workspace" />
 
         <div class="flex flex-wrap items-center gap-2">
-            <Input v-model="form.search" type="search" class="w-56" placeholder="Search projects" aria-label="Search projects" />
+            <Input
+                v-model="form.search"
+                type="search"
+                class="w-56"
+                placeholder="Search projects"
+                aria-label="Search projects"
+            />
             <NativeSelect v-model="form.type" class="w-44" aria-label="Type">
                 <option value="">All types</option>
-                <option v-for="(label, key) in types" :key="key" :value="key">{{ label }}</option>
+                <option v-for="(label, key) in types" :key="key" :value="key">
+                    {{ label }}
+                </option>
             </NativeSelect>
-            <NativeSelect v-model="form.status" class="w-40" aria-label="Status">
+            <NativeSelect
+                v-model="form.status"
+                class="w-40"
+                aria-label="Status"
+            >
                 <option value="">Open & done</option>
-                <option v-for="(label, key) in statuses" :key="key" :value="key">{{ label }}</option>
+                <option
+                    v-for="(label, key) in statuses"
+                    :key="key"
+                    :value="key"
+                >
+                    {{ label }}
+                </option>
             </NativeSelect>
-            <NativeSelect v-if="labels.length" v-model="form.label" class="w-40" aria-label="Label">
+            <NativeSelect
+                v-if="labels.length"
+                v-model="form.label"
+                class="w-40"
+                aria-label="Label"
+            >
                 <option value="">Any label</option>
-                <option v-for="l in labels" :key="l.id" :value="String(l.id)">{{ l.name }}</option>
+                <option v-for="l in labels" :key="l.id" :value="String(l.id)">
+                    {{ l.name }}
+                </option>
             </NativeSelect>
             <label class="inline-flex items-center gap-2 text-sm">
-                <input v-model="form.mine" type="checkbox" true-value="1" false-value="" class="size-4" />
+                <input
+                    v-model="form.mine"
+                    type="checkbox"
+                    true-value="1"
+                    false-value=""
+                    class="size-4"
+                />
                 Mine
             </label>
-            <Button v-if="workspace.can.contribute && !creating" class="ml-auto" @click="creating = true">
+            <Button
+                v-if="workspace.can.contribute && !creating"
+                class="ml-auto"
+                @click="creating = true"
+            >
                 <Plus /> New project
             </Button>
         </div>
@@ -106,13 +154,19 @@ watch(form, apply);
                         :statuses="statuses"
                         :labels="labels"
                         :members="members"
+                        :departments="departments"
                         :errors="errors"
                     />
                     <div class="flex gap-2">
                         <Button type="submit" :disabled="processing">
                             <Spinner v-if="processing" /> Create
                         </Button>
-                        <Button type="button" variant="ghost" @click="creating = false"><X /> Cancel</Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            @click="creating = false"
+                            ><X /> Cancel</Button
+                        >
                     </div>
                 </Form>
             </CardContent>
@@ -120,46 +174,108 @@ watch(form, apply);
 
         <div class="overflow-x-auto rounded-lg border">
             <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50 text-xs text-muted-foreground uppercase">
+                <thead
+                    class="bg-muted/50 text-xs text-muted-foreground uppercase"
+                >
                     <tr>
                         <th class="px-4 py-2 font-medium">Name</th>
                         <th class="px-4 py-2 font-medium">Type</th>
                         <th class="px-4 py-2 font-medium">Status</th>
+                        <th class="px-4 py-2 font-medium">Progress</th>
                         <th class="px-4 py-2 font-medium">Lead</th>
                         <th class="px-4 py-2 font-medium">Due</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <tr v-if="projects.data.length === 0">
-                        <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">
+                        <td
+                            colspan="6"
+                            class="px-4 py-8 text-center text-muted-foreground"
+                        >
                             No projects match.
                         </td>
                     </tr>
                     <tr v-for="p in projects.data" :key="p.id">
                         <td class="px-4 py-2">
                             <Link
-                                :href="show({ workspace: workspace.slug, project: p.id })"
+                                :href="
+                                    show({
+                                        workspace: workspace.slug,
+                                        project: p.id,
+                                    })
+                                "
                                 class="font-medium hover:underline"
                                 >{{ p.name }}</Link
                             >
-                            <div v-if="p.labels.length" class="mt-1 flex flex-wrap gap-1">
-                                <LabelBadge v-for="l in p.labels" :key="l.id" :name="l.name" :color="l.color" />
+                            <div
+                                v-if="p.labels.length"
+                                class="mt-1 flex flex-wrap gap-1"
+                            >
+                                <LabelBadge
+                                    v-for="l in p.labels"
+                                    :key="l.id"
+                                    :name="l.name"
+                                    :color="l.color"
+                                />
                             </div>
                         </td>
-                        <td class="px-4 py-2 text-muted-foreground">{{ types[p.type] ?? p.type }}</td>
+                        <td class="px-4 py-2 text-muted-foreground">
+                            {{ types[p.type] ?? p.type }}
+                        </td>
                         <td class="px-4 py-2">
                             <LabelBadge
                                 :name="statuses[p.status] ?? p.status"
                                 :color="projectStatusColor[p.status] ?? 'slate'"
                             />
                         </td>
+                        <td class="px-4 py-2 whitespace-nowrap">
+                            <template v-if="p.tasks_total">
+                                <div class="flex items-center gap-2">
+                                    <div
+                                        class="h-1.5 w-20 overflow-hidden rounded bg-muted"
+                                        role="progressbar"
+                                        :aria-valuenow="
+                                            Math.round(
+                                                (p.tasks_done / p.tasks_total) *
+                                                    100,
+                                            )
+                                        "
+                                        aria-valuemin="0"
+                                        aria-valuemax="100"
+                                        :aria-label="`${p.name} progress`"
+                                    >
+                                        <div
+                                            class="h-full bg-emerald-500"
+                                            :style="{
+                                                width: `${(p.tasks_done / p.tasks_total) * 100}%`,
+                                            }"
+                                        />
+                                    </div>
+                                    <span
+                                        class="text-xs text-muted-foreground tabular-nums"
+                                        >{{ p.tasks_done }}/{{
+                                            p.tasks_total
+                                        }}</span
+                                    >
+                                </div>
+                            </template>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >No tasks yet</span
+                            >
+                        </td>
                         <td class="px-4 py-2">
                             {{ p.lead ?? '—' }}
-                            <span class="text-xs text-muted-foreground">· {{ p.members }} people</span>
+                            <span class="text-xs text-muted-foreground"
+                                >· {{ p.members }} people</span
+                            >
                         </td>
                         <td
                             class="px-4 py-2 whitespace-nowrap"
-                            :class="isOverdue(p.due_on) && p.status !== 'completed' ? 'font-medium text-rose-600' : 'text-muted-foreground'"
+                            :class="
+                                isOverdue(p.due_on) && p.status !== 'completed'
+                                    ? 'font-medium text-rose-600'
+                                    : 'text-muted-foreground'
+                            "
                         >
                             {{ formatDate(p.due_on) }}
                         </td>
@@ -168,6 +284,11 @@ watch(form, apply);
             </table>
         </div>
 
-        <Pagination :links="projects.links" :from="projects.from" :to="projects.to" :total="projects.total" />
+        <Pagination
+            :links="projects.links"
+            :from="projects.from"
+            :to="projects.to"
+            :total="projects.total"
+        />
     </div>
 </template>

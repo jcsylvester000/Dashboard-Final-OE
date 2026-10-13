@@ -23,9 +23,12 @@ use Illuminate\Support\Carbon;
  * @property string $mime
  * @property int $size
  * @property string|null $thumbnail_key
+ * @property int|null $drive_file_id
+ * @property Carbon|null $approved_at
+ * @property int|null $approved_by
  * @property Carbon|null $created_at
  */
-#[Fillable(['workspace_id', 'attachable_type', 'attachable_id', 'uploaded_by', 'disk', 'key', 'original_name', 'mime', 'size', 'thumbnail_key'])]
+#[Fillable(['workspace_id', 'attachable_type', 'attachable_id', 'uploaded_by', 'disk', 'key', 'original_name', 'mime', 'size', 'thumbnail_key', 'drive_file_id'])]
 class Attachment extends Model
 {
     use SoftDeletes;
@@ -35,7 +38,7 @@ class Attachment extends Model
      */
     protected function casts(): array
     {
-        return ['size' => 'integer'];
+        return ['size' => 'integer', 'approved_at' => 'datetime'];
     }
 
     /** @return MorphTo<Model, $this> */
@@ -48,6 +51,12 @@ class Attachment extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /** @return BelongsTo<Workspace, $this> */

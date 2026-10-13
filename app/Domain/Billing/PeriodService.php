@@ -82,6 +82,9 @@ class PeriodService
         if ($period->status === BillingPeriod::INVOICED) {
             throw new BillingException('This period is invoiced. Void the invoice first.');
         }
+        if ($period->invoices()->whereNotIn('status', [Invoice::DRAFT, Invoice::VOID])->exists()) {
+            throw new BillingException('This period has a finalized project invoice. Void it first.');
+        }
         // A draft built on frozen time would go stale once time can change again.
         $period->invoices()->where('status', Invoice::DRAFT)->get()->each->delete();
         $period->forceFill(['status' => BillingPeriod::OPEN, 'locked_at' => null, 'locked_by' => null])->save();

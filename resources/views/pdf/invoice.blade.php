@@ -30,6 +30,7 @@
             @if ($invoice->period_start && $invoice->period_end)
                 <div class="muted">Period {{ $invoice->period_start->format('M j') }} – {{ $invoice->period_end->format('M j, Y') }}</div>
             @endif
+            @if ($invoice->project)<div class="muted">Project: {{ $invoice->project->name }}</div>@endif
         </td>
     </tr>
 </table>

@@ -31,6 +31,7 @@ class RecordLinkController extends Controller
             'source_id' => ['required', 'integer'],
             'target_type' => ['required', Rule::in(LinkService::TYPES)],
             'target_id' => ['required', 'integer'],
+            'relation' => ['nullable', Rule::in(array_keys(RecordLink::RELATIONS))],
         ]);
 
         $source = $this->links->resolve($data['source_type'], (int) $data['source_id']);
@@ -50,7 +51,7 @@ class RecordLinkController extends Controller
             'source_id' => $source->getKey(),
             'target_type' => $target->getMorphClass(),
             'target_id' => $target->getKey(),
-        ], ['created_by' => $request->user()->id]);
+        ], ['created_by' => $request->user()->id, 'relation' => $data['relation'] ?? 'relates']);
 
         $this->activity->log('link.created', $source, [
             'target' => $target->getMorphClass().':'.$target->getKey(),

@@ -2,14 +2,16 @@
 import { computed } from 'vue';
 
 /**
- * Renders text containing @[Name](user:12) tokens as plain text + mention chips.
+ * Renders text containing @[Name](user:12) and @[Team](dept:3) tokens as plain text + mention chips.
  * No v-html: everything is text-escaped by Vue.
  */
 const props = defineProps<{ text: string | null }>();
 
-type Part = { kind: 'text'; value: string } | { kind: 'mention'; name: string; id: number };
+type Part =
+    | { kind: 'text'; value: string }
+    | { kind: 'mention'; name: string; id: number; team: boolean };
 
-const TOKEN = /@\[([^\]\r\n]{1,80})\]\(user:(\d{1,10})\)/g;
+const TOKEN = /@\[([^\]\r\n]{1,80})\]\((user|dept):(\d{1,10})\)/g;
 
 const parts = computed<Part[]>(() => {
     const text = props.text ?? '';
@@ -21,7 +23,12 @@ const parts = computed<Part[]>(() => {
         if (at > last) {
             out.push({ kind: 'text', value: text.slice(last, at) });
         }
-        out.push({ kind: 'mention', name: match[1], id: Number(match[2]) });
+        out.push({
+            kind: 'mention',
+            name: match[1],
+            id: Number(match[3]),
+            team: match[2] === 'dept',
+        });
         last = at + match[0].length;
     }
 
@@ -38,7 +45,13 @@ const parts = computed<Part[]>(() => {
         <template v-for="(part, i) in parts" :key="i">
             <span
                 v-if="part.kind === 'mention'"
-                class="rounded bg-blue-100 px-1 font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                class="rounded px-1 font-medium"
+                :class="
+                    part.team
+                        ? 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
+                "
+                :title="part.team ? 'Department' : undefined"
                 >@{{ part.name }}</span
             >
             <template v-else>{{ part.value }}</template>

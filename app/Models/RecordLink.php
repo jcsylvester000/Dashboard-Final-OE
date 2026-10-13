@@ -16,16 +16,24 @@ use Illuminate\Support\Carbon;
  * @property string $target_type
  * @property int $target_id
  * @property int|null $created_by
+ * @property string $relation
  * @property Carbon $created_at
  */
 class RecordLink extends Model
 {
     public const UPDATED_AT = null;
 
+    /** relation => [label from the source side, label from the target side] */
+    public const RELATIONS = [
+        'relates' => ['Relates to', 'Relates to'],
+        'duplicates' => ['Duplicates', 'Is duplicated by'],
+        'follows' => ['Follow-up of', 'Has follow-up'],
+    ];
+
     /**
      * @var list<string>
      */
-    protected $fillable = ['source_type', 'source_id', 'target_type', 'target_id', 'created_by'];
+    protected $fillable = ['source_type', 'source_id', 'target_type', 'target_id', 'relation', 'created_by'];
 
     /**
      * @return array<string, string>

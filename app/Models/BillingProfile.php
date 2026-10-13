@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * How a client is billed. Money in minor units (centavos); tax in basis points.
@@ -21,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $invoice_series
  * @property array<string, string|null>|null $bill_to
  * @property string|null $payment_instructions
+ * @property int|null $rate_template_id
+ * @property Carbon|null $rate_template_applied_at
  */
 #[Fillable(['workspace_id', 'currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions'])]
 class BillingProfile extends Model
@@ -56,6 +59,7 @@ class BillingProfile extends Model
             'terms_days' => 'integer',
             'tax_rate_bp' => 'integer',
             'bill_to' => 'array',
+            'rate_template_applied_at' => 'datetime',
         ];
     }
 

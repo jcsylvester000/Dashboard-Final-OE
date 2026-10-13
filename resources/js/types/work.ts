@@ -1,5 +1,9 @@
 import type { DepartmentOption } from '@/types/admin';
-import type { LabelOption, MemberOption, WorkspaceHeader } from '@/types/workspace';
+import type {
+    LabelOption,
+    MemberOption,
+    WorkspaceHeader,
+} from '@/types/workspace';
 
 export type TaskStatus = {
     id: number;
@@ -9,20 +13,38 @@ export type TaskStatus = {
     color: string;
 };
 
+export type TaskType = 'task' | 'story' | 'bug' | 'chore' | 'milestone';
+
 export type TaskRow = {
     id: number;
+    /** "BRW-24" (client key + number), or "#id" when the client has no key. */
+    key: string;
+    type: TaskType;
     title: string;
     priority: 'low' | 'normal' | 'high' | 'urgent';
     status: TaskStatus;
     assignee: { id: number; name: string } | null;
-    department: { id: number; name: string; slug?: string; color: string } | null;
+    department: {
+        id: number;
+        name: string;
+        slug?: string;
+        color: string;
+    } | null;
     project: { id: number; name: string } | null;
+    /** How many tasks/records this one is linked to (references, waiting on/blocks, parent/subtasks). */
+    linked?: number;
     labels: LabelOption[];
     workspace: { id: number; name: string; slug: string; color: string };
     due_on: string | null;
+    start_on?: string | null;
+    estimate_minutes?: number | null;
     position: number;
     waiting_on: number;
     is_handoff: boolean;
+    story_points?: number | null;
+    sprint?: { id: number; name: string; status: string } | null;
+    sprint_id?: number | null;
+    recurrence?: string | null;
 };
 
 export type TaskComment = {
@@ -35,13 +57,25 @@ export type TaskComment = {
     can_delete: boolean;
 };
 
+/** B-07: one custom task field defined for a client. */
+export type CustomField = {
+    key: string;
+    label: string;
+    type: 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'url';
+    options?: string[];
+};
+
 export type TaskDetail = TaskRow & {
     description: string | null;
     work_details: Record<string, string | null>;
+    custom_values?: Record<string, string | number | boolean | null>;
     estimate_minutes: number | null;
     reporter: { id: number; name: string } | null;
     completed_at: string | null;
     created_at: string | null;
+    updated_at?: string | null;
+    recurrence?: 'weekly' | 'biweekly' | 'monthly' | null;
+    recurrence_until?: string | null;
     parent_id: number | null;
     handoff_from: { id: number; title: string } | null;
     subtasks: TaskRow[];
@@ -71,6 +105,8 @@ export type TaskPageShared = {
     projects: { id: number; name: string }[];
     labels: LabelOption[];
     doneStatusIds: number[];
+    sprintOptions: { id: number; name: string; status: string }[];
+    views: SavedViewRow[];
 };
 
 export type TaskFilters = {
@@ -82,4 +118,26 @@ export type TaskFilters = {
     assignee?: string;
     due?: 'overdue' | 'week';
     include_done?: boolean | string;
+    type?: string;
+    /** sprint id, 'active' or 'backlog' */
+    sprint?: string;
+    group?: TaskGroup;
+};
+
+export type TaskGroup =
+    | 'status'
+    | 'assignee'
+    | 'project'
+    | 'department'
+    | 'sprint'
+    | 'priority';
+
+export type SavedViewRow = {
+    id: number;
+    name: string;
+    page: 'list' | 'board';
+    filters: Record<string, string>;
+    shared: boolean;
+    owner: string;
+    can_delete: boolean;
 };

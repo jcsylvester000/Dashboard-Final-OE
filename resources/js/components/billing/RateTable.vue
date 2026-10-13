@@ -5,7 +5,8 @@ import InputError from '@/components/InputError.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatDate } from '@/lib/format';
+import { confirmDialog } from '@/composables/useConfirm';
+import { formatDate, localToday } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
 import { destroy, store } from '@/routes/billing/rates';
 import type { RateRow } from '@/types/billing';
@@ -27,7 +28,7 @@ const form = useForm({
     scope: '',
     rate: '',
     cost: '',
-    effective_from: new Date().toISOString().slice(0, 10),
+    effective_from: localToday(),
 });
 
 function submit(): void {
@@ -45,8 +46,12 @@ function submit(): void {
     });
 }
 
-function remove(id: number): void {
-    if (window.confirm('Remove this rate? Existing invoices keep their amounts.')) {
+async function remove(id: number): Promise<void> {
+    if (
+        await confirmDialog(
+            'Remove this rate? Existing invoices keep their amounts.',
+        )
+    ) {
         router.delete(destroy.url(id), { preserveScroll: true });
     }
 }
@@ -58,20 +63,50 @@ function remove(id: number): void {
             <thead class="text-left text-xs text-muted-foreground">
                 <tr>
                     <th class="py-1.5 font-medium">Applies to</th>
-                    <th class="py-1.5 text-right font-medium">Rate / h</th>
-                    <th class="py-1.5 text-right font-medium">Cost / h</th>
-                    <th class="py-1.5 font-medium">From</th>
+                    <th
+                        class="py-1.5 pl-3 text-right font-medium whitespace-nowrap"
+                    >
+                        Rate / h
+                    </th>
+                    <th
+                        class="py-1.5 pl-3 text-right font-medium whitespace-nowrap"
+                    >
+                        Cost / h
+                    </th>
+                    <th class="py-1.5 pl-3 font-medium">From</th>
                     <th />
                 </tr>
             </thead>
             <tbody class="divide-y">
                 <tr v-for="r in rates" :key="r.id">
-                    <td class="py-1.5">{{ r.person ?? r.department ?? 'Default (everyone)' }}</td>
-                    <td class="py-1.5 text-right tabular-nums">{{ formatMoney(r.rate_minor, currency) }}</td>
-                    <td class="py-1.5 text-right tabular-nums">{{ r.cost_minor !== null ? formatMoney(r.cost_minor, currency) : '—' }}</td>
-                    <td class="py-1.5 text-xs">{{ formatDate(r.effective_from) }}</td>
+                    <td class="py-1.5">
+                        {{ r.person ?? r.department ?? 'Default (everyone)' }}
+                    </td>
+                    <td
+                        class="py-1.5 pl-3 text-right whitespace-nowrap tabular-nums"
+                    >
+                        {{ formatMoney(r.rate_minor, currency) }}
+                    </td>
+                    <td
+                        class="py-1.5 pl-3 text-right whitespace-nowrap tabular-nums"
+                    >
+                        {{
+                            r.cost_minor !== null
+                                ? formatMoney(r.cost_minor, currency)
+                                : '—'
+                        }}
+                    </td>
+                    <td class="py-1.5 pl-3 text-xs whitespace-nowrap">
+                        {{ formatDate(r.effective_from) }}
+                    </td>
                     <td class="py-1.5 text-right">
-                        <Button variant="ghost" size="icon" aria-label="Remove rate" @click="remove(r.id)"><Trash2 class="size-4" /></Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Remove rate"
+                            @click="remove(r.id)"
+                            ><Trash2 class="size-4"
+                        /></Button>
                     </td>
                 </tr>
             </tbody>
@@ -79,21 +114,60 @@ function remove(id: number): void {
         <p v-else class="text-sm text-muted-foreground">No rates yet.</p>
 
         <form class="grid gap-2 sm:grid-cols-5" @submit.prevent="submit">
-            <NativeSelect v-model="form.scope" aria-label="Applies to" class="sm:col-span-2">
+            <NativeSelect
+                v-model="form.scope"
+                aria-label="Applies to"
+                class="sm:col-span-2"
+            >
                 <option value="">Default (everyone)</option>
                 <optgroup label="Department">
-                    <option v-for="d in departments" :key="`d${d.id}`" :value="`dept:${d.id}`">{{ d.name }}</option>
+                    <option
+                        v-for="d in departments"
+                        :key="`d${d.id}`"
+                        :value="`dept:${d.id}`"
+                    >
+                        {{ d.name }}
+                    </option>
                 </optgroup>
                 <optgroup label="Person">
-                    <option v-for="p in people" :key="`u${p.id}`" :value="`user:${p.id}`">{{ p.name }}</option>
+                    <option
+                        v-for="p in people"
+                        :key="`u${p.id}`"
+                        :value="`user:${p.id}`"
+                    >
+                        {{ p.name }}
+                    </option>
                 </optgroup>
             </NativeSelect>
-            <Input v-model="form.rate" inputmode="decimal" placeholder="Rate / hour" aria-label="Rate per hour" />
-            <Input v-model="form.cost" inputmode="decimal" placeholder="Internal cost / h" aria-label="Cost per hour" />
-            <Input v-model="form.effective_from" type="date" aria-label="Effective from" />
+            <Input
+                v-model="form.rate"
+                inputmode="decimal"
+                placeholder="Rate / hour"
+                aria-label="Rate per hour"
+            />
+            <Input
+                v-model="form.cost"
+                inputmode="decimal"
+                placeholder="Internal cost / h"
+                aria-label="Cost per hour"
+            />
+            <Input
+                v-model="form.effective_from"
+                type="date"
+                aria-label="Effective from"
+            />
             <div class="sm:col-span-5">
-                <InputError :message="form.errors.rate ?? form.errors.cost ?? (form.errors as Record<string, string | undefined>).department_id" />
-                <Button size="sm" type="submit" :disabled="form.processing">Add rate</Button>
+                <InputError
+                    :message="
+                        form.errors.rate ??
+                        form.errors.cost ??
+                        (form.errors as Record<string, string | undefined>)
+                            .department_id
+                    "
+                />
+                <Button size="sm" type="submit" :disabled="form.processing"
+                    >Add rate</Button
+                >
             </div>
         </form>
     </div>

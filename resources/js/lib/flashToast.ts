@@ -11,6 +11,24 @@ export function initializeFlashToast(): void {
             return;
         }
 
-        toast[data.type](data.message);
+        const action =
+            data.action &&
+            data.action.url.startsWith('/') &&
+            !data.action.url.startsWith('//')
+                ? data.action
+                : null;
+
+        toast[data.type](
+            data.message,
+            action
+                ? {
+                      duration: 10000,
+                      action: {
+                          label: action.label,
+                          onClick: () => router.visit(action.url),
+                      },
+                  }
+                : undefined,
+        );
     });
 }

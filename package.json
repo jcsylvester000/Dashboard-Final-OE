@@ -1,5 +1,6 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
+    "name": "overeasy-dashboard",
     "private": true,
     "type": "module",
     "scripts": {
@@ -49,7 +50,6 @@
         "lightningcss-linux-x64-gnu": "^1.29.1",
         "lightningcss-win32-x64-msvc": "^1.29.1"
     },
-    "name": "overeasy-dashboard",
     "engines": {
         "node": ">=24"
     }

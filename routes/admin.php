@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\FailedJobController;
 use App\Http\Controllers\Admin\FileSettingsController;
+use App\Http\Controllers\Admin\HolidayController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,8 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->name('users.temporary-password');
         Route::post('users/{user}/reset-two-factor', [UserController::class, 'resetTwoFactor'])->name('users.reset-two-factor');
         Route::post('users/{user}/sign-out', [UserController::class, 'signOut'])->name('users.sign-out');
+        Route::get('users/{user}/personal-data', [UserController::class, 'exportData'])->name('users.export-data');
+        Route::post('users/{user}/anonymise', [UserController::class, 'anonymise'])->name('users.anonymise');
     });
 
     // Roles & permissions
@@ -58,6 +61,9 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::get('failed-jobs', [FailedJobController::class, 'index'])->name('failed-jobs.index');
         Route::post('failed-jobs/retry', [FailedJobController::class, 'retry'])->name('failed-jobs.retry');
         Route::post('failed-jobs/discard', [FailedJobController::class, 'destroy'])->name('failed-jobs.destroy');
+        Route::get('holidays', [HolidayController::class, 'index'])->name('holidays.index');
+        Route::post('holidays', [HolidayController::class, 'store'])->name('holidays.store');
+        Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
         Route::get('files', [FileSettingsController::class, 'edit'])->name('files.edit');
         Route::put('files', [FileSettingsController::class, 'update'])->name('files.update');
     });

@@ -9,13 +9,22 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { departmentDot, formatDate, isOverdue, roleLabel, timeAgo } from '@/lib/format';
+import {
+    departmentDot,
+    formatDate,
+    isOverdue,
+    roleLabel,
+    timeAgo,
+} from '@/lib/format';
 import { dashboard } from '@/routes';
 import { index as inboxIndex, open as openAlert } from '@/routes/inbox';
 import { mine } from '@/routes/tasks';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { edit as securityEdit } from '@/routes/security';
-import { index as workspacesIndex, show as workspaceShow } from '@/routes/workspaces';
+import {
+    index as workspacesIndex,
+    show as workspaceShow,
+} from '@/routes/workspaces';
 import { show as taskShow } from '@/routes/workspaces/tasks';
 import type { DepartmentOption } from '@/types/admin';
 import type { InboxItem } from '@/types/notifications';
@@ -38,7 +47,11 @@ defineProps<{
     recentActivity:
         | { id: number; action: string; actor: string | null; at: string }[]
         | null;
-    workspaces: (DepartmentOption & { slug: string; openProjects: number; myOpenTasks: number })[];
+    workspaces: (DepartmentOption & {
+        slug: string;
+        openProjects: number;
+        myOpenTasks: number;
+    })[];
     myTasks: { open: number; overdue: number; dueWeek: number };
     nextTasks: {
         id: number;
@@ -116,11 +129,22 @@ defineOptions({
                     <CardTitle class="text-2xl">{{ myTasks.open }}</CardTitle>
                 </CardHeader>
                 <CardContent class="text-xs">
-                    <span :class="myTasks.overdue ? 'font-medium text-rose-600' : 'text-muted-foreground'"
+                    <span
+                        :class="
+                            myTasks.overdue
+                                ? 'font-medium text-rose-600'
+                                : 'text-muted-foreground'
+                        "
                         >{{ myTasks.overdue }} overdue</span
                     >
-                    · <span class="text-muted-foreground">{{ myTasks.dueWeek }} due this week</span> ·
-                    <Link :href="mine()" class="underline underline-offset-4">Open My tasks</Link>
+                    ·
+                    <span class="text-muted-foreground"
+                        >{{ myTasks.dueWeek }} due this week</span
+                    >
+                    ·
+                    <Link :href="mine()" class="underline underline-offset-4"
+                        >Open My tasks</Link
+                    >
                 </CardContent>
             </Card>
             <Card>
@@ -129,11 +153,20 @@ defineOptions({
                     <CardTitle class="text-2xl">{{ digest.unread }}</CardTitle>
                 </CardHeader>
                 <CardContent class="text-xs">
-                    <span :class="digest.dueToday ? 'font-medium text-orange-600' : 'text-muted-foreground'"
+                    <span
+                        :class="
+                            digest.dueToday
+                                ? 'font-medium text-orange-600'
+                                : 'text-muted-foreground'
+                        "
                         >{{ digest.dueToday }} due today</span
                     >
                     ·
-                    <Link :href="inboxIndex()" class="underline underline-offset-4">Open inbox</Link>
+                    <Link
+                        :href="inboxIndex()"
+                        class="underline underline-offset-4"
+                        >Open inbox</Link
+                    >
                 </CardContent>
             </Card>
             <Card>
@@ -163,24 +196,49 @@ defineOptions({
             <CardHeader>
                 <CardTitle class="text-base">Daily digest</CardTitle>
                 <CardDescription>
-                    Last 24 hours · {{ digest.overdue }} overdue · {{ digest.dueToday }} due today ·
-                    <Link :href="inboxIndex()" class="underline underline-offset-4">Inbox</Link>
+                    Last 24 hours · {{ digest.overdue }} overdue ·
+                    {{ digest.dueToday }} due today ·
+                    <Link
+                        :href="inboxIndex()"
+                        class="underline underline-offset-4"
+                        >Inbox</Link
+                    >
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <p v-if="digest.items.length === 0" class="text-sm text-muted-foreground">
-                    All quiet. New assignments, mentions, handoffs and due dates show up here.
+                <p
+                    v-if="digest.items.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    All quiet. New assignments, mentions, handoffs and due dates
+                    show up here.
                 </p>
                 <ul v-else class="divide-y text-sm">
-                    <li v-for="n in digest.items" :key="n.id" class="flex items-center justify-between gap-3 py-2">
+                    <li
+                        v-for="n in digest.items"
+                        :key="n.id"
+                        class="flex items-center justify-between gap-3 py-2"
+                    >
                         <span class="min-w-0 truncate">
-                            <Link :href="openAlert(n.id)" :class="n.read ? '' : 'font-medium'" class="hover:underline">{{
-                                n.title
-                            }}</Link>
-                            <span v-if="n.body" class="text-muted-foreground"> · {{ n.body }}</span>
-                            <span v-if="n.workspace" class="text-xs text-muted-foreground"> · {{ n.workspace }}</span>
+                            <Link
+                                :href="openAlert(n.id)"
+                                :class="n.read ? '' : 'font-medium'"
+                                class="hover:underline"
+                                >{{ n.title }}</Link
+                            >
+                            <span v-if="n.body" class="text-muted-foreground">
+                                · {{ n.body }}</span
+                            >
+                            <span
+                                v-if="n.workspace"
+                                class="text-xs text-muted-foreground"
+                            >
+                                · {{ n.workspace }}</span
+                            >
                         </span>
-                        <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(n.created_at) }}</span>
+                        <span class="shrink-0 text-xs text-muted-foreground">{{
+                            timeAgo(n.created_at)
+                        }}</span>
                     </li>
                 </ul>
             </CardContent>
@@ -192,18 +250,44 @@ defineOptions({
                 <CardDescription>My open tasks by due date</CardDescription>
             </CardHeader>
             <CardContent>
-                <p v-if="nextTasks.length === 0" class="text-sm text-muted-foreground">Nothing assigned to you.</p>
+                <p
+                    v-if="nextTasks.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    Nothing assigned to you.
+                </p>
                 <ul v-else class="divide-y text-sm">
-                    <li v-for="t in nextTasks" :key="t.id" class="flex items-center justify-between gap-3 py-2">
+                    <li
+                        v-for="t in nextTasks"
+                        :key="t.id"
+                        class="flex items-center justify-between gap-3 py-2"
+                    >
                         <span class="min-w-0 truncate">
-                            <Link :href="taskShow({ workspace: t.workspaceSlug, task: t.id })" class="font-medium hover:underline">{{
-                                t.title
-                            }}</Link>
-                            <span class="text-xs text-muted-foreground"> · {{ t.workspace }} · {{ t.status }}</span>
+                            <Link
+                                :href="
+                                    taskShow({
+                                        workspace: t.workspaceSlug,
+                                        task: t.id,
+                                    })
+                                "
+                                class="font-medium hover:underline"
+                                >{{ t.title }}</Link
+                            >
+                            <span class="text-xs text-muted-foreground">
+                                · {{ t.workspace }} · {{ t.status }}</span
+                            >
                         </span>
-                        <span class="shrink-0 text-xs" :class="isOverdue(t.due_on) ? 'font-medium text-rose-600' : 'text-muted-foreground'">{{
-                            t.due_on ? formatDate(t.due_on) : 'No due date'
-                        }}</span>
+                        <span
+                            class="shrink-0 text-xs"
+                            :class="
+                                isOverdue(t.due_on)
+                                    ? 'font-medium text-rose-600'
+                                    : 'text-muted-foreground'
+                            "
+                            >{{
+                                t.due_on ? formatDate(t.due_on) : 'No due date'
+                            }}</span
+                        >
                     </li>
                 </ul>
             </CardContent>
@@ -214,23 +298,41 @@ defineOptions({
                 <CardHeader>
                     <CardTitle class="text-base">My workspaces</CardTitle>
                     <CardDescription>
-                        <Link :href="workspacesIndex()" class="underline underline-offset-4"
+                        <Link
+                            :href="workspacesIndex()"
+                            class="underline underline-offset-4"
                             >All workspaces</Link
                         >
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p v-if="workspaces.length === 0" class="text-sm text-muted-foreground">
+                    <p
+                        v-if="workspaces.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
                         You are not on any client workspace yet.
                     </p>
                     <ul v-else class="divide-y text-sm">
-                        <li v-for="w in workspaces" :key="w.id" class="flex items-center justify-between py-2">
-                            <Link :href="workspaceShow(w.slug)" class="flex items-center gap-2 hover:underline">
-                                <span class="size-2 rounded-full" :class="departmentDot[w.color] ?? 'bg-slate-500'" />
+                        <li
+                            v-for="w in workspaces"
+                            :key="w.id"
+                            class="flex items-center justify-between py-2"
+                        >
+                            <Link
+                                :href="workspaceShow(w.slug)"
+                                class="flex items-center gap-2 hover:underline"
+                            >
+                                <span
+                                    class="size-2 rounded-full"
+                                    :class="
+                                        departmentDot[w.color] ?? 'bg-slate-500'
+                                    "
+                                />
                                 {{ w.name }}
                             </Link>
                             <span class="text-xs text-muted-foreground"
-                                >{{ w.myOpenTasks }} my tasks · {{ w.openProjects }} open projects</span
+                                >{{ w.myOpenTasks }} my tasks ·
+                                {{ w.openProjects }} open projects</span
                             >
                         </li>
                     </ul>
@@ -240,20 +342,44 @@ defineOptions({
             <Card>
                 <CardHeader>
                     <CardTitle class="text-base">Tagged in</CardTitle>
-                    <CardDescription>Where teammates @mentioned you</CardDescription>
+                    <CardDescription
+                        >Where teammates @mentioned you</CardDescription
+                    >
                 </CardHeader>
                 <CardContent>
-                    <p v-if="mentions.length === 0" class="text-sm text-muted-foreground">No mentions yet.</p>
+                    <p
+                        v-if="mentions.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        No mentions yet.
+                    </p>
                     <ul v-else class="divide-y text-sm">
-                        <li v-for="m in mentions" :key="m.id" class="flex items-center justify-between gap-3 py-2">
+                        <li
+                            v-for="m in mentions"
+                            :key="m.id"
+                            class="flex items-center justify-between gap-3 py-2"
+                        >
                             <span class="min-w-0 truncate">
-                                <Link :href="m.url" class="font-medium hover:underline">{{ m.label }}</Link>
+                                <Link
+                                    :href="m.url"
+                                    class="font-medium hover:underline"
+                                    >{{ m.label }}</Link
+                                >
                                 <span class="text-xs text-muted-foreground">
-                                    · {{ m.kind === 'comment' ? 'in a comment' : m.kind }} · {{ m.workspace }} · by
+                                    ·
+                                    {{
+                                        m.kind === 'comment'
+                                            ? 'in a comment'
+                                            : m.kind
+                                    }}
+                                    · {{ m.workspace }} · by
                                     {{ m.by ?? 'someone' }}</span
                                 >
                             </span>
-                            <span class="shrink-0 text-xs text-muted-foreground">{{ timeAgo(m.at) }}</span>
+                            <span
+                                class="shrink-0 text-xs text-muted-foreground"
+                                >{{ timeAgo(m.at) }}</span
+                            >
                         </li>
                     </ul>
                 </CardContent>
