@@ -59,15 +59,12 @@ final class Money
     }
 
     /**
-     * 150050, PHP -> "₱1,500.50"; USD -> "$1,500.50".
+     * 150050, PHP -> "₱1,500.50"; USD -> "$1,500.50"; EUR -> "€1,500.50".
      */
     public static function format(int $minor, string $currency = 'PHP'): string
     {
-        $symbol = match ($currency) {
-            'PHP' => "\u{20B1}",
-            'USD' => '$',
-            default => $currency.' ',
-        };
+        $symbol = config('billing.currency_meta.'.$currency.'.symbol');
+        $symbol = is_string($symbol) ? $symbol : $currency.' ';
         $sign = $minor < 0 ? '-' : '';
         $abs = abs($minor);
 

@@ -6,6 +6,7 @@ use App\Domain\Billing\Money;
 use App\Domain\Billing\RateAudit;
 use App\Domain\Billing\RateTemplateService;
 use App\Http\Controllers\Controller;
+use App\Models\BillingProfile;
 use App\Models\Department;
 use App\Models\RateTemplate;
 use App\Models\RateTemplateItem;
@@ -30,12 +31,13 @@ class RateTemplateController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120', Rule::unique('rate_templates', 'name')],
             'description' => ['nullable', 'string', 'max:500'],
+            'currency' => ['nullable', Rule::in(BillingProfile::currencies())],
             'copy_agency' => ['boolean'],
         ]);
 
         /** @var User $user */
         $user = $request->user();
-        $template = RateTemplate::create(['name' => $data['name'], 'description' => $data['description'] ?? null, 'created_by' => $user->id]);
+        $template = RateTemplate::create(['name' => $data['name'], 'description' => $data['description'] ?? null, 'created_by' => $user->id, 'currency' => $data['currency'] ?? 'PHP']);
         if ($request->boolean('copy_agency')) {
             $this->templates->copyAgencyRates($template);
         }
@@ -52,7 +54,7 @@ class RateTemplateController extends Controller
         $money = fn (?int $minor) => $minor !== null ? Money::toDecimal($minor) : '';
 
         return Inertia::render('billing/RateTemplate', [
-            'template' => $rateTemplate->only(['id', 'name', 'description']),
+            'template' => $rateTemplate->only(['id', 'name', 'description', 'currency']),
             'people' => User::query()->active()->with('primaryDepartment:id,name')->orderBy('name')->get(['id', 'name', 'title', 'primary_department_id'])
                 ->map(fn (User $u) => [
                     'id' => $u->id,

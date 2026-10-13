@@ -34,11 +34,13 @@ class RateCardController extends Controller
                 ->map(fn (RateCard $r): array => ClientBillingController::rateRow($r))->values(),
             'departments' => Department::query()->orderBy('position')->get(['id', 'name']),
             'people' => User::query()->active()->orderBy('name')->get(['id', 'name']),
-            'templates' => RateTemplate::query()->withCount('items')->orderBy('name')->get(['id', 'name', 'description', 'updated_at'])
+            'currencies' => BillingProfile::currencies(),
+            'templates' => RateTemplate::query()->withCount('items')->orderBy('name')->get(['id', 'name', 'description', 'currency', 'updated_at'])
                 ->map(fn (RateTemplate $t) => [
                     'id' => $t->id,
                     'name' => $t->name,
                     'description' => $t->description,
+                    'currency' => $t->currency,
                     'items' => (int) $t->getAttribute('items_count'),
                     'clients' => BillingProfile::query()->where('rate_template_id', $t->id)->count(),
                 ])->values(),
@@ -64,12 +66,13 @@ class RateCardController extends Controller
 
         $people = User::query()->whereIn('id', $page->getCollection()->filter(fn (ActivityLog $l) => $l->subject_type === $userMorph)->pluck('subject_id'))->pluck('name', 'id');
         $departments = Department::query()->pluck('name', 'id');
-        $money = fn (mixed $v): ?string => $v === null ? null : Money::format((int) $v);
+        $money = fn (mixed $v, mixed $currency = 'PHP'): ?string => $v === null ? null : Money::format((int) $v, is_string($currency) ? $currency : 'PHP');
 
         return Inertia::render('billing/RateHistory', [
             'entries' => $page->through(function (ActivityLog $l) use ($people, $departments, $money): array {
                 $p = (array) ($l->properties ?? []);
                 $scope = (string) ($p['scope'] ?? '');
+                $cur = $p['currency'] ?? 'PHP';
 
                 return [
                     'id' => $l->id,
@@ -79,11 +82,12 @@ class RateCardController extends Controller
                     'scope' => $scope,
                     'where' => (string) ($p['scope_label'] ?? ''),
                     'for' => isset($p['user_id']) ? ($people[(int) $p['user_id']] ?? 'Former member') : (isset($p['department_id']) ? ($departments[(int) $p['department_id']] ?? 'Department').' (department)' : 'Default rate'),
-                    'from' => $money($p['from_minor'] ?? null),
+                    'from' => $money($p['from_minor'] ?? null, $cur),
                     'from_note' => $p['from_note'] ?? null,
-                    'to' => $money($p['to_minor'] ?? null),
-                    'cost_from' => $money($p['cost_from_minor'] ?? null),
-                    'cost_to' => $money($p['cost_to_minor'] ?? null),
+                    'to' => $money($p['to_minor'] ?? null, $cur),
+                    'cost_from' => $money($p['cost_from_minor'] ?? null, $cur),
+                    'cost_to' => $money($p['cost_to_minor'] ?? null, $cur),
+                    'reason' => $p['reason'] ?? null,
                     'effective_from' => $p['effective_from'] ?? null,
                     'via' => $p['via'] ?? null,
                 ];
@@ -102,7 +106,13 @@ class RateCardController extends Controller
             'rate' => ['required', 'regex:'.Money::INPUT_REGEX],
             'cost' => ['nullable', 'regex:'.Money::INPUT_REGEX],
             'effective_from' => ['required', 'date_format:Y-m-d'],
+            'currency' => ['nullable', Rule::in(BillingProfile::currencies())],
         ]);
+
+        // E-100: a client's cards are always in its billing currency; agency cards pick one.
+        $currency = isset($data['workspace_id'])
+            ? (string) (BillingProfile::query()->where('workspace_id', $data['workspace_id'])->value('currency') ?? 'PHP')
+            : (string) ($data['currency'] ?? 'PHP');
 
         if (isset($data['workspace_id'], $data['user_id'])) {
             $workspace = Workspace::query()->findOrFail($data['workspace_id']);
@@ -118,11 +128,40 @@ class RateCardController extends Controller
             'rate_minor' => Money::parse((string) $data['rate']),
             'cost_minor' => isset($data['cost']) && $data['cost'] !== '' ? Money::parse((string) $data['cost']) : null,
             'effective_from' => $data['effective_from'],
+            'currency' => $currency,
         ]);
 
         $audit->cardAdded($card, $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Rate added.')]);
+
+        return back();
+    }
+
+    /**
+     * E-65: correct a card in place (typo in the amount, wrong start date). Finalized
+     * invoices keep their own copy of the rate on each line, so they never change.
+     */
+    public function update(Request $request, RateCard $rateCard, RateAudit $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'rate' => ['required', 'regex:'.Money::INPUT_REGEX],
+            'cost' => ['nullable', 'regex:'.Money::INPUT_REGEX],
+            'effective_from' => ['required', 'date_format:Y-m-d'],
+            'reason' => ['required', 'string', 'max:255'],
+        ]);
+
+        $fromRate = $rateCard->rate_minor;
+        $fromCost = $rateCard->cost_minor;
+        $fromDate = $rateCard->effective_from->toDateString();
+        $rateCard->forceFill([
+            'rate_minor' => Money::parse((string) $data['rate']),
+            'cost_minor' => isset($data['cost']) && $data['cost'] !== '' ? Money::parse((string) $data['cost']) : null,
+            'effective_from' => $data['effective_from'],
+        ])->save();
+        $audit->cardEdited($rateCard, $fromRate, $fromCost, $fromDate, (string) $data['reason'], $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rate corrected.')]);
 
         return back();
     }

@@ -45,6 +45,14 @@ export type InvoiceLine = {
 };
 
 export type InvoiceDetail = InvoiceRow & {
+    missing_rates?: {
+        user_id: number | null;
+        name: string;
+        department_id: number | null;
+        minutes: number;
+        first: string;
+        last: string;
+    }[];
     subtotal_minor: number;
     tax_rate_bp: number;
     line_grouping: string;
@@ -82,5 +90,6 @@ export type RateRow = {
     person: string | null;
     rate_minor: number;
     cost_minor: number | null;
+    currency?: string;
     effective_from: string;
 };

@@ -31,6 +31,7 @@ class RateAudit
             ->where('workspace_id', $card->workspace_id)
             ->where('department_id', $card->department_id)
             ->where('user_id', $card->user_id)
+            ->where('currency', $card->currency)
             ->whereKeyNot($card->id)
             ->where('effective_from', '<=', $card->effective_from->toDateString())
             ->orderByDesc('effective_from')->orderByDesc('id')
@@ -40,7 +41,7 @@ class RateAudit
         $fromNote = null;
         if ($previous === null && $card->user_id !== null) {
             $deptId = User::query()->whereKey($card->user_id)->value('primary_department_id');
-            $previous = $this->resolver->resolve((int) $card->workspace_id, $deptId !== null ? (int) $deptId : null, $card->user_id, $card->effective_from->copy()->subDay()->toDateString());
+            $previous = $this->resolver->resolve((int) $card->workspace_id, $deptId !== null ? (int) $deptId : null, $card->user_id, $card->effective_from->copy()->subDay()->toDateString(), $card->currency);
             $fromNote = $previous === null ? null : match (true) {
                 $previous->user_id !== null => $previous->workspace_id !== null ? 'client rate' : 'agency rate',
                 $previous->department_id !== null => 'department rate',
@@ -59,7 +60,27 @@ class RateAudit
             'cost_from_minor' => $previous?->cost_minor,
             'cost_to_minor' => $card->cost_minor,
             'effective_from' => $card->effective_from->toDateString(),
+            'currency' => $card->currency,
             'via' => $via?->name,
+        ], $actor);
+    }
+
+    /** E-65: a card corrected in place (amount, cost or date), with the reason. */
+    public function cardEdited(RateCard $card, int $fromRate, ?int $fromCost, string $fromDate, string $reason, ?User $actor = null): void
+    {
+        $this->activity->log('rate.set', $this->subject($card->user_id, $card->department_id), [
+            ...$this->scope($card->workspace_id),
+            'user_id' => $card->user_id,
+            'department_id' => $card->department_id,
+            'from_minor' => $fromRate,
+            'from_note' => 'corrected',
+            'to_minor' => $card->rate_minor,
+            'cost_from_minor' => $fromCost,
+            'cost_to_minor' => $card->cost_minor,
+            'effective_from' => $card->effective_from->toDateString(),
+            'effective_from_was' => $fromDate,
+            'currency' => $card->currency,
+            'reason' => $reason,
         ], $actor);
     }
 

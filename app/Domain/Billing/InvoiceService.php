@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing;
 
+use App\Domain\Identity\ActivityLogger;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
 use App\Models\Department;
@@ -27,6 +28,7 @@ class InvoiceService
     public function __construct(
         private readonly RateResolver $rates,
         private readonly PeriodService $periods,
+        private readonly ActivityLogger $activity,
     ) {}
 
     /**
@@ -124,6 +126,8 @@ class InvoiceService
             $absorb = $retainer !== null && $profile->overage_rule === 'absorb';
             /** @var array<string, array{department_id: int|null, label: string|null, rate: int, minutes: int, sources: list<array{0: TimeEntry, 1: int}>}> $groups */
             $groups = [];
+            /** @var array<int|string, array{user_id: int|null, name: string, department_id: int|null, minutes: int, first: string, last: string}> $missing */
+            $missing = [];
 
             foreach ($entries as $entry) {
                 $covered = min($included, $entry->minutes);
@@ -137,13 +141,17 @@ class InvoiceService
                     continue;
                 }
 
-                $rate = $this->rates->resolve($workspace->id, $entry->department_id, $entry->user_id, $entry->entry_date->toDateString());
+                $rate = $this->rates->resolve($workspace->id, $entry->department_id, $entry->user_id, $entry->entry_date->toDateString(), $profile->currency);
                 if ($rate === null) {
-                    throw new BillingException(sprintf(
-                        'No hourly rate for %s on %s. Add a rate card in Billing > Rates.',
-                        $entry->user->name ?? 'a team member',
-                        $entry->entry_date->toDateString(),
-                    ));
+                    // E-64: keep building; list the unpriced work and block only Finalize.
+                    $date = $entry->entry_date->toDateString();
+                    $k = $entry->user_id ?? 'none';
+                    $missing[$k] ??= ['user_id' => $entry->user_id, 'name' => $entry->user->name ?? 'Former member', 'department_id' => $entry->department_id, 'minutes' => 0, 'first' => $date, 'last' => $date];
+                    $missing[$k]['minutes'] += $over;
+                    $missing[$k]['first'] = min($missing[$k]['first'], $date);
+                    $missing[$k]['last'] = max($missing[$k]['last'], $date);
+
+                    continue;
                 }
 
                 // Department stays part of every key so revenue-by-department reports remain exact.
@@ -222,6 +230,7 @@ class InvoiceService
                 $this->source($line, $expense, null, $expense->amount_minor);
             }
 
+            $invoice->forceFill(['missing_rates' => $missing === [] ? null : array_values($missing)])->save();
             $this->recalculate($invoice);
 
             if ($isNew) {
@@ -242,6 +251,9 @@ class InvoiceService
         }
         if (! $invoice->items()->exists()) {
             throw new BillingException('There is nothing to bill on this invoice.');
+        }
+        if (($invoice->missing_rates ?? []) !== []) {
+            throw new BillingException(__('Some hours have no :c rate yet. Add the missing rates, rebuild the draft, then finalize.', ['c' => $invoice->currency]));
         }
 
         $invoice = DB::transaction(function () use ($invoice, $actor) {
@@ -302,8 +314,17 @@ class InvoiceService
             $invoice->forceFill(['status' => Invoice::VOID])->save();
             $this->markBilled($invoice, false);
 
+            // E-61: the period stays Invoiced while a live whole-client invoice still covers it
+            // (voiding a project invoice must not re-open the client's invoiced period).
             if ($invoice->billing_period_id !== null && $invoice->kind === 'invoice') {
-                BillingPeriod::query()->whereKey($invoice->billing_period_id)->update(['status' => BillingPeriod::LOCKED]);
+                $stillInvoiced = Invoice::query()
+                    ->where('billing_period_id', $invoice->billing_period_id)
+                    ->where('kind', 'invoice')
+                    ->whereNull('project_id')
+                    ->whereNotIn('status', [Invoice::DRAFT, Invoice::VOID])
+                    ->exists();
+                BillingPeriod::query()->whereKey($invoice->billing_period_id)
+                    ->update(['status' => $stillInvoiced ? BillingPeriod::INVOICED : BillingPeriod::LOCKED]);
             }
             if ($invoice->kind === 'credit_note' && $invoice->credited_invoice_id !== null) {
                 $original = Invoice::query()->findOrFail($invoice->credited_invoice_id);
@@ -472,6 +493,26 @@ class InvoiceService
             'note' => $note,
             'user_id' => $actor?->id,
         ]);
+
+        // E-62: every money event also lands in the admin activity log.
+        $what = $invoice->kind === 'credit_note' ? 'credit-note' : 'invoice';
+        $event = match (true) {
+            $from === null && $to === Invoice::DRAFT => 'drafted',
+            $from === Invoice::DRAFT && $to === Invoice::FINALIZED => 'finalized',
+            $to === Invoice::VOID => 'voided',
+            $note !== null && str_starts_with($note, 'Payment') => 'payment-recorded',
+            $note !== null && str_starts_with($note, 'Credit note') => 'credited',
+            default => 'status-changed',
+        };
+        $this->activity->log('billing.'.$what.'-'.$event, $invoice, [
+            'number' => $invoice->number !== null ? $invoice->displayNumber() : null,
+            'workspace_id' => $invoice->workspace_id,
+            'from' => $from,
+            'to' => $to,
+            'note' => $note,
+            'total_minor' => $invoice->total_minor,
+            'currency' => $invoice->currency,
+        ], $actor);
     }
 
     /** 90 -> "1.50" */

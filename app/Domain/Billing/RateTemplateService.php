@@ -63,6 +63,7 @@ class RateTemplateService
     public function copyAgencyRates(RateTemplate $template): void
     {
         $latest = RateCard::query()->whereNull('workspace_id')
+            ->where('currency', $template->currency)
             ->where('effective_from', '<=', now()->toDateString())
             ->orderByDesc('effective_from')->orderByDesc('id')->get()
             ->unique(fn (RateCard $c) => ($c->user_id ?? 0).':'.($c->department_id ?? 0));
@@ -83,6 +84,11 @@ class RateTemplateService
      */
     public function apply(RateTemplate $template, Workspace $workspace, string $effectiveFrom, User $actor): array
     {
+        // E-100: a USD template can't price a EUR client.
+        $clientCurrency = $this->rates->currencyOf($workspace->id);
+        if ($template->currency !== $clientCurrency) {
+            throw new BillingException(__('This template is in :t; the client is billed in :c. Use a :c template.', ['t' => $template->currency, 'c' => $clientCurrency]));
+        }
         $template->loadMissing('items.user:id,name');
         $memberIds = $workspace->members()->pluck('users.id')->map(fn ($id) => (int) $id)->all();
         $created = 0;
@@ -103,6 +109,7 @@ class RateTemplateService
                     'cost_minor' => $item->cost_minor,
                     'effective_from' => $effectiveFrom,
                     'rate_template_id' => $template->id,
+                    'currency' => $template->currency,
                 ]);
                 app(RateAudit::class)->cardAdded($card, $actor, $template);
                 $created++;

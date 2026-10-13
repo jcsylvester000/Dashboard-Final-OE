@@ -32,6 +32,7 @@ type Entry = {
     cost_to: string | null;
     effective_from: string | null;
     via: string | null;
+    reason?: string | null;
 };
 
 const props = defineProps<{
@@ -160,6 +161,11 @@ const verb: Record<Entry['action'], string> = {
                                     class="text-xs text-muted-foreground"
                                 >
                                     · from template {{ e.via }}</span
+                                >
+                                <span
+                                    v-if="e.reason"
+                                    class="block text-xs text-muted-foreground"
+                                    >Reason: {{ e.reason }}</span
                                 >
                             </td>
                             <td class="py-1.5">{{ e.for }}</td>

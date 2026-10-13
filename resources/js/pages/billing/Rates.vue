@@ -4,6 +4,7 @@ import BillingNav from '@/components/billing/BillingNav.vue';
 import RateTable from '@/components/billing/RateTable.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
+import NativeSelect from '@/components/NativeSelect.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -23,18 +24,25 @@ import type { RateRow } from '@/types/billing';
 
 defineProps<{
     rates: RateRow[];
+    currencies?: string[];
     departments: { id: number; name: string }[];
     people: { id: number; name: string }[];
     templates: {
         id: number;
         name: string;
         description: string | null;
+        currency?: string;
         items: number;
         clients: number;
     }[];
 }>();
 
-const newTemplate = useForm({ name: '', description: '', copy_agency: true });
+const newTemplate = useForm({
+    name: '',
+    description: '',
+    copy_agency: true,
+    currency: 'PHP',
+});
 
 defineOptions({
     layout: {
@@ -77,6 +85,7 @@ defineOptions({
                                 >{{ t.name }}</Link
                             >
                             <p class="text-xs text-muted-foreground">
+                                {{ t.currency ?? 'PHP' }} ·
                                 {{ t.items }} rate(s) · used by
                                 {{ t.clients }} client(s)<template
                                     v-if="t.description"
@@ -120,6 +129,22 @@ defineOptions({
                             placeholder="optional"
                         />
                     </label>
+                    <label
+                        v-if="(currencies?.length ?? 0) > 1"
+                        class="grid gap-1"
+                    >
+                        <span class="text-xs text-muted-foreground"
+                            >Currency</span
+                        >
+                        <NativeSelect
+                            v-model="newTemplate.currency"
+                            class="w-24"
+                        >
+                            <option v-for="c in currencies" :key="c" :value="c">
+                                {{ c }}
+                            </option>
+                        </NativeSelect>
+                    </label>
                     <label class="flex items-center gap-1.5 pb-2 text-xs">
                         <input
                             v-model="newTemplate.copy_agency"
@@ -154,9 +179,10 @@ defineOptions({
                 </div>
                 <CardDescription>
                     Which rate applies: client + person, client + department,
-                    client default, then person, department, agency default. The
-                    latest rate effective on the work date wins. Internal cost
-                    feeds profitability reports.
+                    client default, then person, department, agency default, in
+                    the client's billing currency only (a USD client never uses
+                    peso rates). The latest rate effective on the work date
+                    wins. Internal cost feeds profitability reports.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -164,6 +190,7 @@ defineOptions({
                     :rates="rates"
                     :workspace-id="null"
                     currency="PHP"
+                    :currencies="currencies"
                     :departments="departments"
                     :people="people"
                 />

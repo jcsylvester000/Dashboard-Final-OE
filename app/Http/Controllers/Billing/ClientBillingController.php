@@ -7,6 +7,7 @@ use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
 use App\Domain\Billing\PeriodService;
 use App\Domain\Billing\RateTemplateService;
+use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
@@ -31,6 +32,8 @@ use Inertia\Response;
  */
 class ClientBillingController extends Controller
 {
+    public function __construct(private readonly ActivityLogger $activity) {}
+
     public function index(): Response
     {
         $profiles = BillingProfile::query()->get()->keyBy('workspace_id');
@@ -131,7 +134,7 @@ class ClientBillingController extends Controller
             'members' => $workspace->members()->orderBy('name')->get(['users.id', 'users.name'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'options' => [
-                'currencies' => BillingProfile::CURRENCIES,
+                'currencies' => BillingProfile::currencies(),
                 'cycles' => BillingProfile::CYCLES,
                 'overageRules' => BillingProfile::OVERAGE_RULES,
             ],
@@ -141,7 +144,7 @@ class ClientBillingController extends Controller
     public function updateProfile(Request $request, Workspace $workspace): RedirectResponse
     {
         $data = $request->validate([
-            'currency' => ['required', Rule::in(BillingProfile::CURRENCIES)],
+            'currency' => ['required', Rule::in(BillingProfile::currencies())],
             'cycle' => ['required', Rule::in(array_keys(BillingProfile::CYCLES))],
             'retainer' => ['required', 'regex:'.Money::INPUT_REGEX],
             'included_hours' => ['required', 'regex:/^\d{1,5}(\.\d{1,2})?$/'],
@@ -156,7 +159,16 @@ class ClientBillingController extends Controller
             'payment_instructions' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        BillingProfile::query()->updateOrCreate(['workspace_id' => $workspace->id], [
+        $profile = BillingProfile::query()->firstOrNew(['workspace_id' => $workspace->id]);
+        $before = $profile->exists ? $profile->only(['currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions']) : [];
+        $currencyChanged = $profile->exists && $profile->currency !== $data['currency'];
+
+        // E-111: change currency only between billing rounds; history keeps its own currency.
+        if ($currencyChanged && Invoice::query()->where('workspace_id', $workspace->id)->where('status', Invoice::DRAFT)->exists()) {
+            throw new BillingException(__('Finalize or delete this client\'s draft invoices before changing its currency.'));
+        }
+
+        $profile->fill([
             'currency' => $data['currency'],
             'cycle' => $data['cycle'],
             'retainer_minor' => Money::parse((string) $data['retainer']),
@@ -168,9 +180,28 @@ class ClientBillingController extends Controller
             'invoice_series' => $data['invoice_series'],
             'bill_to' => $data['bill_to'],
             'payment_instructions' => $data['payment_instructions'] ?? null,
-        ]);
+        ])->save();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Billing profile saved.')]);
+        // E-62: log what changed (before -> after) on the client.
+        $after = $profile->only(array_keys($before) ?: ['currency']);
+        $changes = [];
+        foreach ($after as $key => $value) {
+            if (($before[$key] ?? null) != $value) {
+                $changes[$key] = ['from' => $before[$key] ?? null, 'to' => $value];
+            }
+        }
+        if ($changes !== []) {
+            $this->activity->log('billing.profile-updated', $workspace, ['changes' => $changes]);
+        }
+
+        $message = __('Billing profile saved.');
+        if ($currencyChanged) {
+            $old = (string) ($before['currency'] ?? '');
+            $stale = RateCard::query()->where('workspace_id', $workspace->id)->where('currency', $old)->count();
+            $message = __('Billing currency is now :c from the next draft. Finalized invoices stay in :o.', ['c' => $profile->currency, 'o' => $old])
+                .($stale > 0 ? ' '.__(':n client rate(s) in :o no longer apply; add :c rates.', ['n' => $stale, 'o' => $old, 'c' => $profile->currency]) : '');
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return back();
     }
@@ -194,13 +225,16 @@ class ClientBillingController extends Controller
         /** @var User $user */
         $user = $request->user();
         $periods->lock($period, $user);
+        $this->activity->log('billing.period-locked', $period, ['workspace_id' => $period->workspace_id, 'starts_on' => $period->starts_on->toDateString(), 'ends_on' => $period->ends_on->toDateString()]);
 
         return back();
     }
 
-    public function unlockPeriod(BillingPeriod $period, PeriodService $periods): RedirectResponse
+    public function unlockPeriod(Request $request, BillingPeriod $period, PeriodService $periods): RedirectResponse
     {
+        $reason = $request->validate(['reason' => ['nullable', 'string', 'max:255']])['reason'] ?? null;
         $periods->unlock($period);
+        $this->activity->log('billing.period-unlocked', $period, ['workspace_id' => $period->workspace_id, 'starts_on' => $period->starts_on->toDateString(), 'ends_on' => $period->ends_on->toDateString(), 'reason' => $reason]);
 
         return back();
     }
@@ -227,7 +261,7 @@ class ClientBillingController extends Controller
             'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')->where('workspace_id', $workspace->id)],
         ]);
 
-        Expense::create([
+        $expense = Expense::create([
             'workspace_id' => $workspace->id,
             'project_id' => $data['project_id'] ?? null,
             'description' => $data['description'],
@@ -236,6 +270,7 @@ class ClientBillingController extends Controller
             'is_billable' => (bool) ($data['is_billable'] ?? true),
             'created_by' => $request->user()?->id,
         ]);
+        $this->activity->log('billing.expense-added', $workspace, ['expense_id' => $expense->id, 'description' => $expense->description, 'amount_minor' => $expense->amount_minor, 'billable' => $expense->is_billable]);
 
         return back();
     }
@@ -253,6 +288,7 @@ class ClientBillingController extends Controller
             throw new BillingException('This expense is on an invoice (or draft) and cannot be removed.');
         }
         $expense->delete();
+        $this->activity->log('billing.expense-deleted', null, ['workspace_id' => $expense->workspace_id, 'expense_id' => $expense->id, 'description' => $expense->description, 'amount_minor' => $expense->amount_minor]);
 
         return back();
     }
@@ -265,7 +301,11 @@ class ClientBillingController extends Controller
         $data = $request->validate(['fixed_fee' => ['nullable', 'regex:'.Money::INPUT_REGEX]]);
 
         $fee = isset($data['fixed_fee']) && $data['fixed_fee'] !== '' ? Money::parse((string) $data['fixed_fee']) : null;
+        $was = $project->fixed_fee_minor;
         $project->forceFill(['fixed_fee_minor' => $fee ?: null])->save();
+        if ($was !== $project->fixed_fee_minor) {
+            $this->activity->log('billing.fixed-fee-changed', $project, ['from_minor' => $was, 'to_minor' => $project->fixed_fee_minor]);
+        }
 
         return back();
     }
@@ -282,6 +322,7 @@ class ClientBillingController extends Controller
             'person' => $r->user?->name,
             'rate_minor' => $r->rate_minor,
             'cost_minor' => $r->cost_minor,
+            'currency' => $r->currency,
             'effective_from' => $r->effective_from->toDateString(),
         ];
     }

@@ -14,10 +14,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $name
  * @property string|null $description
  * @property int|null $created_by
+ * @property string $currency
  */
-#[Fillable(['name', 'description', 'created_by'])]
+#[Fillable(['name', 'description', 'created_by', 'currency'])]
 class RateTemplate extends Model
 {
+    /**
+     * Same default as the database column, so new in-memory models know their currency (E-100).
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = ['currency' => 'PHP'];
+
     /** @return HasMany<RateTemplateItem, $this> */
     public function items(): HasMany
     {

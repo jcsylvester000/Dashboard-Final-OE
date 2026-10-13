@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $finalized_by
  * @property Carbon|null $overdue_alerted_at
  * @property int|null $created_by
+ * @property list<array{user_id: int|null, name: string, department_id: int|null, minutes: int, first: string, last: string}>|null $missing_rates work the draft could not price (E-64)
  * @property Carbon|null $created_at
  */
 #[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by'])]
@@ -104,6 +105,7 @@ class Invoice extends Model
             'paid_minor' => 'integer',
             'credited_minor' => 'integer',
             'bill_to' => 'array',
+            'missing_rates' => 'array',
             'finalized_at' => 'datetime',
             'overdue_alerted_at' => 'datetime',
         ];

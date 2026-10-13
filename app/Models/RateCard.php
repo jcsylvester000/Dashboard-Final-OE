@@ -18,10 +18,18 @@ use Illuminate\Support\Carbon;
  * @property int|null $cost_minor
  * @property Carbon $effective_from
  * @property int|null $rate_template_id
+ * @property string $currency ISO code; a client's cards use its billing currency (E-100)
  */
-#[Fillable(['workspace_id', 'department_id', 'user_id', 'rate_minor', 'cost_minor', 'effective_from', 'rate_template_id'])]
+#[Fillable(['workspace_id', 'department_id', 'user_id', 'rate_minor', 'cost_minor', 'effective_from', 'rate_template_id', 'currency'])]
 class RateCard extends Model
 {
+    /**
+     * Same default as the database column, so new in-memory models know their currency (E-100).
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = ['currency' => 'PHP'];
+
     /**
      * @return array<string, string>
      */

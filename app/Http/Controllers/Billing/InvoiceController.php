@@ -6,6 +6,7 @@ use App\Domain\Billing\BillingException;
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
+use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
 use App\Models\Expense;
@@ -86,6 +87,8 @@ class InvoiceController extends Controller
                 'notes' => $invoice->notes,
                 'kind' => $invoice->kind,
                 'credited_invoice_id' => $invoice->credited_invoice_id,
+                // E-64: work this draft could not price yet (Finalize stays blocked).
+                'missing_rates' => $invoice->isDraft() ? ($invoice->missing_rates ?? []) : [],
                 'items' => $invoice->items->map(fn (InvoiceItem $item): array => [
                     'id' => $item->id,
                     'type' => $item->type,
@@ -223,6 +226,7 @@ class InvoiceController extends Controller
     public function destroy(Invoice $invoice): RedirectResponse
     {
         $invoice->delete(); // the model refuses anything but drafts
+        app(ActivityLogger::class)->log('billing.invoice-draft-deleted', null, ['invoice_id' => $invoice->id, 'workspace_id' => $invoice->workspace_id, 'total_minor' => $invoice->total_minor, 'currency' => $invoice->currency]);
 
         return to_route('billing.invoices.index');
     }

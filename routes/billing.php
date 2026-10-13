@@ -44,6 +44,7 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_MANAGE])->prefix('billing
     Route::get('rates', [RateCardController::class, 'index'])->name('rates.index');
     Route::get('rates/history', [RateCardController::class, 'history'])->name('rates.history');
     Route::post('rates', [RateCardController::class, 'store'])->name('rates.store');
+    Route::put('rates/{rateCard}', [RateCardController::class, 'update'])->name('rates.update');
     Route::delete('rates/{rateCard}', [RateCardController::class, 'destroy'])->name('rates.destroy');
 
     // Rate templates: per-person rates applied to a client as its own copy.

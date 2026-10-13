@@ -201,6 +201,12 @@ async function removeDraft(): Promise<void> {
                 >
                 <Button
                     size="sm"
+                    :disabled="(inv.missing_rates?.length ?? 0) > 0"
+                    :title="
+                        (inv.missing_rates?.length ?? 0) > 0
+                            ? 'Add the missing rates first'
+                            : ''
+                    "
                     @click="
                         post(
                             finalize.url(inv.id),
@@ -213,6 +219,37 @@ async function removeDraft(): Promise<void> {
                     >Delete draft</Button
                 >
             </div>
+        </div>
+
+        <div
+            v-if="inv.missing_rates?.length"
+            class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+            role="alert"
+        >
+            <p class="font-medium">
+                Some hours have no {{ inv.currency }} rate yet, so they are not
+                on this draft.
+            </p>
+            <ul class="mt-1 list-disc pl-5">
+                <li v-for="m in inv.missing_rates" :key="`${m.user_id}`">
+                    {{ m.name }}: {{ formatMinutes(m.minutes) }} ({{
+                        formatDate(m.first)
+                    }}<template v-if="m.last !== m.first">
+                        – {{ formatDate(m.last) }}</template
+                    >)
+                </li>
+            </ul>
+            <p class="mt-2">
+                Add {{ inv.currency }} rates for them
+                <Link
+                    v-if="inv.workspace"
+                    :href="clientShow(inv.workspace.slug)"
+                    class="underline"
+                    >on the client's billing page</Link
+                >
+                (or as agency rates), then press Recalculate. Finalize stays off
+                until every hour is priced.
+            </p>
         </div>
 
         <p
@@ -433,7 +470,15 @@ async function removeDraft(): Promise<void> {
                         </tfoot>
                     </table>
                     <p
-                        v-if="inv.items.length === 0"
+                        v-if="
+                            inv.items.length === 0 && inv.missing_rates?.length
+                        "
+                        class="py-6 text-center text-sm text-muted-foreground"
+                    >
+                        No lines yet: the hours above need a rate first.
+                    </p>
+                    <p
+                        v-else-if="inv.items.length === 0"
                         class="py-6 text-center text-sm text-muted-foreground"
                     >
                         Nothing to bill: no approved billable time, retainer,

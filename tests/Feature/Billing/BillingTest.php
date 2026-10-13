@@ -354,8 +354,12 @@ class BillingTest extends TestCase
     {
         RateCard::query()->delete();
 
-        $this->actingAs($this->finance)->post(route('billing.periods.invoice', $this->october))->assertSessionHasErrors('billing');
-        $this->assertSame(0, Invoice::count());
+        // E-64: the draft still builds, lists the unpriced hours, and Finalize is refused.
+        $this->actingAs($this->finance)->post(route('billing.periods.invoice', $this->october))->assertSessionHasNoErrors();
+        $draft = Invoice::query()->firstOrFail();
+        $this->assertNotEmpty($draft->missing_rates);
+        $this->actingAs($this->finance)->post(route('billing.invoices.finalize', $draft))->assertSessionHasErrors('billing');
+        $this->assertSame(Invoice::DRAFT, $draft->fresh()?->status);
     }
 
     public function test_periods_follow_the_cycle_and_cannot_overlap()

@@ -28,7 +28,21 @@ use Illuminate\Support\Carbon;
 #[Fillable(['workspace_id', 'currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions'])]
 class BillingProfile extends Model
 {
-    public const CURRENCIES = ['PHP', 'USD'];
+    /** Always available; config('billing.currencies') can add more (E-101). */
+    public const CURRENCIES = ['PHP', 'USD', 'EUR'];
+
+    /**
+     * Currencies a client can be billed in (config list, known currencies only).
+     *
+     * @return list<string>
+     */
+    public static function currencies(): array
+    {
+        $meta = (array) config('billing.currency_meta', []);
+        $list = array_values(array_filter((array) config('billing.currencies', self::CURRENCIES), fn ($c) => is_string($c) && isset($meta[$c])));
+
+        return $list === [] ? self::CURRENCIES : $list;
+    }
 
     public const CYCLES = ['monthly' => 'Monthly', 'quarterly' => 'Quarterly'];
 

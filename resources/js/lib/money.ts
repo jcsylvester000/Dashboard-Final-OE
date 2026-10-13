@@ -2,7 +2,15 @@
  * Money arrives from the server as integer minor units (centavos / cents).
  * Format only; never do money arithmetic in floats on the client.
  */
-const symbols: Record<string, string> = { PHP: '₱', USD: '$' };
+const symbols: Record<string, string> = {
+    PHP: '₱',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    AUD: 'A$',
+    SGD: 'S$',
+    CAD: 'C$',
+};
 
 export function formatMoney(
     minor: number | null | undefined,
