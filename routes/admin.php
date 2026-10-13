@@ -2,6 +2,7 @@
 
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\CompanySettingsController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\FailedJobController;
 use App\Http\Controllers\Admin\FileSettingsController;
@@ -66,5 +67,14 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
         Route::get('files', [FileSettingsController::class, 'edit'])->name('files.edit');
         Route::put('files', [FileSettingsController::class, 'update'])->name('files.update');
+    });
+
+    // E-92: company details and logo on documents (system admins and Finance).
+    Route::middleware('can:manage-company')->group(function () {
+        Route::get('company', [CompanySettingsController::class, 'edit'])->name('company.edit');
+        Route::put('company', [CompanySettingsController::class, 'update'])->name('company.update');
+        Route::post('company/logo', [CompanySettingsController::class, 'uploadLogo'])->name('company.logo.store');
+        Route::delete('company/logo', [CompanySettingsController::class, 'removeLogo'])->name('company.logo.destroy');
+        Route::get('company/logo', [CompanySettingsController::class, 'logo'])->name('company.logo');
     });
 });

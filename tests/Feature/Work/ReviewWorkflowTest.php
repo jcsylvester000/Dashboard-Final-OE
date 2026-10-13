@@ -158,12 +158,12 @@ class ReviewWorkflowTest extends TestCase
         $next = Task::where('handoff_from_task_id', $task->id)->firstOrFail();
 
         $this->actingAs($this->colleague)->get(route('workspaces.tasks.show', [$this->ws, $next]))
-            ->assertInertia(fn (Assert $page) => $page
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps('panels', fn (Assert $reload) => $reload
                 ->has('handoffFiles', 1)
                 ->where('handoffFiles.0.name', 'ad-1080x1080.pdf')
                 ->where('handoffFiles.0.approved', true)
                 ->where('handoffFiles.0.can_delete', false)
-                ->where('handoffFiles.0.can_approve', false));
+                ->where('handoffFiles.0.can_approve', false)));
     }
 
     public function test_department_leads_approve_their_own_departments_time_only()

@@ -49,6 +49,7 @@ import { index as holidaysIndex } from '@/routes/admin/holidays';
 import { index as leaveIndex } from '@/routes/leave';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
+import { edit as companySettings } from '@/routes/admin/company';
 import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as driveIndex } from '@/routes/drive';
@@ -223,6 +224,14 @@ const adminNavItems = computed<NavItem[]>(() => {
             title: 'Activity log',
             href: activityIndex(),
             icon: History,
+        });
+    }
+
+    if (can.value['system.manage'] || can.value['billing.manage']) {
+        items.push({
+            title: 'Company',
+            href: companySettings(),
+            icon: Building2,
         });
     }
 

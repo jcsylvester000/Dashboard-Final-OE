@@ -208,7 +208,9 @@ class TaskController extends Controller
         $related = $task->subtasks->concat($task->dependencies)->concat($task->dependents);
         $open = $this->present->openDependencyMap([$task->id, ...$related->pluck('id')->all()]);
 
-        $timeline = ActivityLog::query()
+        // E-120: heavy side panels (timeline, time, files) load right after the page
+        // as one deferred request, so the task itself shows sooner.
+        $timeline = fn () => ActivityLog::query()
             ->with('actor:id,name')
             ->where('subject_type', $task->getMorphClass())
             ->where('subject_id', $task->id)
@@ -257,18 +259,18 @@ class TaskController extends Controller
                 ])->values(),
             ],
             'linkedWork' => $this->linkedWork($task, $workspace, $references),
-            'timeline' => $timeline,
+            'timeline' => Inertia::defer($timeline, 'panels'),
             // Guests (read-only) don't see who logged what.
-            'time' => Gate::allows('update', $task) ? $this->timeSummary($task, $user) : null,
+            'time' => Inertia::defer(fn () => Gate::allows('update', $task) ? $this->timeSummary($task, $user) : null, 'panels'),
             'workDetailFields' => Task::WORK_DETAIL_FIELDS,
             'customFields' => $workspace->custom_fields ?? [],
             'links' => $references,
             'canDelete' => Gate::allows('delete', $task),
-            'attachments' => app(AttachmentPresenter::class)->for($task, $workspace, $user),
+            'attachments' => Inertia::defer(fn () => app(AttachmentPresenter::class)->for($task, $workspace, $user), 'panels'),
             // Files from the step that handed this task off (approved first), read-only here.
-            'handoffFiles' => $task->handoffFrom !== null
+            'handoffFiles' => Inertia::defer(fn () => $task->handoffFrom !== null
                 ? app(AttachmentPresenter::class)->for($task->handoffFrom, $workspace, $user, readOnly: true)
-                : [],
+                : [], 'panels'),
             'canReview' => Gate::allows('review', $task),
             // S2-13: the project needs a lead's sign-off before Done.
             'reviewRequired' => $task->project_id !== null && (bool) Project::query()->whereKey($task->project_id)->value('review_required'),

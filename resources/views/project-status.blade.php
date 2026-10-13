@@ -30,6 +30,7 @@
 <body>
 <main>
     <section class="card">
+        @if ($logo ?? null)<img src="{{ $logo }}" alt="{{ $agency ?? '' }}" style="max-height: 40px; max-width: 180px; margin-bottom: 8px">@endif
         <div class="brand">{{ $client }} · project status</div>
         <h1>{{ $project->name }}</h1>
         <p class="meta">

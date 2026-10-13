@@ -2,8 +2,10 @@
 
 namespace App\Domain\Billing;
 
+use App\Domain\Settings\CompanyProfile;
 use App\Models\Invoice;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Barryvdh\DomPDF\PDF as PdfDocument;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -14,7 +16,25 @@ use Illuminate\Support\Facades\Storage;
  */
 class InvoicePdf
 {
-    public function __construct(private readonly WorkReport $workReport) {}
+    public function __construct(
+        private readonly WorkReport $workReport,
+        private readonly CompanyProfile $company,
+    ) {}
+
+    /**
+     * E-48: "Page X of Y" on every page (bottom right), then the bytes.
+     */
+    private function finish(PdfDocument $pdf): string
+    {
+        $pdf->setPaper('a4');
+        $pdf->render();
+        $dompdf = $pdf->getDomPDF();
+        $canvas = $dompdf->getCanvas();
+        $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans');
+        $canvas->page_text($canvas->get_width() - 112, $canvas->get_height() - 30, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 7.5, [0.61, 0.64, 0.69]);
+
+        return (string) $dompdf->output();
+    }
 
     public function invoice(Invoice $invoice): string
     {
@@ -23,12 +43,13 @@ class InvoicePdf
         // The workspace may already be loaded without its profile (lazy loading is off).
         $profile = $invoice->workspace->loadMissing('billingProfile')->billingProfile;
 
-        return Pdf::loadView('pdf.invoice', [
+        return $this->finish(Pdf::loadView('pdf.invoice', [
             'invoice' => $invoice,
-            'company' => config('billing.company'),
+            'company' => $this->company->get(),
+            'logo' => $this->company->logoDataUri(),
             'paymentInstructions' => $profile?->payment_instructions,
             'draft' => $invoice->isDraft(),
-        ])->setPaper('a4')->output();
+        ]));
     }
 
     public function workReport(Invoice $invoice): string
@@ -52,12 +73,13 @@ class InvoicePdf
      */
     public function renderWorkReport(array $meta, array $report, bool $draft = false): string
     {
-        return Pdf::loadView('pdf.work-report', [
+        return $this->finish(Pdf::loadView('pdf.work-report', [
             'meta' => $meta,
-            'company' => config('billing.company'),
+            'company' => $this->company->get(),
+            'logo' => $this->company->logoDataUri(),
             'report' => $report,
             'draft' => $draft,
-        ])->setPaper('a4')->output();
+        ]));
     }
 
     /**

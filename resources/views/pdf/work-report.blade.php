@@ -12,10 +12,12 @@
 <body>
 @if ($draft)<div class="watermark">DRAFT</div>@endif
 <div class="footer">{{ $company['name'] }} · {{ $meta['title'] }} · {{ $meta['ref'] }}</div>
+<div class="brand-bar" style="background: {{ $company['brand_color'] ?? '#1f2937' }}"></div>
 
 <table class="head">
     <tr>
         <td style="width: 60%">
+            @if ($logo ?? null)<img src="{{ $logo }}" class="logo" alt="">@endif
             <h1>{{ $meta['title'] }}</h1>
             <div><strong>{{ $meta['client'] }}</strong></div>
             @if ($meta['period'])<div class="muted">{{ $meta['period'] }}</div>@endif
@@ -29,9 +31,8 @@
 </table>
 
 @if (count($report['departments']))
-    <h2>Hours by department and person</h2>
     <table>
-        <thead><tr><th>Department</th><th>Who</th><th class="right" style="width: 15%">Hours</th></tr></thead>
+        <thead><tr><th colspan="3" class="section">Hours by department and person</th></tr><tr><th>Department</th><th>Who</th><th class="right" style="width: 15%">Hours</th></tr></thead>
         <tbody>
             @foreach ($report['departments'] as $dept)
                 @foreach ($dept['people'] as $i => $person)
@@ -47,9 +48,8 @@
 @endif
 
 @if (count($report['tasks']))
-    <h2>Tasks worked on</h2>
     <table>
-        <thead><tr><th>Task</th><th style="width: 16%">Department</th><th style="width: 14%">Status</th><th style="width: 22%">Who</th><th class="right" style="width: 10%">Hours</th></tr></thead>
+        <thead><tr><th colspan="5" class="section">Tasks worked on</th></tr><tr><th>Task</th><th style="width: 16%">Department</th><th style="width: 14%">Status</th><th style="width: 22%">Who</th><th class="right" style="width: 10%">Hours</th></tr></thead>
         <tbody>
             @foreach ($report['tasks'] as $task)
                 <tr>
@@ -65,9 +65,8 @@
 @endif
 
 @if (count($report['marketing']))
-    <h2>Marketing</h2>
     <table>
-        <thead><tr><th>Work</th><th>Campaign</th><th>Channel</th><th>Deliverable</th><th class="right">Hours</th></tr></thead>
+        <thead><tr><th colspan="5" class="section">Marketing</th></tr><tr><th>Work</th><th>Campaign</th><th>Channel</th><th>Deliverable</th><th class="right">Hours</th></tr></thead>
         <tbody>
             @foreach ($report['marketing'] as $row)
                 <tr>
@@ -83,9 +82,8 @@
 @endif
 
 @if (count($report['seo']))
-    <h2>SEO</h2>
     <table>
-        <thead><tr><th>Work</th><th>Page</th><th>Keyword</th><th>Type</th><th class="right">Hours</th></tr></thead>
+        <thead><tr><th colspan="5" class="section">SEO</th></tr><tr><th>Work</th><th>Page</th><th>Keyword</th><th>Type</th><th class="right">Hours</th></tr></thead>
         <tbody>
             @foreach ($report['seo'] as $row)
                 <tr>
@@ -101,8 +99,8 @@
 @endif
 
 @if (count($report['completed_without_time']))
-    <h2>Also completed this period</h2>
     <table>
+        <thead><tr><th colspan="2" class="section">Also completed this period</th></tr></thead>
         <tbody>
             @foreach ($report['completed_without_time'] as $t)
                 <tr><td>{{ $t['title'] }}</td><td style="width: 20%">{{ $t['department'] }}</td></tr>

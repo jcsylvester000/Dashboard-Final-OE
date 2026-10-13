@@ -16,7 +16,10 @@ return [
     */
 
     'ssr' => [
-        'enabled' => true,
+        // E-112: off. Every page is behind a login (public pages are Blade), so server
+        // rendering adds work without SEO value. If turned on, deploy must run
+        // npm run build:ssr and a daemon for php artisan inertia:start-ssr.
+        'enabled' => (bool) env('INERTIA_SSR_ENABLED', false),
         'url' => 'http://127.0.0.1:13714',
         // 'bundle' => base_path('bootstrap/ssr/ssr.mjs'),
 

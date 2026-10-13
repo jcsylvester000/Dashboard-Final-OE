@@ -6,6 +6,7 @@ use App\Domain\Files\FileStore;
 use App\Domain\Files\LocalFileStore;
 use App\Domain\Files\UploadThing\UploadThingClient;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Identity\Permissions;
 use App\Domain\Notifications\AlertBatch;
 use App\Domain\Notifications\WorkEventSubscriber;
 use App\Domain\Settings\AppSettings;
@@ -124,6 +125,11 @@ class AppServiceProvider extends ServiceProvider
     {
         // Super Admin passes every Gate / policy check.
         Gate::before(fn (User $user): ?bool => $user->isSuperAdmin() ? true : null);
+
+        // E-130: Laravel Pulse dashboard (/pulse) for admins who manage the system.
+        Gate::define('viewPulse', fn (User $user): bool => $user->can(Permissions::SYSTEM_MANAGE));
+        // E-92: company details on documents: system admins and Finance.
+        Gate::define('manage-company', fn (User $user): bool => $user->can(Permissions::SYSTEM_MANAGE) || $user->can(Permissions::BILLING_MANAGE));
     }
 
     protected function configureAuthAuditing(): void

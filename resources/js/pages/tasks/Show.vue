@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { Deferred, Form, Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowRightLeft,
     BadgeCheck,
@@ -58,11 +58,11 @@ import type {
 const props = defineProps<
     TaskPageShared & {
         task: TaskDetail;
-        timeline: TimelineEntry[];
+        timeline?: TimelineEntry[];
         links: LinkRow[];
         canDelete: boolean;
-        attachments: AttachmentRow[];
-        handoffFiles: AttachmentRow[];
+        attachments?: AttachmentRow[];
+        handoffFiles?: AttachmentRow[];
         linkedWork: {
             relation: string;
             id: number | null;
@@ -73,7 +73,7 @@ const props = defineProps<
         canReview: boolean;
         reviewRequired: boolean;
         fileLimits: FileLimits;
-        time: TaskTime | null;
+        time?: TaskTime | null;
         workDetailFields: Record<
             string,
             Record<string, [string, string, string[]?]>
@@ -164,6 +164,15 @@ function setField(field: string, value: unknown): void {
         } as Record<string, string | number | null>,
         {
             preserveScroll: true,
+            // E-120: a field save only changes the task, its history and linked work.
+            only: [
+                'task',
+                'timeline',
+                'linkedWork',
+                'reviewRequired',
+                'canReview',
+                'canDelete',
+            ],
             onError: (errors) => {
                 if (errors.conflict) {
                     conflict.value = errors.conflict;
@@ -1036,13 +1045,21 @@ function describe(entry: TimelineEntry): string {
                     </CardContent>
                 </Card>
 
-                <TaskTimeCard
-                    v-if="time"
-                    :workspace-slug="ws"
-                    :task-id="task.id"
-                    :time="time"
-                    :can-log="can"
-                />
+                <Deferred data="time">
+                    <template #fallback>
+                        <div
+                            class="h-28 animate-pulse rounded-xl border bg-muted/40"
+                            aria-label="Loading time"
+                        />
+                    </template>
+                    <TaskTimeCard
+                        v-if="time"
+                        :workspace-slug="ws"
+                        :task-id="task.id"
+                        :time="time"
+                        :can-log="can"
+                    />
+                </Deferred>
 
                 <Card>
                     <CardContent class="space-y-3 pt-6 text-sm">
@@ -1234,24 +1251,32 @@ function describe(entry: TimelineEntry): string {
                     :can-edit="can"
                 />
 
-                <AttachmentsPanel
-                    attachable-type="task"
-                    :attachable-id="task.id"
-                    :attachments="attachments"
-                    :limits="fileLimits"
-                    :can-upload="can"
-                />
+                <Deferred :data="['attachments', 'handoffFiles']">
+                    <template #fallback>
+                        <div
+                            class="h-32 animate-pulse rounded-xl border bg-muted/40"
+                            aria-label="Loading files"
+                        />
+                    </template>
+                    <AttachmentsPanel
+                        attachable-type="task"
+                        :attachable-id="task.id"
+                        :attachments="attachments ?? []"
+                        :limits="fileLimits"
+                        :can-upload="can"
+                    />
 
-                <AttachmentsPanel
-                    v-if="task.handoff_from && handoffFiles.length"
-                    attachable-type="task"
-                    :attachable-id="task.handoff_from.id"
-                    :attachments="handoffFiles"
-                    :limits="fileLimits"
-                    :can-upload="false"
-                    title="Files from previous step"
-                    :description="`From \u201c${task.handoff_from.title}\u201d. Approved files are listed first.`"
-                />
+                    <AttachmentsPanel
+                        v-if="task.handoff_from && handoffFiles?.length"
+                        attachable-type="task"
+                        :attachable-id="task.handoff_from.id"
+                        :attachments="handoffFiles"
+                        :limits="fileLimits"
+                        :can-upload="false"
+                        title="Files from previous step"
+                        :description="`From \u201c${task.handoff_from.title}\u201d. Approved files are listed first.`"
+                    />
+                </Deferred>
 
                 <!-- Dependencies -->
                 <Card>
@@ -1359,17 +1384,24 @@ function describe(entry: TimelineEntry): string {
                         <CardTitle class="text-base">Timeline</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ul class="space-y-2 text-xs">
-                            <li v-for="e in timeline" :key="e.id">
-                                <span class="font-medium">{{
-                                    e.actor ?? 'System'
-                                }}</span>
-                                {{ describe(e) }}
-                                <span class="text-muted-foreground">
-                                    · {{ timeAgo(e.at) }}</span
-                                >
-                            </li>
-                        </ul>
+                        <Deferred data="timeline">
+                            <template #fallback>
+                                <p class="text-xs text-muted-foreground">
+                                    Loading history…
+                                </p>
+                            </template>
+                            <ul class="space-y-2 text-xs">
+                                <li v-for="e in timeline ?? []" :key="e.id">
+                                    <span class="font-medium">{{
+                                        e.actor ?? 'System'
+                                    }}</span>
+                                    {{ describe(e) }}
+                                    <span class="text-muted-foreground">
+                                        · {{ timeAgo(e.at) }}</span
+                                    >
+                                </li>
+                            </ul>
+                        </Deferred>
                     </CardContent>
                 </Card>
             </div>

@@ -71,6 +71,69 @@ final class Money
         return $sign.$symbol.number_format(intdiv($abs, 100)).sprintf('.%02d', $abs % 100);
     }
 
+    /**
+     * E-102: on documents a non-peso amount always carries its ISO code so "$" can't be
+     * misread (USD vs AUD/SGD): 150050, USD -> "USD 1,500.50"; PHP -> "₱1,500.50".
+     */
+    public static function formatForDocument(int $minor, string $currency): string
+    {
+        if ($currency === 'PHP') {
+            return self::format($minor, 'PHP');
+        }
+        $sign = $minor < 0 ? '-' : '';
+        $abs = abs($minor);
+
+        return $sign.$currency.' '.number_format(intdiv($abs, 100)).sprintf('.%02d', $abs % 100);
+    }
+
+    /**
+     * E-80: amount in words for invoices, e.g. 150050 PHP ->
+     * "One thousand five hundred pesos and 50/100". No intl extension needed.
+     */
+    public static function inWords(int $minor, string $currency): string
+    {
+        $abs = abs($minor);
+        $whole = intdiv($abs, 100);
+        $cents = $abs % 100;
+        $unit = match ($currency) {
+            'PHP' => 'pesos',
+            'USD' => 'US dollars',
+            'EUR' => 'euros',
+            'GBP' => 'pounds sterling',
+            'AUD' => 'Australian dollars',
+            'SGD' => 'Singapore dollars',
+            'CAD' => 'Canadian dollars',
+            default => $currency,
+        };
+        $words = ucfirst(self::spell($whole));
+
+        return ($minor < 0 ? 'Minus '.lcfirst($words) : $words).' '.$unit.sprintf(' and %02d/100', $cents);
+    }
+
+    private static function spell(int $n): string
+    {
+        $ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+            'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+        $tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+
+        if ($n < 20) {
+            return $ones[$n];
+        }
+        if ($n < 100) {
+            return $tens[intdiv($n, 10)].($n % 10 ? '-'.$ones[$n % 10] : '');
+        }
+        if ($n < 1000) {
+            return $ones[intdiv($n, 100)].' hundred'.($n % 100 ? ' '.self::spell($n % 100) : '');
+        }
+        foreach ([1_000_000_000 => 'billion', 1_000_000 => 'million', 1000 => 'thousand'] as $size => $name) {
+            if ($n >= $size) {
+                return self::spell(intdiv($n, $size)).' '.$name.($n % $size ? ' '.self::spell($n % $size) : '');
+            }
+        }
+
+        return (string) $n;
+    }
+
     /** Regex for validated money input strings. */
     public const INPUT_REGEX = '/^\d{1,12}(\.\d{1,2})?$/';
 }

@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PerformanceHeaders;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -28,6 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->append(SecurityHeaders::class);
+        // E-130: Server-Timing + X-Query-Count when APP_DEBUG or PERF_HEADERS is on.
+        $middleware->prepend(PerformanceHeaders::class);
 
         // Account guards run after HandleInertiaRequests so their redirects pass back
         // through it (Inertia turns 302 into 303 for PUT/PATCH/DELETE visits).

@@ -314,3 +314,18 @@ resources/js/pages/  Inertia pages (auth/, admin/, settings/, Dashboard.vue)
 routes/web.php       app routes · routes/admin.php admin area · routes/settings.php
 docker-compose.yml   PostgreSQL 18 + Valkey for local development
 ```
+
+## Performance settings (enhancement batch E2)
+
+| Setting               | Local               | Production (Forge)                                                                                                             | Why                                                                                          |
+| --------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `SESSION_DRIVER`      | `redis`             | `redis`                                                                                                                        | No database read/write for the session on every request (E-113).                             |
+| `REDIS_CLIENT`        | `predis`            | `phpredis`                                                                                                                     | The PHP extension is faster; Forge's PHP builds include it (`php -m \| grep redis`) (E-114). |
+| `INERTIA_SSR_ENABLED` | `false`             | `false`                                                                                                                        | Every page is behind a login, so server rendering only adds work (E-112).                    |
+| `PERF_HEADERS`        | on with `APP_DEBUG` | `true` on staging only                                                                                                         | Adds `Server-Timing` and `X-Query-Count` headers (E-130).                                    |
+| OPcache               | optional            | `opcache.enable=1`, `opcache.memory_consumption=256`, `opcache.validate_timestamps=0` (FPM reload on deploy already resets it) | Lower CPU per request (E-115).                                                               |
+
+- Search uses PostgreSQL trigram indexes (`pg_trgm`, migration `2026_10_28_000000`).
+- The task page loads its side panels (history, time, files) right after the page (Inertia deferred props, group `panels`).
+- `tests/Feature/Performance/QueryBudgetTest.php` fails if a busy page starts running more queries than its budget.
+- Laravel Pulse (`/pulse`, users with `system.manage`) shows slow requests, slow queries, jobs and cache use.

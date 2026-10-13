@@ -19,6 +19,9 @@ return [
     | First Super Admin created by `php artisan db:seed` (only if none exists).
     */
     // Local development sign-in (php artisan dev:admin). Never used in production.
+    // E-130: add Server-Timing and X-Query-Count headers outside debug mode too (staging).
+    'perf_headers' => (bool) env('PERF_HEADERS', false),
+
     'dev_admin' => [
         'email' => env('DEV_ADMIN_EMAIL', 'admin@overeasy.local'),
         'password' => env('DEV_ADMIN_PASSWORD'),

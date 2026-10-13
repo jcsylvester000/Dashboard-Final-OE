@@ -11,3 +11,8 @@ parameters:
         - routes/
 
     level: 6
+
+    # Vendor-published Pulse migration (unchanged upstream code; its match() on the
+    # database driver has no default arm by design).
+    excludePaths:
+        - database/migrations/*_create_pulse_tables.php

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Settings\CompanyProfile;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\View\View;
@@ -31,6 +32,9 @@ class ProjectStatusController extends Controller
         return view('project-status', [
             'project' => $project,
             'client' => $workspace->name,
+            // E-47: the agency's logo on the client page (embedded, no extra request).
+            'logo' => app(CompanyProfile::class)->logoDataUri(),
+            'agency' => app(CompanyProfile::class)->get()['name'],
             'total' => $tasks->count(),
             'done' => $done->count(),
             'percent' => $tasks->count() > 0 ? (int) round($done->count() / $tasks->count() * 100) : 0,

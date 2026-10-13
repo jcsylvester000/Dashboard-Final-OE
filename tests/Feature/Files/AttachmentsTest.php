@@ -165,10 +165,12 @@ class AttachmentsTest extends TestCase
 
         $this->actingAs($this->colleague)->get(route('workspaces.tasks.show', [$this->ws, $this->task]))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('attachments', 1)
-                ->where('attachments.0.name', 'Task file.pdf')
-                ->where('attachments.0.can_delete', false)
-                ->where('fileLimits.max_mb', 25));
+                ->missing('attachments') // E-120: loaded right after the page
+                ->where('fileLimits.max_mb', 25)
+                ->loadDeferredProps('panels', fn (Assert $reload) => $reload
+                    ->has('attachments', 1)
+                    ->where('attachments.0.name', 'Task file.pdf')
+                    ->where('attachments.0.can_delete', false)));
 
         $this->actingAs($this->member)->get(route('workspaces.projects.show', [$this->ws, $project]))
             ->assertInertia(fn (Assert $page) => $page
