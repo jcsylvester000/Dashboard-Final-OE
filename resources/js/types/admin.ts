@@ -78,3 +78,12 @@ export type RoleTile = {
     href: string;
     tone: 'ok' | 'warn' | 'bad';
 };
+
+/** E-59: one getting-started step. */
+export type GettingStartedStep = {
+    key: string;
+    label: string;
+    hint: string;
+    href: string;
+    done: boolean;
+};

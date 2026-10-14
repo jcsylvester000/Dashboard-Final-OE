@@ -29,9 +29,13 @@ class InboxController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $tab = $request->validate(['tab' => ['nullable', Rule::in(self::TABS)]])['tab'] ?? 'attention';
+        $q = $request->validate(['tab' => ['nullable', Rule::in(self::TABS)], 'only' => ['nullable', Rule::in(['reviews'])]]);
+        $tab = $q['tab'] ?? 'attention';
+        $only = $q['only'] ?? null;
 
         $page = $this->tab($this->mine($user), $tab)
+            // E-58: "only my reviews".
+            ->when($only === 'reviews', fn (Builder $b) => $b->where('kind', NotificationKind::Review->value))
             ->with('workspace:id,name,slug')
             ->latest()
             ->paginate(30)
@@ -42,6 +46,7 @@ class InboxController extends Controller
 
         return Inertia::render('inbox/Index', [
             'tab' => $tab,
+            'only' => $only,
             'counts' => collect(self::TABS)->mapWithKeys(fn (string $t) => [$t => $this->tab($this->mine($user), $t)->count()]),
             'items' => $page->through(fn (InboxNotification $n): array => [...$this->present($n), 'can_approve' => isset($quick[$n->id])]),
             'kinds' => collect(NotificationKind::cases())->mapWithKeys(fn (NotificationKind $k) => [$k->value => $k->label()]),

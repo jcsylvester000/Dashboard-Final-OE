@@ -32,6 +32,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('notifications.edit');
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('notifications.update');
+    Route::put('settings/notifications/quiet', [NotificationSettingsController::class, 'quiet'])->name('notifications.quiet'); // E-58
+    Route::post('settings/notifications/focus', [NotificationSettingsController::class, 'focus'])->name('notifications.focus'); // E-58
 
     Route::get('settings/api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
     Route::post('settings/api-tokens', [ApiTokenController::class, 'store'])->middleware('throttle:10,1')->name('api-tokens.store');

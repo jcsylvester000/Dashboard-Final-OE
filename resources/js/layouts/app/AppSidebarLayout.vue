@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ViewAsBanner from '@/components/admin/ViewAsBanner.vue';
 import PrivacyNoticeDialog from '@/components/privacy/PrivacyNoticeDialog.vue';
+import SaveStatus from '@/components/SaveStatus.vue';
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
@@ -27,5 +28,6 @@ withDefaults(defineProps<Props>(), {
         </AppContent>
         <Toaster />
         <PrivacyNoticeDialog />
+        <SaveStatus />
     </AppShell>
 </template>

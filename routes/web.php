@@ -5,6 +5,7 @@ use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GettingStartedController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\PrivacyController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,10 @@ Route::middleware('auth')->group(function () {
         ->name('password.force.update');
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    // E-59: getting-started checklist.
+    Route::get('getting-started', [GettingStartedController::class, 'show'])->name('getting-started.show');
+    Route::post('getting-started/hide', [GettingStartedController::class, 'hide'])->name('getting-started.hide');
+    Route::post('getting-started/reopen', [GettingStartedController::class, 'reopen'])->name('getting-started.reopen');
 
     // Attachments (P8): uploads, signed downloads, delete.
     Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:60,1')->name('attachments.store');

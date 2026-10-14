@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\Dashboard\RoleHome;
 use App\Domain\Identity\Permissions;
+use App\Domain\Onboarding\GettingStarted;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Models\ActivityLog;
 use App\Models\Comment;
@@ -66,6 +67,9 @@ class DashboardController extends Controller
                 ]),
             // E-98: admin and Finance tiles (each links to the page it counts).
             'roleHome' => app(RoleHome::class)->tiles($user),
+            // E-59: first-run checklist for this person's job (null once hidden).
+            // Deferred: loads right after the page, so it never slows the dashboard down.
+            'gettingStarted' => Inertia::defer(fn () => app(GettingStarted::class)->card($user)),
             'mentions' => $this->recentMentions($user),
             'digest' => $this->digest($user),
             'myTasks' => $this->myTaskCounts($user),

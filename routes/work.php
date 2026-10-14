@@ -17,6 +17,7 @@ use App\Http\Controllers\Work\SprintController;
 use App\Http\Controllers\Work\TaskBulkController;
 use App\Http\Controllers\Work\TaskController;
 use App\Http\Controllers\Work\TaskFlowController;
+use App\Http\Controllers\Work\TaskMuteController;
 use App\Http\Controllers\Work\TimeController;
 use App\Http\Controllers\Work\TimelineController;
 use Illuminate\Support\Facades\Route;
@@ -96,6 +97,8 @@ Route::middleware('auth')->group(function () {
             Route::delete('tasks/{task}/checklist/{checklistItem}', [ChecklistController::class, 'destroy'])->name('tasks.checklist.destroy');
             Route::post('tasks/{task}/dependencies', [TaskFlowController::class, 'addDependency'])->name('tasks.dependencies.store');
             Route::post('tasks/{task}/comments', [CommentController::class, 'store'])->name('tasks.comments.store');
+            Route::post('tasks/{task}/mute', [TaskMuteController::class, 'store'])->name('tasks.mute'); // E-58
+            Route::delete('tasks/{task}/mute', [TaskMuteController::class, 'destroy'])->name('tasks.unmute');
             Route::put('comments/{comment}', [CommentController::class, 'update'])->name('comments.update');
             Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
         });

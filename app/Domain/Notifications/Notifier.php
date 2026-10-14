@@ -19,6 +19,7 @@ class Notifier
         private readonly WorkspaceAccess $access,
         private readonly NotificationPreferences $preferences,
         private readonly AlertBatch $batch,
+        private readonly QuietHours $quietHours,
     ) {}
 
     /**
@@ -61,7 +62,10 @@ class Notifier
                 continue;
             }
 
-            $user->notify(new WorkNotification($kind, $payload, $workspace->id, $mode === NotificationKind::MODE_DIGEST));
+            // E-58: focus / after hours -> quiet (digest, no pop-up); a snoozed task -> snoozed alert.
+            $snooze = $this->quietHours->mutedUntil($user, isset($payload['task_id']) ? (int) $payload['task_id'] : null);
+            $quiet = $mode === NotificationKind::MODE_DIGEST || $snooze !== null || $this->quietHours->isQuiet($user);
+            $user->notify(new WorkNotification($kind, $payload, $workspace->id, $quiet, $snooze?->toIso8601String()));
             $sent++;
         }
 
@@ -90,7 +94,8 @@ class Notifier
             if ($mode === NotificationKind::MODE_OFF) {
                 continue;
             }
-            $user->notify(new WorkNotification($kind, $payload, null, $mode === NotificationKind::MODE_DIGEST));
+            $quiet = $mode === NotificationKind::MODE_DIGEST || $this->quietHours->isQuiet($user); // E-58
+            $user->notify(new WorkNotification($kind, $payload, null, $quiet));
             $sent++;
         }
 

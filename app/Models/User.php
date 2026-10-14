@@ -33,11 +33,14 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $access_end_alerted_at
  * @property string|null $remember_token
  * @property array<string, string>|null $notification_preferences
+ * @property array<string, mixed>|null $quiet_settings E-58: focus window, after-hours digest
+ * @property Carbon|null $focus_until E-58: "focus now" ends at
+ * @property array<string, mixed>|null $onboarding E-59: getting-started checklist state
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable(['name', 'email', 'title', 'primary_department_id', 'password'])]
-#[Hidden(['password', 'remember_token', 'notification_preferences'])]
+#[Hidden(['password', 'remember_token', 'notification_preferences', 'quiet_settings', 'onboarding'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -74,6 +77,9 @@ class User extends Authenticatable
             'access_ends_on' => 'date',
             'access_end_alerted_at' => 'datetime',
             'notification_preferences' => 'array',
+            'quiet_settings' => 'array',
+            'focus_until' => 'datetime',
+            'onboarding' => 'array',
         ];
     }
 

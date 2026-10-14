@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Deferred, Head, Link } from '@inertiajs/vue3';
+import GettingStartedCard from '@/components/dashboard/GettingStartedCard.vue';
 import RoleHomeTiles from '@/components/dashboard/RoleHomeTiles.vue';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -25,11 +26,20 @@ import {
     show as workspaceShow,
 } from '@/routes/workspaces';
 import { show as taskShow } from '@/routes/workspaces/tasks';
-import type { DepartmentOption, RoleTile } from '@/types/admin';
+import type {
+    DepartmentOption,
+    GettingStartedStep,
+    RoleTile,
+} from '@/types/admin';
 import type { InboxItem } from '@/types/notifications';
 
 defineProps<{
     roleHome: { admin: RoleTile[]; finance: RoleTile[] };
+    gettingStarted?: {
+        steps: GettingStartedStep[];
+        done: number;
+        total: number;
+    } | null;
     profile: {
         name: string;
         title: string | null;
@@ -101,6 +111,19 @@ defineOptions({
                 · {{ profile.roles.map(roleLabel).join(', ') || 'No role' }}
             </p>
         </div>
+
+        <!-- E-59: first steps for this person's job (loads right after the page) -->
+        <Deferred data="gettingStarted">
+            <template #fallback><span class="sr-only">Loading</span></template>
+            <GettingStartedCard
+                v-if="
+                    gettingStarted && gettingStarted.done < gettingStarted.total
+                "
+                :steps="gettingStarted.steps"
+                :done="gettingStarted.done"
+                :total="gettingStarted.total"
+            />
+        </Deferred>
 
         <!-- E-98: what needs admin / Finance attention -->
         <RoleHomeTiles title="Admin" :tiles="roleHome.admin" />

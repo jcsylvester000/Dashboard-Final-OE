@@ -112,6 +112,8 @@ export type TaskDetail = TaskRow & {
     dependents: (TaskRow & { link_type: string })[];
     watchers: { id: number; name: string }[];
     watching: boolean;
+    /** E-58: my alerts about this task are snoozed until (ISO) */
+    muted_until?: string | null;
     comments: TaskComment[];
 };
 

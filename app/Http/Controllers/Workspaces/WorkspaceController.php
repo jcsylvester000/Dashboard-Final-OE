@@ -178,7 +178,7 @@ class WorkspaceController extends Controller
                     'mode' => $r->mode, 'reviewers' => User::query()->whereIn('id', $r->user_ids)->orderBy('name')->pluck('name')->values(),
                 ])->values(),
             'reviewModes' => ReviewRule::MODES,
-            'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2] ?? [],
+            'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2],
             'projectOptions' => $workspace->projects()->where('status', '!=', 'archived')->orderBy('name')->get(['id', 'name']),
             'memberOptions' => $this->presenter->memberOptions($workspace),
             'taskTypes' => Task::TYPES,

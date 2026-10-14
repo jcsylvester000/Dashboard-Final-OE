@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Domain\Notifications\NotificationKind;
 use App\Domain\Notifications\NotificationPreferences;
+use App\Domain\Notifications\QuietHours;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +32,54 @@ class NotificationSettingsController extends Controller
                 'default' => $k->defaultMode(),
             ], NotificationKind::cases()),
             'modes' => $this->preferences->all($user),
+            // E-58
+            'quiet' => QuietHours::settings($user),
+            'focusUntil' => $user->focus_until !== null && $user->focus_until->isFuture() ? $user->focus_until->toIso8601String() : null,
         ]);
+    }
+
+    /** E-58: daily focus window and holding alerts outside working hours. */
+    public function quiet(Request $request): RedirectResponse
+    {
+        $time = ['nullable', 'date_format:H:i'];
+        $data = $request->validate([
+            'focus_from' => $time, 'focus_to' => [...$time, 'required_with:focus_from'],
+            'focus_days' => ['array'], 'focus_days.*' => ['integer', 'between:1,7'],
+            'after_hours' => ['boolean'],
+            'work_from' => ['required', 'date_format:H:i'], 'work_to' => ['required', 'date_format:H:i'],
+            'work_days' => ['array'], 'work_days.*' => ['integer', 'between:1,7'],
+        ]);
+        /** @var User $user */
+        $user = $request->user();
+        $user->forceFill(['quiet_settings' => [
+            'focus_from' => $data['focus_from'] ?? null, 'focus_to' => $data['focus_to'] ?? null,
+            'focus_days' => array_values(array_map('intval', $data['focus_days'] ?? [])),
+            'after_hours' => (bool) ($data['after_hours'] ?? false),
+            'work_from' => $data['work_from'], 'work_to' => $data['work_to'],
+            'work_days' => array_values(array_map('intval', $data['work_days'] ?? [])),
+        ]])->save();
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Quiet hours saved.')]);
+
+        return back();
+    }
+
+    /** E-58: focus now for a while (no pop-ups; alerts wait in the digest), or stop. */
+    public function focus(Request $request): RedirectResponse
+    {
+        $for = (string) $request->validate(['for' => ['required', Rule::in(['off', '30m', '1h', '2h', 'today'])]])['for'];
+        /** @var User $user */
+        $user = $request->user();
+        $until = match ($for) {
+            '30m' => now()->addMinutes(30),
+            '1h' => now()->addHour(),
+            '2h' => now()->addHours(2),
+            'today' => now()->endOfDay(),
+            default => null,
+        };
+        $user->forceFill(['focus_until' => $until])->save();
+        Inertia::flash('toast', ['type' => 'success', 'message' => $until === null ? __('Focus off. Alerts pop up again.') : __('Focusing until :t. Alerts wait in your digest.', ['t' => $until->format('g:i A')])]);
+
+        return back();
     }
 
     public function update(Request $request): RedirectResponse

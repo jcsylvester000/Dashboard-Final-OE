@@ -23,6 +23,9 @@ class InboxChannel extends DatabaseChannel
             $payload['kind'] = $notification->kind->value;
             $payload['workspace_id'] = $notification->workspaceId;
             $payload['quiet'] = $notification->quiet;
+            if ($notification->snoozeUntil !== null) {
+                $payload['snoozed_until'] = $notification->snoozeUntil;
+            }
         }
 
         return $payload;

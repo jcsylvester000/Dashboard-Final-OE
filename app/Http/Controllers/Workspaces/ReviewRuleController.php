@@ -26,7 +26,7 @@ class ReviewRuleController extends Controller
     public function store(Request $request, Workspace $workspace, WorkspaceAccess $access): RedirectResponse
     {
         Gate::authorize('lead', $workspace);
-        $deliverables = Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2] ?? [];
+        $deliverables = Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2];
         $data = $request->validate([
             'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')->where('workspace_id', $workspace->id)],
             'deliverable_type' => ['nullable', Rule::in($deliverables)],

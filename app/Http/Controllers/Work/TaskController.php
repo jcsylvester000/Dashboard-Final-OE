@@ -6,6 +6,7 @@ use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Files\AttachmentService;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\ViewAs;
+use App\Domain\Notifications\QuietHours;
 use App\Domain\Text\RichText;
 use App\Domain\Work\ReviewService;
 use App\Domain\Work\TaskPresenter;
@@ -284,6 +285,8 @@ class TaskController extends Controller
                 'dependents' => $task->dependents->map(fn (Task $t) => [...$this->present->row($t, $open), 'link_type' => $t->getRelation('pivot')->getAttribute('type')])->values(),
                 'watchers' => $task->watchers->map->only(['id', 'name'])->values(),
                 'watching' => $task->watchers->contains('id', $user->id),
+                // E-58: alerts about this task snoozed by me until (ISO), if any.
+                'muted_until' => app(QuietHours::class)->mutedUntil($user, $task->id)?->toIso8601String(),
                 'comments' => $task->comments->map(fn (Comment $c) => [
                     'id' => $c->id,
                     'body' => $c->body,

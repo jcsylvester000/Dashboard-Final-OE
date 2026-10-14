@@ -44,9 +44,19 @@ import TaskPicker from '@/components/work/TaskPicker.vue';
 import TaskTimeCard from '@/components/work/TaskTimeCard.vue';
 import WorkDetailsCard from '@/components/work/WorkDetailsCard.vue';
 import { confirmDialog } from '@/composables/useConfirm';
-import { chipColor, formatMinutes, timeAgo } from '@/lib/format';
+import {
+    chipColor,
+    formatDateTime,
+    formatMinutes,
+    timeAgo,
+} from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
-import { index as tasksIndex, show } from '@/routes/workspaces/tasks';
+import {
+    mute as muteRoute,
+    index as tasksIndex,
+    show,
+    unmute as unmuteRoute,
+} from '@/routes/workspaces/tasks';
 import type { AttachmentRow, FileLimits } from '@/types/files';
 import type { TaskTime } from '@/types/time';
 import type { LinkRow } from '@/types/workspace';
@@ -232,6 +242,24 @@ function removeDependency(dep: TaskRow): void {
     );
 }
 
+function mute(forWhen: string): void {
+    router.post(
+        muteRoute.url({ workspace: props.workspace.slug, task: props.task.id }),
+        { for: forWhen },
+        { preserveScroll: true },
+    );
+}
+
+function unmute(): void {
+    router.delete(
+        unmuteRoute.url({
+            workspace: props.workspace.slug,
+            task: props.task.id,
+        }),
+        { preserveScroll: true },
+    );
+}
+
 function toggleWatch(): void {
     router.post(
         TaskController.watch.url({ workspace: ws.value, task: props.task.id }),
@@ -342,6 +370,27 @@ function describe(entry: TimelineEntry): string {
                     <component :is="task.watching ? BellOff : Bell" />
                     {{ task.watching ? 'Unwatch' : 'Watch' }}
                 </Button>
+                <!-- E-58: snooze my alerts about this task -->
+                <Button
+                    v-if="task.muted_until"
+                    variant="outline"
+                    size="sm"
+                    :title="`Alerts snoozed until ${formatDateTime(task.muted_until)}`"
+                    @click="unmute"
+                    >Alerts snoozed · turn back on</Button
+                >
+                <NativeSelect
+                    v-else
+                    class="w-auto"
+                    :model-value="''"
+                    aria-label="Snooze alerts about this task"
+                    @update:model-value="(v) => v && mute(String(v))"
+                >
+                    <option value="">Snooze alerts…</option>
+                    <option value="1h">For 1 hour</option>
+                    <option value="tomorrow">Until tomorrow 9 AM</option>
+                    <option value="next_week">Until Monday 9 AM</option>
+                </NativeSelect>
                 <Button
                     v-if="can"
                     variant="outline"

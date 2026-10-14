@@ -32,6 +32,8 @@ const props = defineProps<{
     counts: Record<Tab, number>;
     items: Paginated<InboxItem>;
     kinds: Record<NotificationKind, string>;
+    /** E-58: "only my reviews" */
+    only?: 'reviews' | null;
 }>();
 
 defineOptions({
@@ -129,7 +131,11 @@ function doneAllShown(): void {
             <Link
                 v-for="t in tabs"
                 :key="t.key"
-                :href="index({ query: { tab: t.key } })"
+                :href="
+                    index({
+                        query: only ? { tab: t.key, only } : { tab: t.key },
+                    })
+                "
                 class="-mb-px border-b-2 px-3 py-2"
                 :class="
                     t.key === tab
@@ -142,6 +148,21 @@ function doneAllShown(): void {
                     counts[t.key]
                 }}</span>
             </Link>
+            <Link
+                :href="
+                    index({
+                        query: only ? { tab } : { tab, only: 'reviews' },
+                    })
+                "
+                class="ml-auto self-center rounded-full border px-2.5 py-1 text-xs"
+                :class="
+                    only
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground'
+                "
+                :aria-pressed="only === 'reviews'"
+                >Only my reviews</Link
+            >
         </nav>
 
         <p

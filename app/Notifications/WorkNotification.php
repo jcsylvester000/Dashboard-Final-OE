@@ -25,6 +25,8 @@ class WorkNotification extends Notification implements ShouldQueue
         public readonly array $payload,
         public readonly ?int $workspaceId,
         public readonly bool $quiet = false,
+        // E-58: the person snoozed this task's alerts until then (ISO 8601).
+        public readonly ?string $snoozeUntil = null,
     ) {}
 
     /**
