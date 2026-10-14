@@ -43,8 +43,12 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property list<array{user_id: int|null, name: string, department_id: int|null, minutes: int, first: string, last: string}>|null $missing_rates work the draft could not price (E-64)
  * @property Carbon|null $created_at
+ * @property string|null $service_label shown instead of the period dates when set (E-67)
+ * @property Carbon|null $review_requested_at draft sent for a second person's check (E-66)
+ * @property int|null $review_requested_by
+ * @property string|null $review_note last send-back note
  */
-#[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by'])]
+#[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by', 'service_label'])]
 class Invoice extends Model
 {
     /** How hour lines are grouped: department, project or person. */
@@ -108,6 +112,8 @@ class Invoice extends Model
             'missing_rates' => 'array',
             'finalized_at' => 'datetime',
             'overdue_alerted_at' => 'datetime',
+            'review_requested_at' => 'datetime',
+            'review_requested_by' => 'integer',
         ];
     }
 

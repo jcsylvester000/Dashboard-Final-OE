@@ -73,6 +73,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::middleware('can:manage-company')->group(function () {
         Route::get('company', [CompanySettingsController::class, 'edit'])->name('company.edit');
         Route::put('company', [CompanySettingsController::class, 'update'])->name('company.update');
+        Route::put('company/finance', [CompanySettingsController::class, 'updateFinance'])->name('company.finance');
         Route::post('company/logo', [CompanySettingsController::class, 'uploadLogo'])->name('company.logo.store');
         Route::delete('company/logo', [CompanySettingsController::class, 'removeLogo'])->name('company.logo.destroy');
         Route::get('company/logo', [CompanySettingsController::class, 'logo'])->name('company.logo');

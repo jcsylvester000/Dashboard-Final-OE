@@ -56,6 +56,7 @@ type Period = {
 
 const props = defineProps<{
     workspace: { id: number; name: string; slug: string; color: string };
+    credits: Record<string, number>;
     profile: {
         configured: boolean;
         currency: string;
@@ -260,6 +261,17 @@ const statusText: Record<Period['status'], string> = {
     <div class="flex flex-1 flex-col gap-4 p-4">
         <BillingNav />
         <h1 class="text-xl font-semibold">{{ workspace.name }}</h1>
+        <p
+            v-if="Object.keys(credits).length"
+            class="text-sm text-emerald-700 dark:text-emerald-300"
+        >
+            Client credit:
+            <template v-for="(amount, cur, i) in credits" :key="cur"
+                ><template v-if="i">, </template
+                >{{ formatMoney(amount, String(cur)) }}</template
+            >
+            (applied to the next invoice when it is finalized)
+        </p>
         <!-- S3-11: set up in order - profile, rates, then periods and invoices. -->
         <ol class="flex flex-wrap gap-2 text-xs" aria-label="Billing setup">
             <li

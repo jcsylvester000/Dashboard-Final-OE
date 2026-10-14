@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Billing\FinanceSettings;
+use App\Domain\Billing\Money;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Settings\CompanyProfile;
 use App\Http\Controllers\Controller;
+use App\Models\BillingProfile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -21,6 +25,7 @@ class CompanySettingsController extends Controller
     public function __construct(
         private readonly CompanyProfile $company,
         private readonly ActivityLogger $activity,
+        private readonly FinanceSettings $finance,
     ) {}
 
     public function edit(): Response
@@ -30,7 +35,41 @@ class CompanySettingsController extends Controller
         return Inertia::render('admin/Company', [
             'company' => [...$c, 'has_logo' => $c['logo_path'] !== null],
             'logoUrl' => $c['logo_path'] !== null ? route('admin.company.logo', ['v' => substr(md5($c['logo_path']), 0, 8)]) : null,
+            'finance' => $this->finance->get(),
+            'reviewModes' => FinanceSettings::REVIEW_MODES,
+            'currencies' => BillingProfile::currencies(),
         ]);
+    }
+
+    /**
+     * E-66 / E-67: who must check invoices before they are finalized, and how far back an
+     * issue date may go.
+     */
+    public function updateFinance(Request $request): RedirectResponse
+    {
+        $currencies = BillingProfile::currencies();
+        $data = $request->validate([
+            'review' => ['required', Rule::in(array_keys(FinanceSettings::REVIEW_MODES))],
+            'thresholds' => ['nullable', 'array'],
+            'thresholds.*' => ['nullable', 'regex:'.Money::INPUT_REGEX],
+            'backdate_days' => ['required', 'integer', 'min:0', 'max:366'],
+        ]);
+        $thresholds = [];
+        foreach ((array) ($data['thresholds'] ?? []) as $currency => $amount) {
+            if (in_array($currency, $currencies, true) && $amount !== null && Money::parse((string) $amount) > 0) {
+                $thresholds[(string) $currency] = Money::parse((string) $amount);
+            }
+        }
+        if ($data['review'] === 'above' && $thresholds === []) {
+            return back()->withErrors(['thresholds' => __('Set an amount for at least one currency.')]);
+        }
+        $values = ['review' => (string) $data['review'], 'thresholds' => $thresholds, 'backdate_days' => (int) $data['backdate_days']];
+        $before = $this->finance->get();
+        $this->finance->save($values);
+        $this->activity->log('settings.finance-updated', null, ['before' => $before, 'after' => $values]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invoice rules saved.')]);
+
+        return back();
     }
 
     public function update(Request $request): RedirectResponse

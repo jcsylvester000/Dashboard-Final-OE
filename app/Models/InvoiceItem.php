@@ -21,11 +21,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $unit_minor
  * @property int $amount_minor
  * @property int $position
+ * @property bool $manual added by Finance on the draft (E-63); kept when the draft is rebuilt
+ * @property bool $taxable
+ * @property int|null $discount_bp percentage discount (basis points); the amount recomputes from it
+ * @property int|null $applies_to_item_id a line discount's target line (null = whole invoice)
+ * @property string|null $reason
  */
-#[Fillable(['invoice_id', 'type', 'description', 'department_id', 'minutes', 'quantity', 'unit_minor', 'amount_minor', 'position'])]
+#[Fillable(['invoice_id', 'type', 'description', 'department_id', 'minutes', 'quantity', 'unit_minor', 'amount_minor', 'position', 'manual', 'taxable', 'discount_bp', 'applies_to_item_id', 'reason'])]
 class InvoiceItem extends Model
 {
-    public const TYPES = ['retainer', 'hours', 'fixed', 'expense', 'credit', 'adjustment'];
+    public const TYPES = ['retainer', 'hours', 'fixed', 'expense', 'credit', 'adjustment', 'discount'];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = ['manual' => false, 'taxable' => true];
 
     protected static function booted(): void
     {
@@ -52,6 +62,10 @@ class InvoiceItem extends Model
             'unit_minor' => 'integer',
             'amount_minor' => 'integer',
             'position' => 'integer',
+            'manual' => 'boolean',
+            'taxable' => 'boolean',
+            'discount_bp' => 'integer',
+            'applies_to_item_id' => 'integer',
         ];
     }
 

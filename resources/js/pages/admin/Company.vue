@@ -14,7 +14,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { confirmDialog } from '@/composables/useConfirm';
-import { edit, update } from '@/routes/admin/company';
+import NativeSelect from '@/components/NativeSelect.vue';
+import { edit, finance as financeRoute, update } from '@/routes/admin/company';
 import {
     destroy as removeLogoRoute,
     store as storeLogo,
@@ -37,6 +38,13 @@ const props = defineProps<{
         has_logo: boolean;
     };
     logoUrl: string | null;
+    finance: {
+        review: string;
+        thresholds: Record<string, number>;
+        backdate_days: number;
+    };
+    reviewModes: Record<string, string>;
+    currencies: string[];
 }>();
 
 defineOptions({
@@ -53,6 +61,20 @@ const form = useForm({
     contact: props.company.contact ?? '',
     brand_color: props.company.brand_color,
     invoice_footer: props.company.invoice_footer ?? '',
+});
+
+// E-66 / E-67: invoice rules. Thresholds are entered as plain amounts ("100000.00").
+const financeForm = useForm({
+    review: props.finance.review,
+    thresholds: Object.fromEntries(
+        props.currencies.map((c) => [
+            c,
+            props.finance.thresholds[c]
+                ? (props.finance.thresholds[c] / 100).toFixed(2)
+                : '',
+        ]),
+    ) as Record<string, string>,
+    backdate_days: props.finance.backdate_days,
 });
 
 const logoForm = useForm<{ logo: File | null }>({ logo: null });
@@ -250,6 +272,88 @@ async function removeLogo(): Promise<void> {
                     <div class="sm:col-span-2">
                         <Button type="submit" :disabled="form.processing"
                             >Save details</Button
+                        >
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Invoice rules</CardTitle>
+                <CardDescription
+                    >A second person in Finance checks invoices before they get
+                    a number. The person who sends a draft for review can't
+                    finalize it.</CardDescription
+                >
+            </CardHeader>
+            <CardContent>
+                <form
+                    class="grid gap-3 sm:grid-cols-2"
+                    @submit.prevent="
+                        financeForm.put(financeRoute.url(), {
+                            preserveScroll: true,
+                        })
+                    "
+                >
+                    <div class="grid gap-1 sm:col-span-2">
+                        <Label for="f-review">Second-person check</Label>
+                        <NativeSelect
+                            id="f-review"
+                            v-model="financeForm.review"
+                        >
+                            <option
+                                v-for="(label, key) in reviewModes"
+                                :key="key"
+                                :value="key"
+                            >
+                                {{ label }}
+                            </option>
+                        </NativeSelect>
+                    </div>
+                    <template v-if="financeForm.review === 'above'">
+                        <div
+                            v-for="c in currencies"
+                            :key="c"
+                            class="grid gap-1"
+                        >
+                            <Label :for="`f-th-${c}`"
+                                >{{ c }} invoices from</Label
+                            >
+                            <Input
+                                :id="`f-th-${c}`"
+                                v-model="financeForm.thresholds[c]"
+                                inputmode="decimal"
+                                placeholder="Leave blank: no check"
+                            />
+                        </div>
+                        <InputError
+                            class="sm:col-span-2"
+                            :message="financeForm.errors.thresholds"
+                        />
+                    </template>
+                    <div class="grid gap-1">
+                        <Label for="f-backdate">Issue date can go back</Label>
+                        <div class="flex items-center gap-2">
+                            <Input
+                                id="f-backdate"
+                                v-model.number="financeForm.backdate_days"
+                                type="number"
+                                min="0"
+                                max="366"
+                                class="w-24"
+                            />
+                            <span class="text-sm text-muted-foreground"
+                                >days</span
+                            >
+                        </div>
+                        <InputError
+                            :message="financeForm.errors.backdate_days"
+                        />
+                    </div>
+                    <div class="sm:col-span-2">
+                        <Button type="submit" :disabled="financeForm.processing"
+                            >Save invoice rules</Button
                         >
                     </div>
                 </form>

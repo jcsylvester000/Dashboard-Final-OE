@@ -34,18 +34,26 @@ import {
     index,
     pdf,
     recalculate,
+    review as requestReview,
+    sendBack,
     show,
     update,
     workReport,
     cancel as voidInvoice,
 } from '@/routes/billing/invoices';
+import { destroy as destroyLine } from '@/routes/billing/invoice-lines';
+import { store as storeDiscount } from '@/routes/billing/invoices/discounts';
+import { store as storeLine } from '@/routes/billing/invoices/lines';
 import { store as storePayment } from '@/routes/billing/invoices/payments';
+import { reverse as reversePaymentRoute } from '@/routes/billing/payments';
 import type { InvoiceDetail } from '@/types/billing';
 
 const props = defineProps<{
     invoice: InvoiceDetail;
     methods: Record<string, string>;
     groupings: Record<string, string>;
+    currencies: string[];
+    backdateDays: number;
 }>();
 
 defineOptions({
@@ -80,14 +88,71 @@ const money = (minor: number | null | undefined) =>
 const expanded = ref<Record<number, boolean>>({});
 const opts = { preserveScroll: true };
 
-const notes = useForm({ notes: props.invoice.notes ?? '' });
+const notes = useForm({
+    notes: props.invoice.notes ?? '',
+    service_label: props.invoice.service_label ?? '',
+});
 const payment = useForm({
     amount: '',
     method: 'bank',
     reference: '',
     received_on: localToday(),
     note: '',
+    fee: '',
+    withholding: '',
+    received_amount: '',
+    received_currency: props.invoice.currency,
 });
+
+// E-63: Finance's own lines and discounts on a draft.
+const lineForm = useForm({
+    description: '',
+    quantity: '1',
+    unit_price: '',
+    taxable: true,
+    reason: '',
+});
+const discountForm = useForm({
+    kind: 'percent',
+    value: '',
+    applies_to_item_id: '' as string | number,
+    reason: '',
+});
+const discountable = computed(() =>
+    inv.value.items.filter((i) => i.type !== 'discount'),
+);
+async function removeLine(id: number): Promise<void> {
+    if (await confirmDialog('Remove this line from the draft?')) {
+        router.delete(destroyLine.url(id), opts);
+    }
+}
+
+// E-66 / E-67: review before finalize; issue date within the allowed window.
+const issueDate = ref(localToday());
+const minIssueDate = computed(() => {
+    const d = new Date(`${localToday()}T00:00:00`);
+    d.setDate(d.getDate() - props.backdateDays);
+    return d.toISOString().slice(0, 10);
+});
+const sendBackForm = useForm({ note: '' });
+const showSendBack = ref(false);
+async function doFinalize(): Promise<void> {
+    if (
+        await confirmDialog(
+            'Finalize? The invoice gets a number and can no longer be changed.',
+        )
+    ) {
+        router.post(
+            finalize.url(inv.value.id),
+            { issue_date: issueDate.value },
+            opts,
+        );
+    }
+}
+
+// E-68: reverse a payment with a reason.
+const reverseFor = ref<number | null>(null);
+const reverseForm = useForm({ reason: '' });
 const creditForm = useForm({ amount: '', reason: '' });
 const voidForm = useForm({ reason: '' });
 
@@ -200,25 +265,108 @@ async function removeDraft(): Promise<void> {
                     >Recalculate</Button
                 >
                 <Button
+                    v-if="inv.review.required && !inv.review.requested_at"
                     size="sm"
                     :disabled="(inv.missing_rates?.length ?? 0) > 0"
-                    :title="
-                        (inv.missing_rates?.length ?? 0) > 0
-                            ? 'Add the missing rates first'
-                            : ''
-                    "
-                    @click="
-                        post(
-                            finalize.url(inv.id),
-                            'Finalize? The invoice gets a number and can no longer be changed.',
-                        )
-                    "
-                    >Finalize</Button
+                    @click="post(requestReview.url(inv.id))"
+                    >Send for review</Button
                 >
+                <Button
+                    v-if="
+                        inv.review.requested_at &&
+                        !inv.review.mine &&
+                        inv.review.required
+                    "
+                    variant="outline"
+                    size="sm"
+                    @click="showSendBack = !showSendBack"
+                    >Send back</Button
+                >
+                <template v-if="inv.review.can_finalize">
+                    <label
+                        class="flex items-center gap-1.5 text-xs text-muted-foreground"
+                    >
+                        Issue date
+                        <Input
+                            v-model="issueDate"
+                            type="date"
+                            class="h-8 w-36 text-xs"
+                            :min="minIssueDate"
+                            :max="localToday()"
+                            aria-label="Issue date"
+                        />
+                    </label>
+                    <Button
+                        size="sm"
+                        :disabled="(inv.missing_rates?.length ?? 0) > 0"
+                        :title="
+                            (inv.missing_rates?.length ?? 0) > 0
+                                ? 'Add the missing rates first'
+                                : ''
+                        "
+                        @click="doFinalize"
+                        >Finalize</Button
+                    >
+                </template>
                 <Button variant="ghost" size="sm" @click="removeDraft"
                     >Delete draft</Button
                 >
             </div>
+        </div>
+
+        <div
+            v-if="inv.status === 'draft' && inv.review.required"
+            class="rounded-md border bg-muted/40 p-3 text-sm"
+            role="status"
+        >
+            <template v-if="inv.review.requested_at">
+                <p>
+                    <span class="font-medium">Waiting for review.</span>
+                    Sent by {{ inv.review.requested_by }}
+                    {{ formatDateTime(inv.review.requested_at) }}.
+                    <template v-if="inv.review.mine"
+                        >Someone else in Finance finalizes it. Any change to the
+                        draft cancels the request.</template
+                    >
+                </p>
+            </template>
+            <p v-else>
+                This invoice needs a second person in Finance to check it. Press
+                <span class="font-medium">Send for review</span> when the draft
+                is ready.
+            </p>
+            <p
+                v-if="inv.review.note"
+                class="mt-1 text-amber-800 dark:text-amber-200"
+            >
+                Sent back: {{ inv.review.note }}
+            </p>
+            <form
+                v-if="showSendBack"
+                class="mt-2 flex flex-wrap gap-2"
+                @submit.prevent="
+                    sendBackForm.post(sendBack.url(inv.id), {
+                        ...opts,
+                        onSuccess: () => {
+                            sendBackForm.reset();
+                            showSendBack = false;
+                        },
+                    })
+                "
+            >
+                <Input
+                    v-model="sendBackForm.note"
+                    class="min-w-0 flex-1"
+                    placeholder="What needs fixing?"
+                    aria-label="Send-back note"
+                />
+                <Button
+                    size="sm"
+                    type="submit"
+                    :disabled="!sendBackForm.note.trim()"
+                    >Send back</Button
+                >
+            </form>
         </div>
 
         <div
@@ -310,6 +458,32 @@ async function removeDraft(): Promise<void> {
                                             line.description
                                         }}</span>
                                         <span
+                                            v-if="!line.taxable"
+                                            class="ml-1 rounded bg-muted px-1 text-xs text-muted-foreground"
+                                            >no tax</span
+                                        >
+                                        <span
+                                            v-if="
+                                                line.reason &&
+                                                line.type !== 'discount'
+                                            "
+                                            class="ml-1 text-xs text-muted-foreground"
+                                            >· {{ line.reason }}</span
+                                        >
+                                        <button
+                                            v-if="
+                                                line.manual &&
+                                                inv.status === 'draft'
+                                            "
+                                            type="button"
+                                            class="ml-2 text-xs text-rose-600 hover:underline"
+                                            :aria-label="`Remove ${line.description}`"
+                                            @click="removeLine(line.id)"
+                                        >
+                                            Remove
+                                        </button>
+                                        <span
+                                            v-if="line.sources.length"
                                             class="ml-1 text-xs text-muted-foreground"
                                             >({{ line.sources.length }} source{{
                                                 line.sources.length === 1
@@ -319,14 +493,22 @@ async function removeDraft(): Promise<void> {
                                         >
                                     </td>
                                     <td class="py-2 text-right tabular-nums">
-                                        {{
-                                            line.minutes !== null
-                                                ? `${line.quantity} h`
-                                                : line.quantity
-                                        }}
+                                        <template
+                                            v-if="line.type !== 'discount'"
+                                            >{{
+                                                line.minutes !== null
+                                                    ? `${line.quantity} h`
+                                                    : line.quantity
+                                            }}</template
+                                        >
                                     </td>
                                     <td class="py-2 text-right tabular-nums">
-                                        {{ money(line.unit_minor) }}
+                                        <template
+                                            v-if="line.type !== 'discount'"
+                                            >{{
+                                                money(line.unit_minor)
+                                            }}</template
+                                        >
                                     </td>
                                     <td class="py-2 text-right tabular-nums">
                                         {{ money(line.amount_minor) }}
@@ -526,7 +708,7 @@ async function removeDraft(): Promise<void> {
                 <Card v-if="inv.status === 'draft'">
                     <CardHeader
                         ><CardTitle class="text-base"
-                            >Notes on the invoice</CardTitle
+                            >Label and notes</CardTitle
                         ></CardHeader
                     >
                     <CardContent>
@@ -536,18 +718,170 @@ async function removeDraft(): Promise<void> {
                                 notes.put(update.url(inv.id), opts)
                             "
                         >
+                            <Input
+                                v-model="notes.service_label"
+                                maxlength="120"
+                                placeholder="Service period label, e.g. October 2026 retainer"
+                                aria-label="Service period label"
+                            />
                             <textarea
                                 v-model="notes.notes"
                                 rows="3"
                                 class="w-full rounded-md border bg-transparent p-2 text-sm"
+                                aria-label="Notes"
                             />
                             <Button
                                 size="sm"
                                 type="submit"
                                 :disabled="notes.processing"
-                                >Save notes</Button
+                                >Save</Button
                             >
                         </form>
+                    </CardContent>
+                </Card>
+
+                <Card v-if="inv.status === 'draft'">
+                    <CardHeader>
+                        <CardTitle class="text-base"
+                            >Adjust the draft</CardTitle
+                        >
+                        <CardDescription
+                            >Lines and discounts you add stay when the draft is
+                            recalculated.</CardDescription
+                        >
+                    </CardHeader>
+                    <CardContent class="space-y-4">
+                        <form
+                            class="grid gap-2 text-sm"
+                            @submit.prevent="
+                                lineForm.post(storeLine.url(inv.id), {
+                                    ...opts,
+                                    onSuccess: () => lineForm.reset(),
+                                })
+                            "
+                        >
+                            <p class="font-medium">Add a line</p>
+                            <Input
+                                v-model="lineForm.description"
+                                placeholder="Description, e.g. Rush fee"
+                                aria-label="Line description"
+                            />
+                            <InputError
+                                :message="lineForm.errors.description"
+                            />
+                            <div class="flex gap-2">
+                                <Input
+                                    v-model="lineForm.quantity"
+                                    inputmode="decimal"
+                                    class="w-20"
+                                    aria-label="Quantity"
+                                />
+                                <Input
+                                    v-model="lineForm.unit_price"
+                                    inputmode="decimal"
+                                    placeholder="Unit price (minus for a credit)"
+                                    aria-label="Unit price"
+                                />
+                            </div>
+                            <InputError
+                                :message="
+                                    lineForm.errors.quantity ??
+                                    lineForm.errors.unit_price
+                                "
+                            />
+                            <label class="flex items-center gap-2 text-xs">
+                                <input
+                                    v-model="lineForm.taxable"
+                                    type="checkbox"
+                                    class="size-4"
+                                />
+                                Taxable
+                            </label>
+                            <Input
+                                v-model="lineForm.reason"
+                                placeholder="Reason (optional)"
+                                aria-label="Line reason"
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                                :disabled="lineForm.processing"
+                                >Add line</Button
+                            >
+                        </form>
+                        <form
+                            class="grid gap-2 border-t pt-3 text-sm"
+                            @submit.prevent="
+                                discountForm.post(storeDiscount.url(inv.id), {
+                                    ...opts,
+                                    onSuccess: () => discountForm.reset(),
+                                })
+                            "
+                        >
+                            <p class="font-medium">Add a discount</p>
+                            <div class="flex gap-2">
+                                <NativeSelect
+                                    v-model="discountForm.kind"
+                                    class="w-28"
+                                    aria-label="Discount type"
+                                >
+                                    <option value="percent">%</option>
+                                    <option value="amount">
+                                        {{ inv.currency }}
+                                    </option>
+                                </NativeSelect>
+                                <Input
+                                    v-model="discountForm.value"
+                                    inputmode="decimal"
+                                    :placeholder="
+                                        discountForm.kind === 'percent'
+                                            ? 'e.g. 10'
+                                            : 'e.g. 5000.00'
+                                    "
+                                    aria-label="Discount value"
+                                />
+                            </div>
+                            <NativeSelect
+                                v-model="discountForm.applies_to_item_id"
+                                aria-label="Discount applies to"
+                            >
+                                <option value="">Whole invoice</option>
+                                <option
+                                    v-for="l in discountable"
+                                    :key="l.id"
+                                    :value="l.id"
+                                >
+                                    {{ l.description }}
+                                </option>
+                            </NativeSelect>
+                            <Input
+                                v-model="discountForm.reason"
+                                placeholder="Reason, e.g. Loyalty discount"
+                                aria-label="Discount reason"
+                            />
+                            <InputError
+                                :message="
+                                    discountForm.errors.value ??
+                                    discountForm.errors.reason
+                                "
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                                :disabled="discountForm.processing"
+                                >Add discount</Button
+                            >
+                        </form>
+                        <p
+                            v-if="inv.client_credit_minor > 0"
+                            class="border-t pt-3 text-xs text-muted-foreground"
+                        >
+                            This client has
+                            {{ money(inv.client_credit_minor) }} credit. It is
+                            applied automatically when the invoice is finalized.
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -601,6 +935,55 @@ async function removeDraft(): Promise<void> {
                                 aria-label="Received on"
                             />
                             <InputError :message="payment.errors.received_on" />
+                            <details class="rounded border px-2 py-1">
+                                <summary class="cursor-pointer text-xs">
+                                    Bank fees, tax withheld, amount received
+                                </summary>
+                                <div class="mt-2 grid gap-2">
+                                    <p class="text-xs text-muted-foreground">
+                                        The amount above is what the client paid
+                                        toward the invoice. Fees and tax
+                                        withheld are part of it.
+                                    </p>
+                                    <Input
+                                        v-model="payment.fee"
+                                        inputmode="decimal"
+                                        placeholder="Bank / transfer fees"
+                                        aria-label="Fees"
+                                    />
+                                    <Input
+                                        v-model="payment.withholding"
+                                        inputmode="decimal"
+                                        placeholder="Tax withheld (BIR 2307)"
+                                        aria-label="Tax withheld"
+                                    />
+                                    <div class="flex gap-2">
+                                        <Input
+                                            v-model="payment.received_amount"
+                                            inputmode="decimal"
+                                            placeholder="Amount that reached the bank"
+                                            aria-label="Amount received"
+                                        />
+                                        <NativeSelect
+                                            v-model="payment.received_currency"
+                                            class="w-24"
+                                            aria-label="Received currency"
+                                        >
+                                            <option
+                                                v-for="c in currencies"
+                                                :key="c"
+                                                :value="c"
+                                            >
+                                                {{ c }}
+                                            </option>
+                                        </NativeSelect>
+                                    </div>
+                                </div>
+                            </details>
+                            <p class="text-xs text-muted-foreground">
+                                Paid more than the balance? The extra is kept as
+                                client credit for the next invoice.
+                            </p>
                             <Button
                                 size="sm"
                                 type="submit"
@@ -705,20 +1088,120 @@ async function removeDraft(): Promise<void> {
                         <li
                             v-for="p in inv.payments"
                             :key="`p${p.id}`"
-                            class="flex justify-between gap-2 py-1.5"
+                            class="py-1.5"
                         >
-                            <span
-                                >{{ formatDate(p.received_on) }} · {{ p.method
-                                }}<span
-                                    v-if="p.reference"
-                                    class="text-muted-foreground"
+                            <div class="flex justify-between gap-2">
+                                <span
+                                    :class="
+                                        p.reversed_at
+                                            ? 'line-through opacity-60'
+                                            : ''
+                                    "
+                                    >{{ formatDate(p.received_on) }} ·
+                                    {{ p.method
+                                    }}<span
+                                        v-if="p.reference"
+                                        class="text-muted-foreground"
+                                    >
+                                        · {{ p.reference }}</span
+                                    ></span
                                 >
-                                    · {{ p.reference }}</span
-                                ></span
+                                <span class="flex items-center gap-2">
+                                    <span
+                                        class="tabular-nums"
+                                        :class="
+                                            p.reversed_at
+                                                ? 'line-through opacity-60'
+                                                : ''
+                                        "
+                                        >{{ money(p.amount_minor) }}</span
+                                    >
+                                    <button
+                                        v-if="
+                                            !p.reversed_at &&
+                                            inv.status !== 'void'
+                                        "
+                                        type="button"
+                                        class="text-xs text-rose-600 hover:underline"
+                                        @click="
+                                            reverseFor =
+                                                reverseFor === p.id
+                                                    ? null
+                                                    : p.id
+                                        "
+                                    >
+                                        Reverse
+                                    </button>
+                                </span>
+                            </div>
+                            <p
+                                v-if="
+                                    p.fee_minor ||
+                                    p.withholding_minor ||
+                                    p.received_minor !== null ||
+                                    p.credit_minor
+                                "
+                                class="text-xs text-muted-foreground"
                             >
-                            <span class="tabular-nums">{{
-                                money(p.amount_minor)
-                            }}</span>
+                                <template v-if="p.fee_minor"
+                                    >Fees {{ money(p.fee_minor) }} ·
+                                </template>
+                                <template v-if="p.withholding_minor"
+                                    >Tax withheld
+                                    {{ money(p.withholding_minor) }} ·
+                                </template>
+                                <template v-if="p.received_minor !== null"
+                                    >Received
+                                    {{
+                                        formatMoney(
+                                            p.received_minor,
+                                            p.received_currency ?? inv.currency,
+                                        )
+                                    }}
+                                    ·
+                                </template>
+                                <template v-if="p.credit_minor"
+                                    >{{ money(p.credit_minor) }} kept as client
+                                    credit</template
+                                >
+                            </p>
+                            <p
+                                v-if="p.reversed_at"
+                                class="text-xs text-rose-700 dark:text-rose-300"
+                            >
+                                Reversed by {{ p.reversed_by }}:
+                                {{ p.reversal_reason }}
+                            </p>
+                            <form
+                                v-if="reverseFor === p.id"
+                                class="mt-1 flex gap-2"
+                                @submit.prevent="
+                                    reverseForm.post(
+                                        reversePaymentRoute.url(p.id),
+                                        {
+                                            ...opts,
+                                            onSuccess: () => {
+                                                reverseForm.reset();
+                                                reverseFor = null;
+                                            },
+                                        },
+                                    )
+                                "
+                            >
+                                <Input
+                                    v-model="reverseForm.reason"
+                                    class="h-8 min-w-0 flex-1 text-xs"
+                                    placeholder="Why? e.g. Check bounced"
+                                    aria-label="Reversal reason"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    type="submit"
+                                    :disabled="!reverseForm.reason.trim()"
+                                    >Reverse</Button
+                                >
+                            </form>
                         </li>
                         <li
                             v-for="c in inv.credit_notes"

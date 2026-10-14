@@ -26,6 +26,13 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_MANAGE])->prefix('billing
     Route::post('invoices/{invoice}/void', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
     Route::post('invoices/{invoice}/credit', [InvoiceController::class, 'credit'])->name('invoices.credit');
     Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'payment'])->name('invoices.payments.store');
+    Route::post('payments/{payment}/reverse', [InvoiceController::class, 'reversePayment'])->name('payments.reverse');
+    // E-63 / E-66: draft adjustments and review before finalize.
+    Route::post('invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->name('invoices.lines.store');
+    Route::post('invoices/{invoice}/discounts', [InvoiceController::class, 'storeDiscount'])->name('invoices.discounts.store');
+    Route::delete('invoice-lines/{invoiceItem}', [InvoiceController::class, 'destroyLine'])->name('invoice-lines.destroy');
+    Route::post('invoices/{invoice}/review', [InvoiceController::class, 'requestReview'])->name('invoices.review');
+    Route::post('invoices/{invoice}/send-back', [InvoiceController::class, 'sendBack'])->name('invoices.send-back');
 
     Route::get('clients', [ClientBillingController::class, 'index'])->name('clients.index');
     Route::get('clients/{workspace:slug}', [ClientBillingController::class, 'show'])->name('clients.show');

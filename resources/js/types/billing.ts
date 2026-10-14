@@ -41,6 +41,10 @@ export type InvoiceLine = {
     quantity: string;
     unit_minor: number;
     amount_minor: number;
+    manual: boolean;
+    taxable: boolean;
+    discount_bp: number | null;
+    reason: string | null;
     sources: InvoiceSource[];
 };
 
@@ -63,6 +67,16 @@ export type InvoiceDetail = InvoiceRow & {
     bill_to: Record<string, string | null> | null;
     notes: string | null;
     credited_invoice_id: number | null;
+    service_label: string | null;
+    review: {
+        required: boolean;
+        requested_at: string | null;
+        requested_by: string | null;
+        mine: boolean;
+        note: string | null;
+        can_finalize: boolean;
+    };
+    client_credit_minor: number;
     items: InvoiceLine[];
     history: {
         id: number;
@@ -79,6 +93,16 @@ export type InvoiceDetail = InvoiceRow & {
         reference: string | null;
         received_on: string;
         by: string | null;
+        note: string | null;
+        is_credit: boolean;
+        fee_minor: number;
+        withholding_minor: number;
+        received_minor: number | null;
+        received_currency: string | null;
+        credit_minor: number;
+        reversed_at: string | null;
+        reversed_by: string | null;
+        reversal_reason: string | null;
     }[];
     credit_notes: InvoiceRow[];
 };

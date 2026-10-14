@@ -32,7 +32,9 @@
             <div><strong>{{ $invoice->displayNumber() }}</strong></div>
             @if ($invoice->issue_date)<div>Issued {{ $invoice->issue_date->format('M j, Y') }}</div>@endif
             @if ($invoice->due_date && $invoice->kind === 'invoice')<div>Due {{ $invoice->due_date->format('M j, Y') }}</div>@endif
-            @if ($invoice->period_start && $invoice->period_end)
+            @if ($invoice->service_label)
+                <div class="muted">{{ $invoice->service_label }}</div>
+            @elseif ($invoice->period_start && $invoice->period_end)
                 <div class="muted">Period {{ $invoice->period_start->format('M j') }} – {{ $invoice->period_end->format('M j, Y') }}</div>
             @endif
             @if ($invoice->project)<div class="muted">Project: {{ $invoice->project->name }}</div>@endif
@@ -62,9 +64,13 @@
     <tbody>
         @foreach ($invoice->items as $item)
             <tr>
-                <td>{{ $item->description }}</td>
-                <td class="right">{{ $item->quantity }}{{ $item->minutes !== null ? ' h' : '' }}</td>
-                <td class="right">{{ $money($item->unit_minor) }}</td>
+                <td>{{ $item->description }}@if (! $item->taxable && $invoice->tax_rate_bp > 0) *@endif</td>
+                @if ($item->type === 'discount')
+                    <td></td><td></td>
+                @else
+                    <td class="right">{{ $item->quantity }}{{ $item->minutes !== null ? ' h' : '' }}</td>
+                    <td class="right">{{ $money($item->unit_minor) }}</td>
+                @endif
                 <td class="right">{{ $money($item->amount_minor) }}</td>
             </tr>
         @endforeach
@@ -79,6 +85,7 @@
     @if ($invoice->credited_minor > 0)<tr><td></td><td class="right muted">Credited</td><td class="right">-{{ $money($invoice->credited_minor) }}</td></tr>@endif
     @if ($invoice->paid_minor > 0 || $invoice->credited_minor > 0)<tr class="grand"><td></td><td class="right">Balance due</td><td class="right">{{ $money($balance) }}</td></tr>@endif
 </table>
+@if ($invoice->tax_rate_bp > 0 && $invoice->items->contains(fn ($i) => ! $i->taxable))<p class="small muted">* Not subject to {{ $taxLabel }}.</p>@endif
 <p class="small muted keep" style="text-align: right">{{ \App\Domain\Billing\Money::inWords($invoice->total_minor, $invoice->currency) }}</p>
 
 @if ($invoice->notes)

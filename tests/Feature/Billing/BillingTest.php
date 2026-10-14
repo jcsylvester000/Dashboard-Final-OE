@@ -257,8 +257,10 @@ class BillingTest extends TestCase
         $this->assertSame(Invoice::PARTIALLY_PAID, $invoice->status);
         $this->assertSame(341280, $invoice->balanceMinor());
 
+        // Fees are part of the amount paid, so they can't exceed it. (Overpayment is no longer
+        // refused: E-68 keeps the extra as client credit, see EnhancementBatchE6aTest.)
         $this->actingAs($this->finance)->post(route('billing.invoices.payments.store', $invoice), [
-            'amount' => '5000.00', 'method' => 'bank', 'received_on' => '2026-11-03',
+            'amount' => '100.00', 'fee' => '200.00', 'method' => 'bank', 'received_on' => '2026-11-03',
         ])->assertSessionHasErrors('billing');
 
         // 40 days after the due date (11-18) it sits in the 31-60 bucket.

@@ -5,6 +5,7 @@ namespace App\Domain\Billing;
 use App\Domain\Identity\ActivityLogger;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
+use App\Models\ClientCredit;
 use App\Models\Department;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -29,6 +30,7 @@ class InvoiceService
         private readonly RateResolver $rates,
         private readonly PeriodService $periods,
         private readonly ActivityLogger $activity,
+        private readonly FinanceSettings $finance,
     ) {}
 
     /**
@@ -72,10 +74,17 @@ class InvoiceService
             $this->periods->lock($period, $actor);
             $invoice = $period->invoices()->where('status', Invoice::DRAFT)->where('project_id', $project?->id)->first();
             $isNew = $invoice === null;
+            $droppedDiscounts = 0;
             if ($invoice === null) {
                 $invoice = new Invoice(['workspace_id' => $workspace->id, 'billing_period_id' => $period->id, 'project_id' => $project?->id, 'created_by' => $actor->id]);
             } else {
-                $invoice->items()->get()->each->delete();
+                // E-63: Finance's own lines and whole-invoice discounts survive a rebuild; a discount
+                // on a generated line goes with that line (the line is rebuilt with new numbers).
+                $generated = $invoice->items()->where('manual', false)->pluck('id');
+                $droppedDiscounts = $invoice->items()->where('type', 'discount')->whereIn('applies_to_item_id', $generated)->count();
+                $invoice->items()->where('type', 'discount')->whereIn('applies_to_item_id', $generated)->get()->each->delete();
+                $invoice->items()->where('manual', false)->get()->each->delete();
+                $this->clearReview($invoice);
             }
 
             $grouping ??= $invoice->line_grouping ?? ($project !== null ? 'person' : 'department');
@@ -230,11 +239,18 @@ class InvoiceService
                 $this->source($line, $expense, null, $expense->amount_minor);
             }
 
+            // Finance's lines follow the generated ones; discounts come last.
+            foreach ($invoice->items()->where('manual', true)->get()->sortBy(fn (InvoiceItem $i) => [$i->type === 'discount' ? 1 : 0, $i->position, $i->id]) as $manual) {
+                $manual->forceFill(['position' => $position++])->save();
+            }
+
             $invoice->forceFill(['missing_rates' => $missing === [] ? null : array_values($missing)])->save();
             $this->recalculate($invoice);
 
             if ($isNew) {
                 $this->history($invoice, null, Invoice::DRAFT, 'Draft created', $actor);
+            } elseif ($droppedDiscounts > 0) {
+                $this->history($invoice, Invoice::DRAFT, Invoice::DRAFT, sprintf('Rebuilt: %d line discount(s) removed with their lines', $droppedDiscounts), $actor);
             }
 
             return $invoice;
@@ -243,8 +259,10 @@ class InvoiceService
 
     /**
      * Number the invoice, freeze it and mark everything it bills as billed.
+     *
+     * @param  string|null  $issueDate  E-67: Y-m-d within the allowed back-dating window (default today)
      */
-    public function finalize(Invoice $invoice, User $actor): Invoice
+    public function finalize(Invoice $invoice, User $actor, ?string $issueDate = null): Invoice
     {
         if (! $invoice->isDraft()) {
             throw new BillingException('Only drafts can be finalized.');
@@ -255,8 +273,21 @@ class InvoiceService
         if (($invoice->missing_rates ?? []) !== []) {
             throw new BillingException(__('Some hours have no :c rate yet. Add the missing rates, rebuild the draft, then finalize.', ['c' => $invoice->currency]));
         }
+        if ($invoice->kind === 'invoice' && $invoice->total_minor < 0) {
+            throw new BillingException('The total is below zero. Reduce the discount or issue a credit note instead.');
+        }
+        // E-66: maker-checker. The person who sent the draft for review cannot finalize it.
+        if ($this->finance->needsReview($invoice)) {
+            if ($invoice->review_requested_at === null) {
+                throw new BillingException('This invoice needs a second person to check it. Send it for review first.');
+            }
+            if ($invoice->review_requested_by === $actor->id) {
+                throw new BillingException('You sent this invoice for review, so someone else in Finance must finalize it.');
+            }
+        }
+        $issue = $this->issueDate($invoice, $issueDate);
 
-        $invoice = DB::transaction(function () use ($invoice, $actor) {
+        $invoice = DB::transaction(function () use ($invoice, $actor, $issue) {
             $profile = BillingProfile::query()->where('workspace_id', $invoice->workspace_id)->first();
 
             // Postgres rejects FOR UPDATE with aggregates, so lock the highest numbered row instead.
@@ -267,8 +298,8 @@ class InvoiceService
             $invoice->forceFill([
                 'number' => (int) $last + 1,
                 'status' => Invoice::FINALIZED,
-                'issue_date' => $now->toDateString(),
-                'due_date' => $now->addDays($profile->terms_days ?? 15)->toDateString(),
+                'issue_date' => $issue->toDateString(),
+                'due_date' => $issue->addDays($profile->terms_days ?? 15)->toDateString(),
                 'bill_to' => $invoice->bill_to ?? $profile?->bill_to,
                 'finalized_at' => $now,
                 'finalized_by' => $actor->id,
@@ -281,7 +312,12 @@ class InvoiceService
                 BillingPeriod::query()->whereKey($invoice->billing_period_id)->update(['status' => BillingPeriod::INVOICED]);
             }
 
-            $this->history($invoice, Invoice::DRAFT, Invoice::FINALIZED, null, $actor);
+            $this->history($invoice, Invoice::DRAFT, Invoice::FINALIZED, $invoice->review_requested_at !== null ? 'Checked and finalized' : null, $actor);
+
+            // E-68: credit the client already has (an earlier overpayment) pays this invoice first.
+            if ($invoice->kind === 'invoice') {
+                $this->applyCredit($invoice, $actor);
+            }
 
             return $invoice;
         });
@@ -385,24 +421,267 @@ class InvoiceService
     }
 
     /**
-     * @param  array{amount_minor: int, method: string, reference?: string|null, received_on: string, note?: string|null}  $data
+     * Record money in. amount_minor is what settles the invoice (invoice currency) and
+     * includes any bank fee or tax the client withheld (E-105). More than the balance
+     * moves the excess to the client's credit (E-68) instead of being refused.
+     *
+     * @param  array{amount_minor: int, method: string, reference?: string|null, received_on: string, note?: string|null, fee_minor?: int, withholding_minor?: int, received_minor?: int|null, received_currency?: string|null, fx_rate?: string|null}  $data
      */
     public function recordPayment(Invoice $invoice, array $data, User $actor): Payment
     {
         if (! in_array($invoice->status, [Invoice::FINALIZED, Invoice::PARTIALLY_PAID], true) || $invoice->kind !== 'invoice') {
             throw new BillingException('Payments can only be recorded on open, finalized invoices.');
         }
-        if ($data['amount_minor'] <= 0 || $data['amount_minor'] > $invoice->balanceMinor()) {
-            throw new BillingException('The payment is more than the balance due.');
+        if ($data['amount_minor'] <= 0) {
+            throw new BillingException('Enter the amount paid.');
+        }
+        $fee = $data['fee_minor'] ?? 0;
+        $withheld = $data['withholding_minor'] ?? 0;
+        if ($fee < 0 || $withheld < 0 || $fee + $withheld > $data['amount_minor']) {
+            throw new BillingException('Fees and tax withheld are part of the amount paid, so they cannot be more than it.');
         }
 
         return DB::transaction(function () use ($invoice, $data, $actor) {
-            $payment = Payment::create([...$data, 'invoice_id' => $invoice->id, 'recorded_by' => $actor->id]);
-            $invoice->forceFill(['paid_minor' => $invoice->paid_minor + $data['amount_minor']])->save();
-            $this->settle($invoice, $actor, sprintf('Payment %s via %s', Money::format($data['amount_minor'], $invoice->currency), Payment::METHODS[$data['method']] ?? $data['method']));
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $applied = min($data['amount_minor'], $invoice->balanceMinor());
+            $excess = $data['amount_minor'] - $applied;
+
+            $payment = Payment::create([...$data, 'amount_minor' => $applied, 'credit_minor' => $excess, 'invoice_id' => $invoice->id, 'recorded_by' => $actor->id]);
+            $invoice->forceFill(['paid_minor' => $invoice->paid_minor + $applied])->save();
+            if ($excess > 0) {
+                ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => $excess,
+                    'payment_id' => $payment->id, 'invoice_id' => $invoice->id, 'note' => 'Overpayment on '.$invoice->displayNumber(), 'created_by' => $actor->id]);
+            }
+            $this->settle($invoice, $actor, sprintf('Payment %s via %s%s', Money::format($applied, $invoice->currency), Payment::METHODS[$data['method']] ?? $data['method'],
+                $excess > 0 ? sprintf(' (%s extra kept as client credit)', Money::format($excess, $invoice->currency)) : ''));
 
             return $payment;
         });
+    }
+
+    /**
+     * E-68: undo a payment recorded by mistake (bounced check, wrong invoice). The row stays,
+     * marked reversed, so the history is complete. Credit created by it must still be unused.
+     */
+    public function reversePayment(Payment $payment, User $actor, string $reason): Payment
+    {
+        if ($payment->isReversed()) {
+            throw new BillingException('This payment is already reversed.');
+        }
+
+        return DB::transaction(function () use ($payment, $actor, $reason) {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($payment->invoice_id);
+            if ($invoice->status === Invoice::VOID) {
+                throw new BillingException('The invoice is void.');
+            }
+            if ($payment->credit_minor > 0) {
+                if (ClientCredit::balance($invoice->workspace_id, $invoice->currency) < $payment->credit_minor) {
+                    throw new BillingException('Part of this payment became client credit that is already used. Reverse the payment that used it first.');
+                }
+                ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => -$payment->credit_minor,
+                    'payment_id' => $payment->id, 'invoice_id' => $invoice->id, 'note' => 'Payment reversed', 'created_by' => $actor->id]);
+            }
+            // Credit that paid this invoice goes back to the client.
+            if ($payment->method === 'credit') {
+                ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => $payment->amount_minor,
+                    'payment_id' => $payment->id, 'invoice_id' => $invoice->id, 'note' => 'Credit returned from '.$invoice->displayNumber(), 'created_by' => $actor->id]);
+            }
+
+            $payment->forceFill(['reversed_at' => now(), 'reversed_by' => $actor->id, 'reversal_reason' => $reason])->save();
+            $invoice->forceFill(['paid_minor' => $invoice->paid_minor - $payment->amount_minor])->save();
+            $this->settle($invoice, $actor, sprintf('Payment reversed %s: %s', Money::format($payment->amount_minor, $invoice->currency), $reason));
+
+            return $payment;
+        });
+    }
+
+    /**
+     * Use the client's credit in this currency on an open invoice, up to its balance.
+     */
+    public function applyCredit(Invoice $invoice, User $actor): int
+    {
+        $available = ClientCredit::balance($invoice->workspace_id, $invoice->currency);
+        $use = min($available, $invoice->balanceMinor());
+        if ($use <= 0) {
+            return 0;
+        }
+
+        $payment = Payment::create(['invoice_id' => $invoice->id, 'amount_minor' => $use, 'method' => 'credit', 'received_on' => now()->toDateString(),
+            'note' => 'Client credit applied', 'recorded_by' => $actor->id]);
+        ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => -$use,
+            'payment_id' => $payment->id, 'invoice_id' => $invoice->id, 'note' => 'Applied to '.$invoice->displayNumber(), 'created_by' => $actor->id]);
+        $invoice->forceFill(['paid_minor' => $invoice->paid_minor + $use])->save();
+        $this->settle($invoice, $actor, sprintf('Payment %s via %s', Money::format($use, $invoice->currency), Payment::METHODS['credit']));
+
+        return $use;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | E-63: Finance's own lines and discounts on a draft
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * @param  array{description: string, quantity: string, unit_minor: int, taxable: bool, reason?: string|null}  $data
+     */
+    public function addLine(Invoice $invoice, array $data, User $actor): InvoiceItem
+    {
+        $this->assertDraft($invoice);
+        $amount = $this->lineAmount($data['quantity'], $data['unit_minor']);
+
+        return DB::transaction(function () use ($invoice, $data, $amount, $actor) {
+            $line = $this->item($invoice, $this->nextPosition($invoice), [
+                'type' => 'adjustment', 'manual' => true, 'description' => $data['description'], 'quantity' => $data['quantity'],
+                'unit_minor' => $data['unit_minor'], 'amount_minor' => $amount, 'taxable' => $data['taxable'], 'reason' => $data['reason'] ?? null,
+            ]);
+            $this->changed($invoice, sprintf('Line added: %s %s', $data['description'], Money::format($amount, $invoice->currency)), $actor);
+
+            return $line;
+        });
+    }
+
+    /**
+     * A discount as a percentage (basis points) or a fixed amount, on one line or the whole invoice.
+     *
+     * @param  array{percent_bp?: int|null, amount_minor?: int|null, applies_to_item_id?: int|null, reason: string}  $data
+     */
+    public function addDiscount(Invoice $invoice, array $data, User $actor): InvoiceItem
+    {
+        $this->assertDraft($invoice);
+        $bp = $data['percent_bp'] ?? null;
+        $fixed = $data['amount_minor'] ?? null;
+        if (($bp === null) === ($fixed === null) || ($bp !== null && ($bp <= 0 || $bp > 10000)) || ($fixed !== null && $fixed <= 0)) {
+            throw new BillingException('Enter either a percentage (up to 100) or an amount.');
+        }
+        $target = null;
+        if (($data['applies_to_item_id'] ?? null) !== null) {
+            $target = $invoice->items()->whereKey($data['applies_to_item_id'])->where('type', '!=', 'discount')->first();
+            if ($target === null) {
+                throw new BillingException('That line is not on this invoice.');
+            }
+        }
+
+        return DB::transaction(function () use ($invoice, $bp, $fixed, $target, $data, $actor) {
+            $label = $bp !== null ? rtrim(rtrim(sprintf('%d.%02d', intdiv($bp, 100), $bp % 100), '0'), '.').'%' : null;
+            $line = $this->item($invoice, $this->nextPosition($invoice), [
+                'type' => 'discount', 'manual' => true,
+                'description' => trim('Discount '.($label ?? '').($target !== null ? ' on '.$target->description : '')).' – '.$data['reason'],
+                'quantity' => '1.00', 'unit_minor' => -($fixed ?? 0), 'amount_minor' => -($fixed ?? 0),
+                'discount_bp' => $bp, 'applies_to_item_id' => $target?->id, 'taxable' => $target->taxable ?? true, 'reason' => $data['reason'],
+            ]);
+            $this->changed($invoice, 'Discount added: '.$line->description, $actor);
+
+            return $line;
+        });
+    }
+
+    public function removeLine(InvoiceItem $item, User $actor): void
+    {
+        $invoice = Invoice::query()->findOrFail($item->invoice_id);
+        $this->assertDraft($invoice);
+        if (! $item->manual) {
+            throw new BillingException('Generated lines come from time, fixed fees and expenses. Change those, or add a discount, then recalculate.');
+        }
+
+        DB::transaction(function () use ($invoice, $item, $actor) {
+            // A discount on this line goes with it.
+            $invoice->items()->where('applies_to_item_id', $item->id)->get()->each->delete();
+            $item->delete();
+            $this->changed($invoice, 'Line removed: '.$item->description, $actor);
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | E-66: review before finalize
+    |--------------------------------------------------------------------------
+    */
+
+    public function requestReview(Invoice $invoice, User $actor): void
+    {
+        $this->assertDraft($invoice);
+        if (($invoice->missing_rates ?? []) !== [] || ! $invoice->items()->exists()) {
+            throw new BillingException('Finish the draft first: every hour needs a rate and there must be something to bill.');
+        }
+        $invoice->forceFill(['review_requested_at' => now(), 'review_requested_by' => $actor->id, 'review_note' => null])->save();
+        $this->history($invoice, Invoice::DRAFT, Invoice::DRAFT, 'Ready for review', $actor);
+    }
+
+    public function sendBack(Invoice $invoice, User $actor, string $note): void
+    {
+        $this->assertDraft($invoice);
+        if ($invoice->review_requested_at === null) {
+            throw new BillingException('This draft is not waiting for review.');
+        }
+        if ($invoice->review_requested_by === $actor->id) {
+            throw new BillingException('Someone else in Finance reviews this draft.');
+        }
+        $invoice->forceFill(['review_requested_at' => null, 'review_note' => $note])->save();
+        $this->history($invoice, Invoice::DRAFT, Invoice::DRAFT, 'Sent back: '.$note, $actor);
+    }
+
+    private function assertDraft(Invoice $invoice): void
+    {
+        if (! $invoice->isDraft()) {
+            throw new BillingException('Finalized invoices cannot be edited. Issue a credit note instead.');
+        }
+    }
+
+    /** Any change to a draft reopens it for review (the checker must see the final numbers). */
+    private function changed(Invoice $invoice, string $note, User $actor): void
+    {
+        $this->clearReview($invoice);
+        $this->recalculate($invoice);
+        $this->history($invoice, Invoice::DRAFT, Invoice::DRAFT, $note, $actor);
+    }
+
+    private function clearReview(Invoice $invoice): void
+    {
+        if ($invoice->review_requested_at !== null) {
+            $invoice->forceFill(['review_requested_at' => null])->save();
+        }
+    }
+
+    private function nextPosition(Invoice $invoice): int
+    {
+        return (int) $invoice->items()->max('position') + 1;
+    }
+
+    /** "1.50" x 100000 -> 150000, rounded half away from zero. */
+    private function lineAmount(string $quantity, int $unitMinor): int
+    {
+        if (preg_match('/^\d{1,8}(\.\d{1,2})?$/', $quantity) !== 1) {
+            throw new BillingException('Quantity must be a number with up to 2 decimals.');
+        }
+
+        return Money::mulDiv(Money::parse($quantity), $unitMinor, 100);
+    }
+
+    /**
+     * E-67: an issue date other than today must be inside the back-dating window and not
+     * before the last invoice already issued in the same series (numbers stay in date order).
+     */
+    private function issueDate(Invoice $invoice, ?string $requested): CarbonImmutable
+    {
+        $today = now()->toImmutable()->startOfDay();
+        if ($requested === null || $requested === '') {
+            return $today;
+        }
+        $date = CarbonImmutable::parse($requested)->startOfDay(); // Y-m-d, validated by the request
+        if ($date->greaterThan($today)) {
+            throw new BillingException('The issue date cannot be in the future.');
+        }
+        $days = $this->finance->get()['backdate_days'];
+        if ($date->lessThan($today->subDays($days))) {
+            throw new BillingException(__('The issue date can be at most :d days back.', ['d' => $days]));
+        }
+        $last = Invoice::query()->where('series', $invoice->series)->whereNotNull('number')->orderByDesc('number')->value('issue_date');
+        if ($last !== null && $date->lessThan(CarbonImmutable::parse((string) $last)->startOfDay())) {
+            throw new BillingException(__('The last :s invoice was issued on :d; this one cannot be dated earlier.', ['s' => $invoice->series, 'd' => CarbonImmutable::parse((string) $last)->format('M j, Y')]));
+        }
+
+        return $date;
     }
 
     /**
@@ -427,8 +706,35 @@ class InvoiceService
      */
     private function recalculate(Invoice $invoice): void
     {
-        $subtotal = (int) $invoice->items()->sum('amount_minor');
-        $tax = Money::tax($subtotal, $invoice->tax_rate_bp);
+        $items = $invoice->items()->get();
+        $lines = $items->where('type', '!=', 'discount');
+
+        // E-63: percentage discounts follow the current amounts of what they discount.
+        foreach ($items->where('type', 'discount')->whereNotNull('discount_bp') as $discount) {
+            $base = $discount->applies_to_item_id !== null
+                ? (int) ($lines->firstWhere('id', $discount->applies_to_item_id)->amount_minor ?? 0)
+                : (int) $lines->sum('amount_minor');
+            $amount = -Money::mulDiv(max(0, $base), (int) $discount->discount_bp, 10000);
+            if ($discount->amount_minor !== $amount) {
+                $discount->forceFill(['amount_minor' => $amount, 'unit_minor' => $amount])->save();
+            }
+        }
+
+        // Tax only on taxable lines; a whole-invoice discount reduces the taxable part in proportion.
+        $gross = (int) $lines->sum('amount_minor');
+        $taxableGross = (int) $lines->where('taxable', true)->sum('amount_minor');
+        $taxable = $taxableGross;
+        $subtotal = $gross;
+        foreach ($items->where('type', 'discount') as $discount) {
+            $subtotal += $discount->amount_minor;
+            if ($discount->applies_to_item_id !== null) {
+                $taxable += $discount->taxable ? $discount->amount_minor : 0;
+            } elseif ($gross > 0) {
+                $taxable += Money::mulDiv($discount->amount_minor, $taxableGross, $gross);
+            }
+        }
+
+        $tax = Money::tax($taxable, $invoice->tax_rate_bp);
         $invoice->forceFill(['subtotal_minor' => $subtotal, 'tax_minor' => $tax, 'total_minor' => $subtotal + $tax])->save();
     }
 
@@ -500,7 +806,11 @@ class InvoiceService
             $from === null && $to === Invoice::DRAFT => 'drafted',
             $from === Invoice::DRAFT && $to === Invoice::FINALIZED => 'finalized',
             $to === Invoice::VOID => 'voided',
+            $note !== null && str_starts_with($note, 'Payment reversed') => 'payment-reversed',
             $note !== null && str_starts_with($note, 'Payment') => 'payment-recorded',
+            $note === 'Ready for review' => 'review-requested',
+            $note !== null && str_starts_with($note, 'Sent back') => 'sent-back',
+            $from === Invoice::DRAFT && $to === Invoice::DRAFT => 'adjusted',
             $note !== null && str_starts_with($note, 'Credit note') => 'credited',
             default => 'status-changed',
         };

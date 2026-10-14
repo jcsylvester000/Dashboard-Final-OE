@@ -11,6 +11,7 @@ use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
+use App\Models\ClientCredit;
 use App\Models\Department;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -81,6 +82,8 @@ class ClientBillingController extends Controller
 
         return Inertia::render('billing/Client', [
             'workspace' => $workspace->only(['id', 'name', 'slug', 'color']),
+            // E-68: overpayments kept for the next invoice, per currency.
+            'credits' => ClientCredit::balances($workspace->id),
             'profile' => [
                 'configured' => $profile->exists,
                 'currency' => $profile->currency,

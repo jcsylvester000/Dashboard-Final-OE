@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Domain\Billing\BillingException;
+use App\Domain\Billing\FinanceSettings;
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
 use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
+use App\Models\BillingProfile;
+use App\Models\ClientCredit;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\InvoiceHistory;
@@ -60,7 +63,7 @@ class InvoiceController extends Controller
         ]);
     }
 
-    public function show(Invoice $invoice): Response
+    public function show(Request $request, Invoice $invoice, FinanceSettings $finance): Response
     {
         $invoice->load([
             'workspace:id,name,slug',
@@ -71,7 +74,10 @@ class InvoiceController extends Controller
             ]),
             'history.user:id,name',
             'payments.recorder:id,name',
+            'payments.reverser:id,name',
         ]);
+        $user = $this->user($request);
+        $needsReview = $invoice->isDraft() && $finance->needsReview($invoice);
 
         return Inertia::render('billing/Invoice', [
             'invoice' => [
@@ -87,6 +93,18 @@ class InvoiceController extends Controller
                 'notes' => $invoice->notes,
                 'kind' => $invoice->kind,
                 'credited_invoice_id' => $invoice->credited_invoice_id,
+                'service_label' => $invoice->service_label,
+                // E-66: who may finalize. A draft sent for review waits for a second person.
+                'review' => [
+                    'required' => $needsReview,
+                    'requested_at' => $invoice->review_requested_at?->toIso8601String(),
+                    'requested_by' => $invoice->review_requested_by !== null ? User::query()->whereKey($invoice->review_requested_by)->value('name') : null,
+                    'mine' => $invoice->review_requested_by === $user->id,
+                    'note' => $invoice->review_note,
+                    'can_finalize' => ! $needsReview || ($invoice->review_requested_at !== null && $invoice->review_requested_by !== $user->id),
+                ],
+                // E-68: credit the client holds in this currency (applied automatically at finalize).
+                'client_credit_minor' => ClientCredit::balance($invoice->workspace_id, $invoice->currency),
                 // E-64: work this draft could not price yet (Finalize stays blocked).
                 'missing_rates' => $invoice->isDraft() ? ($invoice->missing_rates ?? []) : [],
                 'items' => $invoice->items->map(fn (InvoiceItem $item): array => [
@@ -98,6 +116,10 @@ class InvoiceController extends Controller
                     'quantity' => $item->quantity,
                     'unit_minor' => $item->unit_minor,
                     'amount_minor' => $item->amount_minor,
+                    'manual' => $item->manual,
+                    'taxable' => $item->taxable,
+                    'discount_bp' => $item->discount_bp,
+                    'reason' => $item->reason,
                     'sources' => $item->sources->map(fn (InvoiceItemSource $s): array => $this->source($s, $invoice))->values(),
                 ])->values(),
                 'history' => $invoice->history->map(fn (InvoiceHistory $h): array => [
@@ -115,12 +137,24 @@ class InvoiceController extends Controller
                     'reference' => $p->reference,
                     'received_on' => $p->received_on->toDateString(),
                     'by' => $p->recorder?->name,
+                    'note' => $p->note,
+                    'is_credit' => $p->method === 'credit',
+                    'fee_minor' => $p->fee_minor,
+                    'withholding_minor' => $p->withholding_minor,
+                    'received_minor' => $p->received_minor,
+                    'received_currency' => $p->received_currency,
+                    'credit_minor' => $p->credit_minor,
+                    'reversed_at' => $p->reversed_at?->toIso8601String(),
+                    'reversed_by' => $p->reverser?->name,
+                    'reversal_reason' => $p->reversal_reason,
                 ])->values(),
                 'credit_notes' => Invoice::query()->where('credited_invoice_id', $invoice->id)->get()
                     ->map(fn (Invoice $c): array => $this->row($c))->values(),
             ],
-            'methods' => Payment::METHODS,
+            'methods' => Payment::manualMethods(),
             'groupings' => Invoice::GROUPINGS,
+            'currencies' => BillingProfile::currencies(),
+            'backdateDays' => $finance->get()['backdate_days'],
         ]);
     }
 
@@ -153,8 +187,11 @@ class InvoiceController extends Controller
         if (! $invoice->isDraft()) {
             throw new BillingException('Finalized invoices cannot be edited. Issue a credit note instead.');
         }
-        $data = $request->validate(['notes' => ['nullable', 'string', 'max:2000']]);
-        $invoice->forceFill(['notes' => $data['notes'] ?? null])->save();
+        $data = $request->validate([
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'service_label' => ['nullable', 'string', 'max:120'],
+        ]);
+        $invoice->forceFill(['notes' => $data['notes'] ?? null, 'service_label' => $data['service_label'] ?? null])->save();
 
         return back();
     }
@@ -175,7 +212,8 @@ class InvoiceController extends Controller
 
     public function finalize(Request $request, Invoice $invoice): RedirectResponse
     {
-        $this->invoices->finalize($invoice, $this->user($request));
+        $data = $request->validate(['issue_date' => ['nullable', 'date_format:Y-m-d']]);
+        $this->invoices->finalize($invoice, $this->user($request), $data['issue_date'] ?? null);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Invoice :n finalized.', ['n' => $invoice->displayNumber()])]);
 
         return back();
@@ -204,21 +242,130 @@ class InvoiceController extends Controller
     {
         $data = $request->validate([
             'amount' => ['required', 'regex:'.Money::INPUT_REGEX],
-            'method' => ['required', Rule::in(array_keys(Payment::METHODS))],
+            'method' => ['required', Rule::in(array_keys(Payment::manualMethods()))],
             'reference' => ['nullable', 'string', 'max:100'],
             'received_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'note' => ['nullable', 'string', 'max:500'],
+            // E-105: what the bank actually credited, and what came off on the way.
+            'fee' => ['nullable', 'regex:'.Money::INPUT_REGEX],
+            'withholding' => ['nullable', 'regex:'.Money::INPUT_REGEX],
+            'received_amount' => ['nullable', 'regex:'.Money::INPUT_REGEX],
+            'received_currency' => ['nullable', 'required_with:received_amount', Rule::in(BillingProfile::currencies())],
         ]);
 
-        $this->invoices->recordPayment($invoice, [
-            'amount_minor' => Money::parse((string) $data['amount']),
+        $amount = Money::parse((string) $data['amount']);
+        $received = isset($data['received_amount']) ? Money::parse((string) $data['received_amount']) : null;
+        $receivedCurrency = $received !== null ? (string) $data['received_currency'] : null;
+        $payment = $this->invoices->recordPayment($invoice, [
+            'amount_minor' => $amount,
             'method' => (string) $data['method'],
             'reference' => $data['reference'] ?? null,
             'received_on' => (string) $data['received_on'],
             'note' => $data['note'] ?? null,
+            'fee_minor' => isset($data['fee']) ? Money::parse((string) $data['fee']) : 0,
+            'withholding_minor' => isset($data['withholding']) ? Money::parse((string) $data['withholding']) : 0,
+            'received_minor' => $received,
+            'received_currency' => $receivedCurrency,
+            // Rate = received / (applied - fee - withholding), only across currencies.
+            'fx_rate' => $this->fxRate($invoice->currency, $receivedCurrency, $received, $amount, $data),
         ], $this->user($request));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Payment recorded.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $payment->credit_minor > 0
+            ? __('Payment recorded. :x extra is kept as client credit.', ['x' => Money::format($payment->credit_minor, $invoice->currency)])
+            : __('Payment recorded.')]);
+
+        return back();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function fxRate(string $invoiceCurrency, ?string $receivedCurrency, ?int $received, int $amount, array $data): ?string
+    {
+        if ($received === null || $receivedCurrency === null || $receivedCurrency === $invoiceCurrency) {
+            return null;
+        }
+        $net = $amount - (isset($data['fee']) ? Money::parse((string) $data['fee']) : 0) - (isset($data['withholding']) ? Money::parse((string) $data['withholding']) : 0);
+
+        if ($net <= 0) {
+            return null;
+        }
+        $scaled = Money::mulDiv($received, 100_000_000, $net); // 8 decimals, integer math (no bcmath needed)
+
+        return sprintf('%d.%08d', intdiv($scaled, 100_000_000), $scaled % 100_000_000);
+    }
+
+    /** E-68: undo a payment recorded by mistake, keeping it in the history. */
+    public function reversePayment(Request $request, Payment $payment): RedirectResponse
+    {
+        $reason = (string) $request->validate(['reason' => ['required', 'string', 'max:500']])['reason'];
+        $this->invoices->reversePayment($payment, $this->user($request), $reason);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Payment reversed.')]);
+
+        return back();
+    }
+
+    /** E-63: a line Finance adds by hand (one-off charge, goodwill credit). */
+    public function storeLine(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:255'],
+            'quantity' => ['required', 'regex:/^\d{1,8}(\.\d{1,2})?$/'],
+            'unit_price' => ['required', 'regex:/^-?\d{1,12}(\.\d{1,2})?$/'],
+            'taxable' => ['boolean'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+        $this->invoices->addLine($invoice, [
+            'description' => (string) $data['description'],
+            'quantity' => (string) $data['quantity'],
+            'unit_minor' => Money::parse((string) $data['unit_price']),
+            'taxable' => (bool) ($data['taxable'] ?? true),
+            'reason' => $data['reason'] ?? null,
+        ], $this->user($request));
+
+        return back();
+    }
+
+    public function storeDiscount(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $data = $request->validate([
+            'kind' => ['required', Rule::in(['percent', 'amount'])],
+            'value' => ['required', 'regex:'.Money::INPUT_REGEX],
+            'applies_to_item_id' => ['nullable', 'integer'],
+            'reason' => ['required', 'string', 'max:200'],
+        ]);
+        $value = Money::parse((string) $data['value']); // "12.5" -> 1250 = basis points for a percentage
+        $this->invoices->addDiscount($invoice, [
+            'percent_bp' => $data['kind'] === 'percent' ? $value : null,
+            'amount_minor' => $data['kind'] === 'amount' ? $value : null,
+            'applies_to_item_id' => isset($data['applies_to_item_id']) ? (int) $data['applies_to_item_id'] : null,
+            'reason' => (string) $data['reason'],
+        ], $this->user($request));
+
+        return back();
+    }
+
+    public function destroyLine(Request $request, InvoiceItem $invoiceItem): RedirectResponse
+    {
+        $this->invoices->removeLine($invoiceItem, $this->user($request));
+
+        return back();
+    }
+
+    /** E-66: maker marks the draft ready; a second Finance user finalizes or sends it back. */
+    public function requestReview(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $this->invoices->requestReview($invoice, $this->user($request));
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Sent for review. Someone else in Finance finalizes it.')]);
+
+        return back();
+    }
+
+    public function sendBack(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $note = (string) $request->validate(['note' => ['required', 'string', 'max:500']])['note'];
+        $this->invoices->sendBack($invoice, $this->user($request), $note);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Sent back with your note.')]);
 
         return back();
     }
