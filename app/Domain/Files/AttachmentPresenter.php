@@ -24,16 +24,38 @@ class AttachmentPresenter
         $canLead = Gate::forUser($user)->allows('lead', $workspace);
         $canApprove = ! $readOnly && $this->canApprove($record, $workspace, $user);
 
-        return Attachment::query()
+        $all = Attachment::query()
             ->with(['uploader:id,name', 'approver:id,name'])
             ->where('attachable_type', $record->getMorphClass())
             ->where('attachable_id', $record->getKey())
+            ->get();
+        // E-02: one row per file (its latest version) with the older versions inside.
+        $byStack = $all->groupBy(fn (Attachment $a) => $a->stackId());
+
+        return $all->where('is_latest', true)
             // Approved files first, then newest.
-            ->orderByRaw('approved_at is null')
-            ->latest('id')
-            ->get()
+            ->sortBy(fn (Attachment $a) => [$a->approved_at === null ? 1 : 0, -$a->id])
             ->map(fn (Attachment $a): array => [
                 'id' => $a->id,
+                'version' => $a->version,
+                'review_status' => $a->review_status,
+                'review_note' => $a->review_note,
+                'versions' => $byStack->get($a->stackId(), collect())
+                    ->where('id', '!=', $a->id)
+                    ->sortByDesc('version')
+                    ->map(fn (Attachment $v): array => [
+                        'id' => $v->id,
+                        'version' => $v->version,
+                        'name' => $v->original_name,
+                        'mime' => $v->mime,
+                        'uploader' => $v->uploader?->name,
+                        'created_at' => $v->created_at?->toIso8601String(),
+                        'url' => $this->files->url($v),
+                        'download_url' => $this->files->url($v, download: true),
+                        'approved' => $v->approved_at !== null,
+                        'review_status' => $v->review_status,
+                        'review_note' => $v->review_note,
+                    ])->values()->all(),
                 'name' => $a->original_name,
                 'mime' => $a->mime,
                 'size' => $a->size,
@@ -70,6 +92,7 @@ class AttachmentPresenter
             ->with(['uploader:id,name', 'approver:id,name', 'attachable:id,title'])
             ->where('attachable_type', (new Task)->getMorphClass())
             ->whereIn('attachable_id', $taskIds)
+            ->where('is_latest', true)
             ->orderByRaw('approved_at is null')
             ->latest('id')
             ->limit($limit)

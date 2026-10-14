@@ -91,6 +91,13 @@ class SaveTaskRequest extends FormRequest
             'work_details.target_url' => ['nullable', 'url:http,https', 'max:255'],
             ...$this->workDetailSelectRules(),
             ...$this->customFieldRules($workspace),
+            // E-21: structured bug report (steps, expected, actual are the minimum).
+            'bug_report' => ['sometimes', 'nullable', 'array:steps,expected,actual,environment,severity'],
+            'bug_report.steps' => ['required_with:bug_report', 'string', 'max:5000'],
+            'bug_report.expected' => ['required_with:bug_report', 'string', 'max:2000'],
+            'bug_report.actual' => ['required_with:bug_report', 'string', 'max:2000'],
+            'bug_report.environment' => ['nullable', 'string', 'max:500'],
+            'bug_report.severity' => ['nullable', Rule::in(array_keys(Task::SEVERITIES))],
             'label_ids' => ['sometimes', 'array', 'max:30'],
             'label_ids.*' => ['integer', Rule::exists('labels', 'id')->where('workspace_id', $workspace->id)],
         ];

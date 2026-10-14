@@ -7,6 +7,7 @@ use App\Domain\Identity\ActivityLogger;
 use App\Domain\Workspaces\MentionService;
 use App\Events\Work\TaskAssigned;
 use App\Events\Work\TaskStatusChanged;
+use App\Models\Attachment;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\Sprint;
@@ -49,7 +50,7 @@ class TaskService
 
             $task = new Task;
             $task->fill([
-                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values']),
+                ...Arr::only($data, ['project_id', 'department_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values', 'bug_report']),
                 'workspace_id' => $workspace->id,
                 'status_id' => $statusId,
                 'description' => $normalized['text'],
@@ -86,7 +87,7 @@ class TaskService
         return DB::transaction(function () use ($task, $data, $actor) {
             $before = Arr::only($task->getAttributes(), self::TRACKED);
 
-            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'position', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values']);
+            $fill = Arr::only($data, ['project_id', 'department_id', 'status_id', 'parent_id', 'title', 'type', 'priority', 'assignee_id', 'due_on', 'start_on', 'estimate_minutes', 'position', 'work_details', 'sprint_id', 'story_points', 'recurrence', 'recurrence_until', 'custom_values', 'bug_report']);
 
             $mentionIds = null;
             if (array_key_exists('description', $data)) {
@@ -212,6 +213,15 @@ class TaskService
         }
         if (! Project::query()->whereKey($task->project_id)->value('review_required')) {
             return;
+        }
+        // E-06: every deliverable's latest version must be approved first (reviewers too).
+        $pending = $task->exists ? Attachment::query()
+            ->where('attachable_type', $task->getMorphClass())->where('attachable_id', $task->id)
+            ->where('is_latest', true)->whereNull('approved_at')->count() : 0;
+        if ($pending > 0) {
+            throw ValidationException::withMessages([
+                'status_id' => trans_choice(':count file still needs approval (latest version) before Done.|:count files still need approval (latest versions) before Done.', $pending),
+            ]);
         }
         if (Gate::forUser($actor)->allows('review', $task)) {
             return;

@@ -28,6 +28,7 @@ Route::middleware('auth')->group(function () {
     Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:60,1')->name('attachments.store');
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
     Route::post('attachments/{attachment}/approve', [AttachmentController::class, 'approve'])->name('attachments.approve');
+    Route::post('attachments/{attachment}/review', [AttachmentController::class, 'review'])->name('attachments.review');
     Route::post('attachments/from-drive', [AttachmentController::class, 'fromDrive'])->middleware('throttle:60,1')->name('attachments.from-drive');
     Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
 

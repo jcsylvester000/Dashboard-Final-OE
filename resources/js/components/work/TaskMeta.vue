@@ -94,6 +94,12 @@ const priorityClass: Record<string, string> = {
             <Timer class="size-3" /> {{ task.sprint.name }}
         </span>
         <span
+            v-if="task.bug_report_missing"
+            class="rounded bg-rose-100 px-1 text-[10px] font-medium text-rose-800 dark:bg-rose-950 dark:text-rose-200"
+            title="This bug has no steps / expected / actual yet"
+            >Needs bug report</span
+        >
+        <span
             v-if="task.recurrence"
             class="inline-flex items-center gap-1 text-muted-foreground"
             :title="`Repeats ${task.recurrence === 'biweekly' ? 'every 2 weeks' : task.recurrence === 'weekly' ? 'every week' : 'every month'}`"

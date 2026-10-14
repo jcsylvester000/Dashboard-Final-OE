@@ -79,7 +79,10 @@ class AttachmentService
         return ['required', 'file', 'max:'.($this->maxMb() * 1024), 'mimes:'.implode(',', $this->allowedExtensions())];
     }
 
-    public function attach(Model $attachable, int $workspaceId, UploadedFile $file, User $by): Attachment
+    /**
+     * @param  Attachment|null  $versionOf  E-02: upload as the next version of this file's stack
+     */
+    public function attach(Model $attachable, int $workspaceId, UploadedFile $file, User $by, ?Attachment $versionOf = null): Attachment
     {
         $mime = (string) ($file->getMimeType() ?: 'application/octet-stream');
         $name = self::sanitiseName($file->getClientOriginalName(), $file->guessExtension());
@@ -99,7 +102,18 @@ class AttachmentService
             $disk = $this->store->name();
         }
 
+        $stack = null;
+        $version = 1;
+        if ($versionOf !== null) {
+            $stack = $versionOf->stackId();
+            $version = 1 + (int) Attachment::query()->where(fn ($q) => $q->whereKey($stack)->orWhere('version_root_id', $stack))->max('version');
+            Attachment::query()->where(fn ($q) => $q->whereKey($stack)->orWhere('version_root_id', $stack))->update(['is_latest' => false]);
+        }
+
         $attachment = Attachment::create([
+            'version_root_id' => $stack,
+            'version' => $version,
+            'is_latest' => true,
             'workspace_id' => $workspaceId,
             'attachable_type' => $attachable->getMorphClass(),
             'attachable_id' => $attachable->getKey(),
@@ -115,7 +129,7 @@ class AttachmentService
             $this->makeThumbnail($attachment, (string) $file->getRealPath());
         }
 
-        $this->activity->log('file.uploaded', $attachable, ['attachment_id' => $attachment->id, 'name' => $attachment->original_name], $by);
+        $this->activity->log($version > 1 ? 'file.version-uploaded' : 'file.uploaded', $attachable, ['attachment_id' => $attachment->id, 'name' => $attachment->original_name, 'version' => $version], $by);
 
         return $attachment;
     }
@@ -137,6 +151,13 @@ class AttachmentService
             $this->store->delete($attachment->thumbnail_key);
         }
         $attachment->delete();
+        // E-02: removing the newest version makes the previous one the latest again.
+        if ($attachment->is_latest) {
+            $stack = $attachment->stackId();
+            $previous = Attachment::query()->where(fn ($q) => $q->whereKey($stack)->orWhere('version_root_id', $stack))
+                ->orderByDesc('version')->first();
+            $previous?->forceFill(['is_latest' => true])->save();
+        }
         $this->activity->log('file.deleted', null, ['attachment_id' => $attachment->id, 'name' => $attachment->original_name], $by);
     }
 

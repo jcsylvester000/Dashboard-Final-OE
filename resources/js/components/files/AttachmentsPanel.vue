@@ -9,6 +9,7 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import MediaViewer from '@/components/files/MediaViewer.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -142,6 +143,50 @@ function attachFromDrive(id: number): void {
             drive_file_id: id,
         },
         { preserveScroll: true, onSuccess: () => (picking.value = false) },
+    );
+}
+
+// E-01: open previewable files in the in-app viewer.
+const viewing = ref<number | null>(null);
+const viewable = computed(() => props.attachments.filter((a) => a.previewable));
+function open(a: AttachmentRow, e: MouseEvent): void {
+    if (!a.previewable || e.ctrlKey || e.metaKey || e.shiftKey) {
+        return; // let the link open normally
+    }
+    e.preventDefault();
+    viewing.value = viewable.value.findIndex((v) => v.id === a.id);
+}
+
+// E-02: upload a new version of a file.
+const versionInput = ref<HTMLInputElement | null>(null);
+const versionOf = ref<number | null>(null);
+function pickVersion(a: AttachmentRow): void {
+    versionOf.value = a.id;
+    versionInput.value?.click();
+}
+function uploadVersion(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file || versionOf.value === null) {
+        return;
+    }
+    router.post(
+        store.url(),
+        {
+            attachable_type: props.attachableType,
+            attachable_id: props.attachableId,
+            version_of: versionOf.value,
+            file,
+        },
+        {
+            forceFormData: true,
+            preserveScroll: true,
+            onFinish: () => {
+                versionOf.value = null;
+                if (versionInput.value) {
+                    versionInput.value.value = '';
+                }
+            },
+        },
     );
 }
 
@@ -304,6 +349,7 @@ function size(bytes: number): string {
                         target="_blank"
                         rel="noopener"
                         class="shrink-0"
+                        @click="open(a, $event)"
                     >
                         <img
                             v-if="a.thumb_url || a.mime.startsWith('image/')"
@@ -325,7 +371,20 @@ function size(bytes: number): string {
                             rel="noopener"
                             class="block truncate font-medium hover:underline"
                             :title="a.name"
+                            @click="open(a, $event)"
                             >{{ a.name }}</a
+                        >
+                        <span
+                            v-if="(a.version ?? 1) > 1 || a.versions?.length"
+                            class="mr-1 rounded bg-muted px-1 text-[10px] font-medium"
+                            :title="`${(a.versions?.length ?? 0) + 1} versions`"
+                            >v{{ a.version ?? 1 }}</span
+                        >
+                        <span
+                            v-if="a.review_status === 'changes'"
+                            class="rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                            :title="a.review_note ?? ''"
+                            >Changes requested</span
                         >
                         <p class="text-xs text-muted-foreground">
                             {{ size(a.size) }} ·
@@ -362,6 +421,15 @@ function size(bytes: number): string {
                     >
                         {{ a.approved ? 'Unapprove' : 'Approve' }}
                     </Button>
+                    <Button
+                        v-if="canUpload && !a.task"
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 px-2 text-xs"
+                        :title="`Upload a new version of ${a.name}`"
+                        @click="pickVersion(a)"
+                        >New version</Button
+                    >
                     <Button variant="ghost" size="icon" as-child>
                         <a
                             :href="a.download_url"
@@ -380,6 +448,22 @@ function size(bytes: number): string {
                     </Button>
                 </li>
             </ul>
+            <input
+                ref="versionInput"
+                type="file"
+                class="hidden"
+                :accept="accept"
+                aria-label="New version"
+                @change="uploadVersion"
+            />
         </CardContent>
     </Card>
+    <Teleport to="body">
+        <MediaViewer
+            v-if="viewing !== null && viewing >= 0 && viewable.length"
+            :items="viewable"
+            :start="viewing"
+            @close="viewing = null"
+        />
+    </Teleport>
 </template>

@@ -47,13 +47,14 @@ use Illuminate\Support\Carbon;
  * @property int|null $sprint_id
  * @property int|null $story_points
  * @property Carbon|null $completed_at
+ * @property array<string, string|null>|null $bug_report steps, expected, actual, environment, severity (E-21)
  * @property array<string, mixed>|null $custom_values B-07: custom field key => value
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable([
     'workspace_id', 'project_id', 'department_id', 'status_id', 'parent_id', 'handoff_from_task_id',
-    'title', 'description', 'work_details', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position', 'type', 'sprint_id', 'story_points', 'start_on', 'recurrence', 'recurrence_until', 'custom_values',
+    'title', 'description', 'work_details', 'priority', 'assignee_id', 'reporter_id', 'due_on', 'estimate_minutes', 'position', 'type', 'sprint_id', 'story_points', 'start_on', 'recurrence', 'recurrence_until', 'custom_values', 'bug_report',
 ])]
 class Task extends Model implements Mentionable
 {
@@ -80,6 +81,9 @@ class Task extends Model implements Mentionable
             'work_type' => ['Work type', 'select', ['On-page', 'Technical', 'Content', 'Links', 'Local', 'Reporting']],
         ],
     ];
+
+    /** E-21: bug severity => label */
+    public const SEVERITIES = ['critical' => 'Critical (blocks work)', 'high' => 'High', 'medium' => 'Medium', 'low' => 'Low'];
 
     /** type => label (Jira-style issue types) */
     public const TYPES = [
@@ -149,6 +153,7 @@ class Task extends Model implements Mentionable
             'completed_at' => 'datetime',
             'work_details' => 'array',
             'custom_values' => 'array',
+            'bug_report' => 'array',
             'estimate_minutes' => 'integer',
             'position' => 'integer',
             'number' => 'integer',

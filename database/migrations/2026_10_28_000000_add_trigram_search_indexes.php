@@ -13,9 +13,9 @@ return new class extends Migration
 {
     /** @var array<string, string> index name => table(expression) */
     private array $indexes = [
-        'tasks_title_trgm' => 'tasks (lower(title) gin_trgm_ops)',
-        'projects_name_trgm' => 'projects (lower(name) gin_trgm_ops)',
-        'comments_body_trgm' => 'comments (lower(body) gin_trgm_ops)',
+        'tasks_title_trgm' => 'tasks USING gin (lower(title) gin_trgm_ops)',
+        'projects_name_trgm' => 'projects USING gin (lower(name) gin_trgm_ops)',
+        'comments_body_trgm' => 'comments USING gin (lower(body) gin_trgm_ops)',
     ];
 
     public function up(): void

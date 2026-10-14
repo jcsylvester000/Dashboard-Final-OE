@@ -45,16 +45,27 @@ export type TaskRow = {
     sprint?: { id: number; name: string; status: string } | null;
     sprint_id?: number | null;
     recurrence?: string | null;
+    bug_report_missing?: boolean;
 };
 
 export type TaskComment = {
     id: number;
     body: string;
+    body_html?: string;
     author: { id: number; name: string } | null;
     created_at: string;
     edited_at: string | null;
     can_edit: boolean;
     can_delete: boolean;
+};
+
+/** E-21: structured bug report on bug tasks. */
+export type BugReport = {
+    steps?: string;
+    expected?: string;
+    actual?: string;
+    environment?: string | null;
+    severity?: 'critical' | 'high' | 'medium' | 'low' | null;
 };
 
 /** B-07: one custom task field defined for a client. */
@@ -67,6 +78,8 @@ export type CustomField = {
 
 export type TaskDetail = TaskRow & {
     description: string | null;
+    description_html?: string;
+    bug_report?: BugReport;
     work_details: Record<string, string | null>;
     custom_values?: Record<string, string | number | boolean | null>;
     estimate_minutes: number | null;

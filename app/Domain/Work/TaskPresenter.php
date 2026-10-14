@@ -61,6 +61,8 @@ class TaskPresenter
             'sprint' => $task->sprint_id !== null && $task->relationLoaded('sprint') ? $task->sprint?->only(['id', 'name', 'status']) : null,
             'sprint_id' => $task->sprint_id,
             'recurrence' => $task->recurrence,
+            // E-21: bugs without steps/expected/actual are flagged on cards.
+            'bug_report_missing' => $task->type === 'bug' && trim((string) ($task->bug_report['steps'] ?? '')) === '',
         ];
     }
 

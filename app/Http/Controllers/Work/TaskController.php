@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Work;
 
 use App\Domain\Files\AttachmentPresenter;
+use App\Domain\Files\AttachmentService;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Text\RichText;
 use App\Domain\Work\TaskPresenter;
 use App\Domain\Work\TaskService;
 use App\Domain\Workspaces\LinkService;
@@ -11,6 +13,7 @@ use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Work\SaveTaskRequest;
 use App\Models\ActivityLog;
+use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\RecordLink;
@@ -227,11 +230,27 @@ class TaskController extends Controller
 
         $references = $links->linksFor($task, $user);
 
+        // E-20 / E-10: Markdown with mentions and pasted screenshots ([[file:N]] -> this task's files only).
+        $rich = app(RichText::class);
+        $fileIds = array_values(array_unique([...RichText::fileIds($task->description), ...$task->comments->flatMap(fn (Comment $c) => RichText::fileIds($c->body))->all()]));
+        $files = $fileIds === [] ? [] : Attachment::query()
+            ->whereIn('id', $fileIds)
+            ->where('attachable_type', $task->getMorphClass())->where('attachable_id', $task->id)
+            ->get()
+            ->mapWithKeys(fn (Attachment $a) => [$a->id => [
+                'name' => $a->original_name,
+                'url' => app(AttachmentService::class)->url($a),
+                'thumb_url' => $a->thumbnail_key !== null ? app(AttachmentService::class)->url($a, thumbnail: true) : null,
+                'image' => $a->isImage(),
+            ]])->all();
+
         return Inertia::render('tasks/Show', [
             ...$this->shared($workspace, $user),
             'task' => [
                 ...$this->present->row($task, $open),
                 'description' => $task->description,
+                'description_html' => $rich->render($task->description, $files),
+                'bug_report' => $task->bug_report ?? (object) [],
                 'work_details' => $task->work_details ?? (object) [],
                 'custom_values' => $task->custom_values ?? (object) [],
                 'estimate_minutes' => $task->estimate_minutes,
@@ -251,6 +270,7 @@ class TaskController extends Controller
                 'comments' => $task->comments->map(fn (Comment $c) => [
                     'id' => $c->id,
                     'body' => $c->body,
+                    'body_html' => $rich->render($c->body, $files),
                     'author' => $c->author?->only(['id', 'name']),
                     'created_at' => $c->created_at->toIso8601String(),
                     'edited_at' => $c->edited_at?->toIso8601String(),

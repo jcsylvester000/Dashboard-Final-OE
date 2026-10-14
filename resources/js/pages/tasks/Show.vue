@@ -18,11 +18,11 @@ import TaskController from '@/actions/App/Http/Controllers/Work/TaskController';
 import TaskFlowController from '@/actions/App/Http/Controllers/Work/TaskFlowController';
 import InputError from '@/components/InputError.vue';
 import LabelBadge from '@/components/LabelBadge.vue';
-import MentionText from '@/components/MentionText.vue';
 import MentionTextarea from '@/components/MentionTextarea.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import AttachmentsPanel from '@/components/files/AttachmentsPanel.vue';
 import ReferencePanel from '@/components/ReferencePanel.vue';
+import RichText from '@/components/RichText.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -34,6 +34,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
+import BugReportCard from '@/components/work/BugReportCard.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
 import TaskMeta from '@/components/work/TaskMeta.vue';
@@ -600,6 +601,15 @@ function describe(entry: TimelineEntry): string {
 
                 <!-- Details / edit -->
                 <Card>
+                    <BugReportCard
+                        v-if="task.type === 'bug'"
+                        :key="`bug-${task.id}-${task.updated_at}`"
+                        :workspace-slug="ws"
+                        :task-id="task.id"
+                        :report="task.bug_report ?? {}"
+                        :can-edit="can"
+                    />
+
                     <CardContent class="pt-6">
                         <Form
                             v-if="editing"
@@ -728,9 +738,9 @@ function describe(entry: TimelineEntry): string {
                             </div>
                         </Form>
                         <template v-else>
-                            <MentionText
-                                v-if="task.description"
-                                :text="task.description"
+                            <RichText
+                                v-if="task.description_html"
+                                :html="task.description_html"
                             />
                             <p v-else class="text-sm text-muted-foreground">
                                 No description.
@@ -858,7 +868,7 @@ function describe(entry: TimelineEntry): string {
                                     >
                                 </div>
                             </Form>
-                            <MentionText v-else :text="c.body" />
+                            <RichText v-else :html="c.body_html ?? ''" />
                         </div>
 
                         <Form
@@ -880,7 +890,8 @@ function describe(entry: TimelineEntry): string {
                                 :members="members"
                                 :departments="departments"
                                 :rows="3"
-                                placeholder="Write an update. Type @ to tag a person or a department."
+                                :paste-target="{ type: 'task', id: task.id }"
+                                placeholder="Write an update. Type @ to tag someone. Paste a screenshot (Ctrl+V). Markdown and ``` code blocks work."
                             />
                             <InputError :message="errors.body" />
                             <Button
