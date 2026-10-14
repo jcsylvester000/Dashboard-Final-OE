@@ -19,6 +19,8 @@ use App\Models\Project;
 use App\Models\RecordLink;
 use App\Models\SavedView;
 use App\Models\Task;
+use App\Models\TaskChecklistItem;
+use App\Models\TaskReviewer;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\WorkflowTemplate;
@@ -251,6 +253,15 @@ class TaskController extends Controller
                 'description' => $task->description,
                 'description_html' => $rich->render($task->description, $files),
                 'bug_report' => $task->bug_report ?? (object) [],
+                // E-07 / E-36
+                'review_rule' => $task->review_rule,
+                'reviewers' => $task->reviewers()->with('user:id,name')->get()->map(fn (TaskReviewer $r) => [
+                    'user_id' => $r->user_id, 'name' => $r->user->name ?? 'Former member', 'decision' => $r->decision, 'note' => $r->note,
+                    'decided_at' => $r->decided_at?->toIso8601String(),
+                ])->values(),
+                'checklist_items' => $task->checklistItems()->with('doneBy:id,name')->get()->map(fn (TaskChecklistItem $i) => [
+                    'id' => $i->id, 'label' => $i->label, 'required' => $i->required, 'done' => $i->done_at !== null, 'done_by' => $i->doneBy?->name,
+                ])->values(),
                 'work_details' => $task->work_details ?? (object) [],
                 'custom_values' => $task->custom_values ?? (object) [],
                 'estimate_minutes' => $task->estimate_minutes,

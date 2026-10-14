@@ -12,6 +12,7 @@ import {
     Gauge,
     Briefcase,
     AlertTriangle,
+    BadgeCheck,
     Building2,
     CheckSquare,
     CalendarDays,
@@ -50,6 +51,7 @@ import { index as leaveIndex } from '@/routes/leave';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { edit as companySettings } from '@/routes/admin/company';
+import { index as reviewsIndex } from '@/routes/reviews';
 import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as driveIndex } from '@/routes/drive';
@@ -97,6 +99,11 @@ const mainNavItems: NavItem[] = [
         title: 'My tasks',
         href: myTasks(),
         icon: CheckSquare,
+    },
+    {
+        title: 'Reviews',
+        href: reviewsIndex(),
+        icon: BadgeCheck,
     },
     {
         title: 'My files',

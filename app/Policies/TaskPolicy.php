@@ -43,6 +43,11 @@ class TaskPolicy
             return false;
         }
 
+        // E-07: anyone named as a reviewer on the task.
+        if ($task->reviewers()->where('user_id', $user->id)->exists()) {
+            return true;
+        }
+
         // Read the lead columns directly: pages eager-load project/department with only a few
         // columns, so the loaded relations may not include lead_user_id.
         return ($task->project_id !== null && (int) Project::query()->whereKey($task->project_id)->value('lead_user_id') === $user->id)

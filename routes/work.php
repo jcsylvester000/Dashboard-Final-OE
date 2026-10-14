@@ -8,8 +8,10 @@ use App\Http\Controllers\People\PeopleReportController;
 use App\Http\Controllers\People\WorkloadController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Work\CalendarController;
+use App\Http\Controllers\Work\ChecklistController;
 use App\Http\Controllers\Work\CommentController;
 use App\Http\Controllers\Work\QueueController;
+use App\Http\Controllers\Work\ReviewQueueController;
 use App\Http\Controllers\Work\SavedViewController;
 use App\Http\Controllers\Work\SprintController;
 use App\Http\Controllers\Work\TaskBulkController;
@@ -25,6 +27,8 @@ use Illuminate\Support\Facades\Route;
 */
 Route::middleware('auth')->group(function () {
     Route::get('my-tasks', [QueueController::class, 'mine'])->name('tasks.mine');
+    // E-32: everything waiting for my review, across clients.
+    Route::get('reviews', ReviewQueueController::class)->name('reviews.index');
     Route::get('tasks/new-options', [TaskController::class, 'newOptions'])->name('tasks.new-options');
 
     // People (findings batch 4): leave, workload, people report, directory
@@ -85,6 +89,10 @@ Route::middleware('auth')->group(function () {
 
             Route::post('tasks/{task}/handoff', [TaskFlowController::class, 'handoff'])->name('tasks.handoff');
             Route::post('tasks/{task}/review', [TaskFlowController::class, 'review'])->name('tasks.review');
+            Route::put('tasks/{task}/reviewers', [TaskFlowController::class, 'reviewers'])->name('tasks.reviewers');
+            Route::post('tasks/{task}/checklist', [ChecklistController::class, 'store'])->name('tasks.checklist.store');
+            Route::patch('tasks/{task}/checklist/{checklistItem}', [ChecklistController::class, 'update'])->name('tasks.checklist.update');
+            Route::delete('tasks/{task}/checklist/{checklistItem}', [ChecklistController::class, 'destroy'])->name('tasks.checklist.destroy');
             Route::post('tasks/{task}/dependencies', [TaskFlowController::class, 'addDependency'])->name('tasks.dependencies.store');
             Route::post('tasks/{task}/comments', [CommentController::class, 'store'])->name('tasks.comments.store');
             Route::put('comments/{comment}', [CommentController::class, 'update'])->name('comments.update');

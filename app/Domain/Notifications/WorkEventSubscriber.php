@@ -256,6 +256,12 @@ class WorkEventSubscriber
      */
     private function reviewersFor(Task $task, Workspace $workspace): array
     {
+        // E-07: named reviewers first.
+        $named = $task->reviewers()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        if ($named !== []) {
+            return array_values($named);
+        }
+
         $ids = array_filter([
             $task->project_id !== null ? (int) DB::table('projects')->where('id', $task->project_id)->value('lead_user_id') : 0,
             $task->department_id !== null ? (int) DB::table('departments')->where('id', $task->department_id)->value('lead_user_id') : 0,

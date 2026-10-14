@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Work;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Work\CommentService;
 use App\Domain\Work\HandoffService;
+use App\Domain\Work\ReviewService;
 use App\Domain\Work\TaskService;
 use App\Domain\Work\TemplateService;
 use App\Http\Controllers\Controller;
@@ -17,6 +18,7 @@ use App\Models\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -71,6 +73,29 @@ class TaskFlowController extends Controller
         $user = $request->user();
         $note = trim((string) ($data['note'] ?? ''));
 
+        // E-07: the decision and the status change succeed or fail together, so an approval
+        // blocked by the Done gate (open checklist, unapproved files) is not left recorded.
+        return DB::transaction(fn () => $this->decide($task, $user, $data['decision'], $note, $tasks, $comments));
+    }
+
+    private function decide(Task $task, User $user, string $decision, string $note, TaskService $tasks, CommentService $comments): RedirectResponse
+    {
+        $data = ['decision' => $decision];
+        $reviews = app(ReviewService::class);
+        $named = $reviews->isReviewer($task, $user);
+        if ($named) {
+            $reviews->record($task, $user, $data['decision'] === 'approve' ? 'approved' : 'changes', $note !== '' ? $note : null);
+        }
+
+        // E-07: with rule "all", one approval out of several keeps the task In Review.
+        if ($data['decision'] === 'approve' && $named && ! $reviews->satisfied($task)) {
+            $progress = $reviews->progress($task);
+            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null, 'partial' => true], $user);
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Approved (:a of :t). Waiting for :names.', ['a' => $progress['approved'], 't' => $progress['total'], 'names' => implode(', ', $progress['waiting'])])]);
+
+            return back();
+        }
+
         if ($data['decision'] === 'approve') {
             $tasks->update($task, ['status_id' => TaskStatus::idFor('done')], $user);
             $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null], $user);
@@ -86,6 +111,24 @@ class TaskFlowController extends Controller
             $comments->create($task, $tag.__('Changes requested: :note', ['note' => $note]), $user);
             Inertia::flash('toast', ['type' => 'success', 'message' => __('Sent back with your notes.')]);
         }
+
+        return back();
+    }
+
+    /**
+     * E-07: who reviews this task and whether all of them or any one must approve.
+     */
+    public function reviewers(Request $request, Workspace $workspace, Task $task): RedirectResponse
+    {
+        Gate::authorize('update', $task);
+        $data = $request->validate([
+            'user_ids' => ['present', 'array', 'max:10'],
+            'user_ids.*' => ['integer'],
+            'rule' => ['required', Rule::in(['all', 'any'])],
+        ]);
+        /** @var User $user */
+        $user = $request->user();
+        app(ReviewService::class)->setReviewers($task, array_map('intval', $data['user_ids']), (string) $data['rule'], $user);
 
         return back();
     }

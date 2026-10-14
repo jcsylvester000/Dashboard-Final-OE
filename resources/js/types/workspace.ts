@@ -65,6 +65,7 @@ export type ProjectDetail = {
     description: string | null;
     lead_user_id: number | null;
     review_required?: boolean;
+    review_sla_days?: number;
     department_ids?: number[];
     status_link?: {
         url: string;

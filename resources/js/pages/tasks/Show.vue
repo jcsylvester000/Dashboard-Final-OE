@@ -35,8 +35,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import BugReportCard from '@/components/work/BugReportCard.vue';
+import ChecklistCard from '@/components/work/ChecklistCard.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
+import ReviewersCard from '@/components/work/ReviewersCard.vue';
 import TaskMeta from '@/components/work/TaskMeta.vue';
 import TaskPicker from '@/components/work/TaskPicker.vue';
 import TaskTimeCard from '@/components/work/TaskTimeCard.vue';
@@ -790,6 +792,13 @@ function describe(entry: TimelineEntry): string {
                     </CardContent>
                 </Card>
 
+                <ChecklistCard
+                    :workspace-slug="ws"
+                    :task-id="task.id"
+                    :items="task.checklist_items ?? []"
+                    :can-edit="can"
+                />
+
                 <!-- Comments -->
                 <Card>
                     <CardHeader>
@@ -906,6 +915,15 @@ function describe(entry: TimelineEntry): string {
             </div>
 
             <div :key="sideKey" class="space-y-4">
+                <ReviewersCard
+                    :workspace-slug="ws"
+                    :task-id="task.id"
+                    :assignee-id="task.assignee?.id ?? null"
+                    :reviewers="task.reviewers ?? []"
+                    :rule="task.review_rule ?? 'all'"
+                    :members="members"
+                    :can-edit="can"
+                />
                 <!-- Quick fields (S1-19): what people change most, then Time, then the rest. -->
                 <Card>
                     <CardContent class="space-y-3 pt-6 text-sm">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Workspaces;
 
 use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
+use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\Workspace;
 use Illuminate\Http\RedirectResponse;
@@ -54,6 +55,33 @@ class TaskFieldsController extends Controller
         $workspace->forceFill(['custom_fields' => $fields === [] ? null : $fields])->save();
         $this->activity->log('workspace.custom-fields', $workspace, ['count' => count($fields)]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Task fields saved.')]);
+
+        return back();
+    }
+
+    /**
+     * E-36: checklist lines added to every new task of a type, e.g. Story -> tests, docs, review.
+     */
+    public function checklists(Request $request, Workspace $workspace): RedirectResponse
+    {
+        Gate::authorize('lead', $workspace);
+        $data = $request->validate([
+            'templates' => ['present', 'array'],
+            'templates.*' => ['nullable', 'string', 'max:3000'],
+        ]);
+        $templates = [];
+        foreach ((array) $data['templates'] as $type => $text) {
+            if (! array_key_exists((string) $type, Task::TYPES)) {
+                continue;
+            }
+            $lines = array_values(array_filter(array_map(fn ($l) => mb_substr(trim($l), 0, 200), preg_split('/\R/', (string) $text) ?: []), fn ($l) => $l !== ''));
+            if ($lines !== []) {
+                $templates[(string) $type] = array_slice($lines, 0, 30);
+            }
+        }
+        $workspace->forceFill(['checklist_templates' => $templates === [] ? null : $templates])->save();
+        $this->activity->log('workspace.checklist-templates', $workspace, ['types' => array_keys($templates)]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Checklists saved. New tasks of these types get them.')]);
 
         return back();
     }

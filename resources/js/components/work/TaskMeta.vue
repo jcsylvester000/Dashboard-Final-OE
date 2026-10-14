@@ -94,6 +94,17 @@ const priorityClass: Record<string, string> = {
             <Timer class="size-3" /> {{ task.sprint.name }}
         </span>
         <span
+            v-if="task.checklist"
+            class="text-muted-foreground"
+            :class="
+                task.checklist.done === task.checklist.total
+                    ? 'text-emerald-700'
+                    : ''
+            "
+            :title="`Checklist ${task.checklist.done} of ${task.checklist.total} done`"
+            >☑ {{ task.checklist.done }}/{{ task.checklist.total }}</span
+        >
+        <span
             v-if="task.bug_report_missing"
             class="rounded bg-rose-100 px-1 text-[10px] font-medium text-rose-800 dark:bg-rose-950 dark:text-rose-200"
             title="This bug has no steps / expected / actual yet"

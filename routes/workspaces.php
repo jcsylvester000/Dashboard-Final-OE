@@ -21,6 +21,7 @@ Route::middleware('auth')->group(function () {
         // B-07: custom task fields and status names (leads).
         Route::put('settings/task-fields', [TaskFieldsController::class, 'fields'])->name('task-fields.update');
         Route::put('settings/status-labels', [TaskFieldsController::class, 'statusLabels'])->name('status-labels.update');
+        Route::put('settings/checklists', [TaskFieldsController::class, 'checklists'])->name('checklists.update');
         Route::get('settings', [WorkspaceController::class, 'edit'])->name('edit');
         Route::put('/', [WorkspaceController::class, 'update'])->name('update');
 

@@ -46,6 +46,7 @@ export type TaskRow = {
     sprint_id?: number | null;
     recurrence?: string | null;
     bug_report_missing?: boolean;
+    checklist?: { done: number; total: number } | null;
 };
 
 export type TaskComment = {
@@ -80,6 +81,21 @@ export type TaskDetail = TaskRow & {
     description: string | null;
     description_html?: string;
     bug_report?: BugReport;
+    review_rule?: 'all' | 'any';
+    reviewers?: {
+        user_id: number;
+        name: string;
+        decision: 'approved' | 'changes' | null;
+        note: string | null;
+        decided_at: string | null;
+    }[];
+    checklist_items?: {
+        id: number;
+        label: string;
+        required: boolean;
+        done: boolean;
+        done_by: string | null;
+    }[];
     work_details: Record<string, string | null>;
     custom_values?: Record<string, string | number | boolean | null>;
     estimate_minutes: number | null;

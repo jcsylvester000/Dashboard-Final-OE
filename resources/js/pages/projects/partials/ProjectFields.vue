@@ -235,6 +235,24 @@ function firstError(field: string): string | undefined {
             </span>
         </label>
 
+        <div class="grid gap-1 sm:col-span-2">
+            <Label for="p-sla">Review time (working days)</Label>
+            <input
+                id="p-sla"
+                type="number"
+                name="review_sla_days"
+                min="1"
+                max="10"
+                class="h-9 w-24 rounded-md border bg-transparent px-3 text-sm"
+                :value="project?.review_sla_days ?? 1"
+            />
+            <span class="text-xs text-muted-foreground"
+                >Reviewers get a reminder after this many working days in
+                review; leads one day later.</span
+            >
+            <InputError :message="firstError('review_sla_days')" />
+        </div>
+
         <div class="grid gap-2 sm:col-span-2">
             <Label for="p-desc">Brief</Label>
             <MentionTextarea

@@ -47,6 +47,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $sprint_id
  * @property int|null $story_points
  * @property Carbon|null $completed_at
+ * @property string $review_rule all | any (E-07)
+ * @property Carbon|null $review_requested_at when the task last entered In Review (E-33)
  * @property array<string, string|null>|null $bug_report steps, expected, actual, environment, severity (E-21)
  * @property array<string, mixed>|null $custom_values B-07: custom field key => value
  * @property Carbon|null $created_at
@@ -154,6 +156,7 @@ class Task extends Model implements Mentionable
             'work_details' => 'array',
             'custom_values' => 'array',
             'bug_report' => 'array',
+            'review_requested_at' => 'datetime',
             'estimate_minutes' => 'integer',
             'position' => 'integer',
             'number' => 'integer',
@@ -255,6 +258,18 @@ class Task extends Model implements Mentionable
     public function timeEntries(): HasMany
     {
         return $this->hasMany(TimeEntry::class);
+    }
+
+    /** @return HasMany<TaskReviewer, $this> */
+    public function reviewers(): HasMany
+    {
+        return $this->hasMany(TaskReviewer::class);
+    }
+
+    /** @return HasMany<TaskChecklistItem, $this> */
+    public function checklistItems(): HasMany
+    {
+        return $this->hasMany(TaskChecklistItem::class)->orderBy('position')->orderBy('id');
     }
 
     /** @return MorphMany<Comment, $this> */

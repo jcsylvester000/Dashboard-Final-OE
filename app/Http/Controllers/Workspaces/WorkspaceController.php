@@ -9,6 +9,7 @@ use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Workspace;
@@ -156,6 +157,8 @@ class WorkspaceController extends Controller
             'customFields' => $workspace->custom_fields ?? [],
             'fieldTypes' => Workspace::CUSTOM_FIELD_TYPES,
             'maxFields' => Workspace::MAX_CUSTOM_FIELDS,
+            'checklistTemplates' => collect(Task::TYPES)->mapWithKeys(fn ($label, $type) => [$type => implode("\n", $workspace->checklist_templates[$type] ?? [])]),
+            'taskTypes' => Task::TYPES,
             'taskStatuses' => TaskStatus::ordered()->map(fn (TaskStatus $s) => [
                 'id' => $s->id, 'name' => $s->name, 'label' => $workspace->status_labels[$s->id] ?? '',
             ])->values(),

@@ -64,6 +64,12 @@ class AttachmentController extends Controller
         }
         $attachment = $this->files->attach($model, $workspaceId, $file, $user, $versionOf);
 
+        // E-35: a new version answering "changes requested" sends the task back for review.
+        if ($versionOf !== null && $versionOf->review_status === 'changes' && $model instanceof Task
+            && $model->status_id === TaskStatus::idFor('in-progress')) {
+            app(TaskService::class)->update($model, ['status_id' => TaskStatus::idFor('in-review')], $user);
+        }
+
         // E-10: pasted screenshots upload in the background and come back as a token for the comment.
         if ($request->expectsJson()) {
             return response()->json(['id' => $attachment->id, 'name' => $attachment->original_name, 'token' => '[[file:'.$attachment->id.']]']);

@@ -61,6 +61,13 @@ class TaskService
             $this->stampCompletion($task);
             $task->save();
 
+            // E-36: the client's checklist template for this task type.
+            foreach ($workspace->checklist_templates[$task->type] ?? [] as $i => $line) {
+                if (trim($line) !== '') {
+                    $task->checklistItems()->create(['label' => mb_substr(trim($line), 0, 200), 'position' => $i]);
+                }
+            }
+
             if (array_key_exists('label_ids', $data)) {
                 $task->labels()->sync(array_map('intval', (array) $data['label_ids']));
             }
@@ -98,13 +105,23 @@ class TaskService
 
             $task->fill($fill);
 
+            $newRound = false;
             if ($task->isDirty('status_id')) {
                 $this->guardFinish($task);
                 $this->guardReview($task, $actor);
+                $this->guardReviewers($task, $actor);
                 $this->stampCompletion($task);
+                // E-33 / E-07: entering In Review starts a new round and the review clock.
+                if ($task->status_id === TaskStatus::idFor('in-review')) {
+                    $task->forceFill(['review_requested_at' => now()]);
+                    $newRound = true;
+                }
             }
 
             $task->save();
+            if ($newRound) {
+                app(ReviewService::class)->resetRound($task);
+            }
 
             if (array_key_exists('label_ids', $data)) {
                 $task->labels()->sync(array_map('intval', (array) $data['label_ids']));
@@ -188,6 +205,14 @@ class TaskService
         $status = TaskStatus::ordered()->firstWhere('id', $task->status_id);
         if ($status === null || ! $status->isDone()) {
             return;
+        }
+
+        // E-36: required checklist lines must be ticked.
+        $openItems = $task->exists ? $task->checklistItems()->where('required', true)->whereNull('done_at')->count() : 0;
+        if ($openItems > 0) {
+            throw ValidationException::withMessages([
+                'status_id' => trans_choice(':count required checklist item is still open.|:count required checklist items are still open.', $openItems),
+            ]);
         }
 
         $open = $task->exists ? $task->openDependencyCount() : 0;
@@ -305,6 +330,26 @@ class TaskService
         $this->lastTimeMove = ['moved' => $moved, 'kept' => $kept];
 
         return $this->lastTimeMove;
+    }
+
+    /**
+     * E-07: with named reviewers, only their approval (by the rule) or a lead's override reaches Done.
+     */
+    private function guardReviewers(Task $task, User $actor): void
+    {
+        $status = TaskStatus::ordered()->firstWhere('id', $task->status_id);
+        if ($status === null || ! $status->isDone() || ! $task->exists || ! $task->reviewers()->exists()) {
+            return;
+        }
+        $workspace = Workspace::query()->find($task->workspace_id);
+        if (app(ReviewService::class)->satisfied($task) || ($workspace !== null && Gate::forUser($actor)->allows('lead', $workspace))) {
+            return;
+        }
+
+        $waiting = app(ReviewService::class)->progress($task)['waiting'];
+        throw ValidationException::withMessages([
+            'status_id' => __('Waiting for review by :names.', ['names' => implode(', ', $waiting)]),
+        ]);
     }
 
     /**

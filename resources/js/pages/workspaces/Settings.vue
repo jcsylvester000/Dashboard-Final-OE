@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import { confirmDialog } from '@/composables/useConfirm';
 import { index as workspacesIndex } from '@/routes/workspaces';
+import { update as checklistsUpdate } from '@/routes/workspaces/checklists';
 import { update as statusLabelsUpdate } from '@/routes/workspaces/status-labels';
 import { update as taskFieldsUpdate } from '@/routes/workspaces/task-fields';
 import type { CustomField } from '@/types/work';
@@ -43,6 +44,8 @@ const props = defineProps<{
     fieldTypes?: Record<string, string>;
     maxFields?: number;
     taskStatuses?: { id: number; name: string; label: string }[];
+    checklistTemplates?: Record<string, string>;
+    taskTypes?: Record<string, string>;
 }>();
 
 // B-07: custom task fields (options typed one per line for "Pick one").
@@ -90,6 +93,16 @@ function saveFields(): void {
 }
 const fieldError = (i: number, name: string): string | undefined =>
     (fieldsForm.errors as Record<string, string>)[`fields.${i}.${name}`];
+
+// E-36: checklist lines added to new tasks of each type (one line per row).
+const checklistForm = useForm<{ templates: Record<string, string> }>({
+    templates: { ...props.checklistTemplates },
+});
+function saveChecklists(): void {
+    checklistForm.put(checklistsUpdate.url(props.workspace.slug), {
+        preserveScroll: true,
+    });
+}
 
 // B-07: this client's names for the shared statuses (blank = default name).
 const labelsForm = useForm<{ labels: Record<string, string> }>({
@@ -444,6 +457,52 @@ async function removeLabel(label: {
                             size="sm"
                             :disabled="labelsForm.processing"
                             >Save status names</Button
+                        >
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+        <Card v-if="workspace.can.lead && taskTypes">
+            <CardHeader>
+                <CardTitle class="text-base">Checklists</CardTitle>
+                <CardDescription
+                    >Lines added to every new task of that type, one per row.
+                    Each line must be ticked before Done (members can mark extra
+                    lines optional).</CardDescription
+                >
+            </CardHeader>
+            <CardContent>
+                <form
+                    class="grid gap-3 text-sm sm:grid-cols-2"
+                    @submit.prevent="saveChecklists"
+                >
+                    <label
+                        v-for="(label, type) in taskTypes"
+                        :key="type"
+                        class="grid gap-1"
+                    >
+                        <span class="text-xs text-muted-foreground">{{
+                            label
+                        }}</span>
+                        <textarea
+                            v-model="checklistForm.templates[type]"
+                            rows="4"
+                            class="rounded-md border bg-transparent px-2 py-1 text-sm"
+                            :placeholder="
+                                type === 'story'
+                                    ? 'Tests added\nDocs updated\nAccessibility checked'
+                                    : type === 'bug'
+                                      ? 'Reproduced\nFix verified on staging'
+                                      : ''
+                            "
+                        />
+                    </label>
+                    <div class="sm:col-span-2">
+                        <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="checklistForm.processing"
+                            >Save checklists</Button
                         >
                     </div>
                 </form>

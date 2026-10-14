@@ -32,6 +32,11 @@ Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping(
 // Overdue client invoices -> Finance inbox (P6).
 Schedule::command('billing:alerts')->dailyAt('07:00')->withoutOverlapping();
 
+// E-33: overdue reviews (reminder, then escalation); E-39: timesheet nudges (Manila time).
+Schedule::command('work:review-reminders')->hourlyAt(15)->weekdays()->withoutOverlapping();
+Schedule::command('time:nudges --friday')->weeklyOn(5, '16:00')->timezone('Asia/Manila');
+Schedule::command('time:nudges --monday')->weeklyOn(1, '09:00')->timezone('Asia/Manila');
+
 // Team file drive: free quota held by abandoned uploads.
 Schedule::command('drive:prune')->hourly()->withoutOverlapping();
 

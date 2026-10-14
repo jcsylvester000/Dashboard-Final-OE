@@ -48,6 +48,8 @@ class SaveProjectRequest extends FormRequest
             'lead_user_id' => ['nullable', 'integer', $member],
             'description' => ['nullable', 'string', 'max:10000'],
             'review_required' => ['sometimes', 'boolean'],
+            // E-33: working days a review may take before reminders.
+            'review_sla_days' => ['sometimes', 'integer', 'min:1', 'max:10'],
             'start_on' => ['nullable', 'date'],
             'due_on' => ['nullable', 'date', Rule::when($this->filled('start_on'), ['after_or_equal:start_on'])],
             'department_ids' => ['array', 'max:20'],

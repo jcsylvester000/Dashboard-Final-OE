@@ -30,7 +30,8 @@ use Illuminate\Support\Facades\DB;
  * @property string|null $key short task-key prefix, e.g. BRW (BRW-24)
  * @property int $next_task_number
  * @property list<array{key: string, label: string, type: string, options?: list<string>}>|null $custom_fields B-07
- * @property array<int|string, string>|null $status_labels B-07: status id => this client's name for it
+ * @property array<int|string, string>|null $status_labels
+ * @property array<string, list<string>>|null $checklist_templates E-36: task type => checklist lines B-07: status id => this client's name for it
  * @property int|null $created_by
  * @property-read int|null $members_count
  * @property-read int|null $open_projects_count
@@ -218,6 +219,7 @@ class Workspace extends Model
         return [
             'custom_fields' => 'array',
             'status_labels' => 'array',
+            'checklist_templates' => 'array',
         ];
     }
 

@@ -140,6 +140,7 @@ class ProjectController extends Controller
                 'description' => $project->description,
                 'lead_user_id' => $project->lead_user_id,
                 'review_required' => $project->review_required,
+                'review_sla_days' => $project->review_sla_days,
                 // B-06: client status page (leads see and manage it).
                 'status_link' => Gate::allows('lead', $workspace) && $project->status_token !== null ? [
                     'url' => route('project-status.show', $project->status_token),
@@ -301,6 +302,7 @@ class ProjectController extends Controller
             'due_on' => $data['due_on'] ?? null,
             // Only when the form sends it, so other callers don't switch sign-off off by accident.
             ...(array_key_exists('review_required', $data) ? ['review_required' => (bool) $data['review_required']] : []),
+            ...(array_key_exists('review_sla_days', $data) ? ['review_sla_days' => (int) $data['review_sla_days']] : []),
         ];
     }
 

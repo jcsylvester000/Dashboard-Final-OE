@@ -26,6 +26,7 @@ class TaskPresenter
         'labels:id,name,color',
         'workspace:id,name,slug,color,key,status_labels',
         'sprint:id,name,status',
+        'checklistItems:id,task_id,required,done_at',
     ];
 
     /** @var array<int, int> task_id => number of linked items (filled by openDependencyMap) */
@@ -61,6 +62,10 @@ class TaskPresenter
             'sprint' => $task->sprint_id !== null && $task->relationLoaded('sprint') ? $task->sprint?->only(['id', 'name', 'status']) : null,
             'sprint_id' => $task->sprint_id,
             'recurrence' => $task->recurrence,
+            // E-36: checklist progress for cards (null when the task has none).
+            'checklist' => $task->relationLoaded('checklistItems') && $task->checklistItems->isNotEmpty()
+                ? ['done' => $task->checklistItems->whereNotNull('done_at')->count(), 'total' => $task->checklistItems->count()]
+                : null,
             // E-21: bugs without steps/expected/actual are flagged on cards.
             'bug_report_missing' => $task->type === 'bug' && trim((string) ($task->bug_report['steps'] ?? '')) === '',
         ];

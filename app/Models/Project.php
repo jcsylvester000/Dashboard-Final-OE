@@ -37,11 +37,12 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property int|null $fixed_fee_minor
  * @property Carbon|null $fixed_fee_billed_at
+ * @property int $review_sla_days working days a review may take before reminders (E-33)
  * @property string $status_detail simple | detailed (client status page, R-22)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['workspace_id', 'name', 'type', 'status', 'lead_user_id', 'description', 'start_on', 'due_on', 'created_by', 'review_required', 'status_detail'])]
+#[Fillable(['workspace_id', 'name', 'type', 'status', 'lead_user_id', 'description', 'start_on', 'due_on', 'created_by', 'review_required', 'status_detail', 'review_sla_days'])]
 class Project extends Model implements Mentionable
 {
     /** @use HasFactory<ProjectFactory> */
