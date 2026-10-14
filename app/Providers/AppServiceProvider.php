@@ -7,6 +7,7 @@ use App\Domain\Files\LocalFileStore;
 use App\Domain\Files\UploadThing\UploadThingClient;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
+use App\Domain\Identity\ViewAs;
 use App\Domain\Notifications\AlertBatch;
 use App\Domain\Notifications\WorkEventSubscriber;
 use App\Domain\Settings\AppSettings;
@@ -95,6 +96,10 @@ class AppServiceProvider extends ServiceProvider
         Date::use(CarbonImmutable::class);
 
         DB::prohibitDestructiveCommands(app()->isProduction());
+
+        // E-90: while a super admin views as someone, model saves and deletes are dropped
+        // (the ViewAsUser middleware already refuses every write request).
+        Event::listen(['eloquent.saving: *', 'eloquent.deleting: *'], fn () => ViewAs::$readOnly ? false : null);
 
         // Catch N+1 lazy loading and silently discarded mass-assignment while developing.
         // Short, stable type names for polymorphic links/mentions/labels (used in URLs and the API).

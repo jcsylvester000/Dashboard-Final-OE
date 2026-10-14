@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Dashboard\RoleHome;
 use App\Domain\Identity\AccessLinkService;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Offboarding;
@@ -40,7 +41,7 @@ class UserController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
-            'status' => ['nullable', Rule::in(['active', 'inactive'])],
+            'status' => ['nullable', Rule::in(['active', 'inactive', 'pending'])],
             'role' => ['nullable', 'string', Rule::exists('roles', 'name')],
             'department' => ['nullable', 'integer'],
         ]);
@@ -56,6 +57,8 @@ class UserController extends Controller
             })
             ->when(($filters['status'] ?? null) === 'active', fn (Builder $q) => $q->where('is_active', true))
             ->when(($filters['status'] ?? null) === 'inactive', fn (Builder $q) => $q->where('is_active', false))
+            // E-98: same rule as the dashboard tile.
+            ->when(($filters['status'] ?? null) === 'pending', fn (Builder $q) => $q->whereIn('id', RoleHome::pendingSetup()->select('id')))
             ->when($filters['role'] ?? null, fn (Builder $q, string $role) => $q->role($role))
             ->when($filters['department'] ?? null, fn (Builder $q, $id) => $q->where(fn (Builder $w) => $w
                 ->where('primary_department_id', (int) $id)
@@ -154,6 +157,8 @@ class UserController extends Controller
                 'access_ends_on' => $user->access_ends_on?->toDateString(),
                 'created_at' => $user->created_at?->toIso8601String(),
                 'is_self' => $user->is($request->user()),
+                // E-90
+                'can_view_as' => $request->user()?->isSuperAdmin() === true && ! $user->isSuperAdmin() && $user->is_active && ! $user->is($request->user()),
             ],
             // E-88: where this person is signed in, and recent sign-ins.
             'devices' => app(SessionTracker::class)->devices($user, $user->is($request->user()) ? $request->session()->getId() : null),

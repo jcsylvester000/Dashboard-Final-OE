@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Domain\Identity\Permissions;
+use App\Domain\Identity\ViewAs;
 use App\Models\Department;
 use App\Models\InboxNotification;
 use App\Models\TimeEntry;
@@ -55,6 +56,12 @@ class HandleInertiaRequests extends Middleware
                     ? Department::query()->whereKey($user->primary_department_id)->first(['id', 'name', 'slug'])?->only(['id', 'name', 'slug'])
                     : null,
             ],
+            // E-90: banner while a super admin views the app as this person.
+            'viewAs' => fn () => $request->attributes->get('view_as') === true && $user !== null ? [
+                'name' => $user->name,
+                'expires_at' => app(ViewAs::class)->state($request)['expires_at'] ?? null,
+                'reason' => app(ViewAs::class)->state($request)['reason'] ?? null,
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'workspaceNav' => fn () => $user ? $this->workspaceNav($request, $user) : null,
             'runningTimer' => fn () => $user ? $this->runningTimer($user) : null,

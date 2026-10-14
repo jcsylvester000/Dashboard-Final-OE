@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Dashboard\RoleHome;
 use App\Domain\Identity\Permissions;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Models\ActivityLog;
@@ -63,6 +64,8 @@ class DashboardController extends Controller
                     'openProjects' => $w->open_projects_count,
                     'myOpenTasks' => (int) $w->getAttribute('my_open_count'),
                 ]),
+            // E-98: admin and Finance tiles (each links to the page it counts).
+            'roleHome' => app(RoleHome::class)->tiles($user),
             'mentions' => $this->recentMentions($user),
             'digest' => $this->digest($user),
             'myTasks' => $this->myTaskCounts($user),

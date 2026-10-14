@@ -47,6 +47,8 @@ class BillingReportController extends Controller
             'base' => FxRates::BASE,
             // E-76: budget vs actual.
             'budgets' => $reports->budgets(),
+            // E-98: cash received in the range (the dashboard tile links here for this month).
+            'cash' => $reports->cashReceived($from->startOfMonth(), $to),
             'exports' => self::EXPORTS,
         ]);
     }

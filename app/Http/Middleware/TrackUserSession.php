@@ -20,6 +20,10 @@ class TrackUserSession
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
+        // E-90: viewing as someone is not their session.
+        if ($request->attributes->get('view_as') === true) {
+            return $next($request);
+        }
         if ($user instanceof User && ! $this->tracker->touch($request, $user)) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();

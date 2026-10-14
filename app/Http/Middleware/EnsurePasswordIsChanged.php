@@ -20,6 +20,7 @@ class EnsurePasswordIsChanged
         $user = $request->user();
 
         if ($user !== null
+            && $request->attributes->get('view_as') !== true // E-90: viewing as them changes nothing
             && $user->must_change_password
             && ! $request->routeIs(...self::ALLOWED)) {
             if ($request->expectsJson()) {

@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserImportController;
+use App\Http\Controllers\Admin\ViewAsController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +43,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::delete('users/{user}/sessions/{userSession}', [UserController::class, 'destroySession'])->name('users.sessions.destroy');
         Route::get('users/{user}/personal-data', [UserController::class, 'exportData'])->name('users.export-data');
         Route::post('users/{user}/anonymise', [UserController::class, 'anonymise'])->name('users.anonymise');
+        Route::post('users/{user}/view-as', [ViewAsController::class, 'start'])->name('users.view-as'); // E-90 (super admins; checked in ViewAs)
     });
 
     // Roles & permissions
@@ -103,3 +105,6 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::get('company/logo', [CompanySettingsController::class, 'logo'])->name('company.logo');
     });
 });
+
+// E-90: leave view-as (allowed while viewing as someone; acts as the admin).
+Route::post('view-as/stop', [ViewAsController::class, 'stop'])->middleware('auth')->name('view-as.stop');

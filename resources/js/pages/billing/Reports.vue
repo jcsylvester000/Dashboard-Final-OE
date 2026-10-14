@@ -83,6 +83,11 @@ const props = defineProps<{
         missing_rates: string[];
     };
     base: string;
+    cash: {
+        total_php_minor: number;
+        missing: number;
+        by_currency: Record<string, number>;
+    };
     budgets: {
         client: string;
         project: string;
@@ -191,6 +196,36 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                 :label="title"
             />
         </div>
+
+        <!-- E-98: the dashboard "Cash received" tile links here -->
+        <Card id="cash" class="scroll-mt-4">
+            <CardHeader>
+                <CardTitle class="text-base">Cash received</CardTitle>
+                <CardDescription
+                    >Payments by payment date in this range, reversed payments
+                    and client credit left out; in {{ base }} at each payment's
+                    rate.</CardDescription
+                >
+            </CardHeader>
+            <CardContent
+                class="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm"
+            >
+                <p class="text-2xl font-semibold tabular-nums">
+                    {{ formatMoney(cash.total_php_minor, base) }}
+                </p>
+                <p
+                    v-for="(amount, cur) in cash.by_currency"
+                    :key="cur"
+                    class="text-muted-foreground tabular-nums"
+                >
+                    {{ formatMoney(amount, String(cur)) }}
+                </p>
+                <p v-if="cash.missing" class="text-amber-700">
+                    {{ cash.missing }} payment(s) have no {{ base }} rate and
+                    are not in the total.
+                </p>
+            </CardContent>
+        </Card>
 
         <Card>
             <CardHeader>
@@ -330,7 +365,7 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                 </CardContent>
             </Card>
 
-            <Card>
+            <Card id="unbilled" class="scroll-mt-4">
                 <CardHeader>
                     <CardTitle class="text-base"
                         >Unbilled approved time</CardTitle

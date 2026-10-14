@@ -26,6 +26,12 @@ declare module '@inertiajs/core' {
             workspaceNav: WorkspaceNav | null;
             runningTimer: RunningTimer | null;
             notifications: NotificationsShared | null;
+            /** E-90: set while a super admin views the app as this person. */
+            viewAs: {
+                name: string;
+                expires_at: string | null;
+                reason: string | null;
+            } | null;
             [key: string]: unknown;
         };
     }

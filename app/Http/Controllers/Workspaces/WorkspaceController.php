@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workspaces;
 use App\Domain\Billing\PrepaidHoursService;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
+use App\Domain\Identity\ViewAs;
 use App\Domain\Reports\WorkspaceOverview;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
@@ -200,7 +201,7 @@ class WorkspaceController extends Controller
      */
     private function remember(User $user, Workspace $workspace): void
     {
-        if ($user->last_workspace_id !== $workspace->id) {
+        if ($user->last_workspace_id !== $workspace->id && ! ViewAs::active()) {
             $user->forceFill(['last_workspace_id' => $workspace->id])->saveQuietly();
         }
     }

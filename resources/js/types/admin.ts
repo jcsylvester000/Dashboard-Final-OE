@@ -48,6 +48,8 @@ export type Member = MemberForm & {
     last_login_at: string | null;
     created_at: string | null;
     is_self: boolean;
+    /** E-90: super admin may view the app as this person */
+    can_view_as?: boolean;
 };
 
 export type AccessLinkRow = {
@@ -65,4 +67,14 @@ export type IssuedSecret = {
     purpose: 'setup' | 'reset' | 'temporary';
     value: string;
     expiresAt: string | null;
+};
+
+/** E-98: a dashboard tile for admins / Finance. */
+export type RoleTile = {
+    key: string;
+    label: string;
+    value: string;
+    hint: string;
+    href: string;
+    tone: 'ok' | 'warn' | 'bad';
 };

@@ -459,4 +459,31 @@ class BillingReports
 
         return $rows;
     }
+
+    /**
+     * E-98: money received in the range (by payment date), reversed payments and client credit
+     * excluded, per currency and in PHP at each payment's locked rate.
+     *
+     * @return array{total_php_minor: int, missing: int, by_currency: array<string, int>}
+     */
+    public function cashReceived(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $out = ['total_php_minor' => 0, 'missing' => 0, 'by_currency' => []];
+        Payment::query()->join('invoices as v', 'v.id', '=', 'payments.invoice_id')
+            ->whereNull('payments.reversed_at')->where('payments.method', '!=', 'credit')
+            ->whereDate('payments.received_on', '>=', $from->toDateString())->whereDate('payments.received_on', '<=', $to->toDateString())
+            ->get(['payments.amount_minor', 'payments.php_rate', 'v.currency'])
+            ->each(function (Payment $p) use (&$out) {
+                $currency = (string) $p->getAttribute('currency');
+                $out['by_currency'][$currency] = ($out['by_currency'][$currency] ?? 0) + $p->amount_minor;
+                $php = FxRates::toPhp($p->amount_minor, $p->php_rate !== null ? (string) $p->php_rate : ($currency === FxRates::BASE ? '1' : null));
+                if ($php === null) {
+                    $out['missing']++;
+                } else {
+                    $out['total_php_minor'] += $php;
+                }
+            });
+
+        return $out;
+    }
 }

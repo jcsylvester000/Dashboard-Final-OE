@@ -6,6 +6,7 @@ import { Form, Head, Link, router } from '@inertiajs/vue3';
 import { KeyRound, Link2, LogOut, UserCheck, UserX } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
+import ViewAsStart from '@/components/admin/ViewAsStart.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -180,6 +181,11 @@ const statusVariant: Record<
 
         <IssuedSecretCard v-if="issuedSecret" :secret="issuedSecret" />
 
+        <ViewAsStart
+            v-if="member.can_view_as"
+            :user-id="member.id"
+            :name="member.name"
+        />
         <Card>
             <CardHeader>
                 <CardTitle class="text-base">Details & access</CardTitle>

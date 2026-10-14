@@ -8,6 +8,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PerformanceHeaders;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TrackUserSession;
+use App\Http\Middleware\ViewAsUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -37,6 +38,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // through it (Inertia turns 302 into 303 for PUT/PATCH/DELETE visits).
         $middleware->web(append: [
             HandleAppearance::class,
+            // E-90: before the shared props, so the page is built for the person viewed.
+            ViewAsUser::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             EnsureUserIsActive::class,

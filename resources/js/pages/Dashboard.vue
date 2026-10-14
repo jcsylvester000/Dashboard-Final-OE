@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import RoleHomeTiles from '@/components/dashboard/RoleHomeTiles.vue';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -24,10 +25,11 @@ import {
     show as workspaceShow,
 } from '@/routes/workspaces';
 import { show as taskShow } from '@/routes/workspaces/tasks';
-import type { DepartmentOption } from '@/types/admin';
+import type { DepartmentOption, RoleTile } from '@/types/admin';
 import type { InboxItem } from '@/types/notifications';
 
 defineProps<{
+    roleHome: { admin: RoleTile[]; finance: RoleTile[] };
     profile: {
         name: string;
         title: string | null;
@@ -99,6 +101,10 @@ defineOptions({
                 · {{ profile.roles.map(roleLabel).join(', ') || 'No role' }}
             </p>
         </div>
+
+        <!-- E-98: what needs admin / Finance attention -->
+        <RoleHomeTiles title="Admin" :tiles="roleHome.admin" />
+        <RoleHomeTiles title="Finance" :tiles="roleHome.finance" />
 
         <div class="grid gap-4 md:grid-cols-3">
             <Card>

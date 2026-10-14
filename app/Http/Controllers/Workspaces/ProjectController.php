@@ -6,6 +6,7 @@ use App\Domain\Budgets\BudgetService;
 use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
+use App\Domain\Identity\ViewAs;
 use App\Domain\Work\TaskPresenter;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\MentionService;
@@ -134,7 +135,7 @@ class ProjectController extends Controller
         $project->load(['lead:id,name', 'members:id,name,title', 'labels:id,name,color', 'mentions.user:id,name', 'departments:id,name,color']);
         $project->setRelation('workspace', $workspace);
 
-        if ($user->last_workspace_id !== $workspace->id) {
+        if ($user->last_workspace_id !== $workspace->id && ! ViewAs::active()) {
             $user->forceFill(['last_workspace_id' => $workspace->id])->saveQuietly();
         }
 

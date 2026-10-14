@@ -9,6 +9,7 @@ use App\Domain\Billing\FxRates;
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
+use App\Domain\Dashboard\RoleHome;
 use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\BillingPeriod;
@@ -45,15 +46,20 @@ class InvoiceController extends Controller
     public function index(Request $request): Response
     {
         $filters = $request->validate([
-            'status' => ['nullable', Rule::in([Invoice::DRAFT, Invoice::FINALIZED, Invoice::PARTIALLY_PAID, Invoice::PAID, Invoice::VOID, 'open'])],
+            'status' => ['nullable', Rule::in([Invoice::DRAFT, Invoice::FINALIZED, Invoice::PARTIALLY_PAID, Invoice::PAID, Invoice::VOID, 'open', 'overdue'])],
             'workspace' => ['nullable', 'integer'],
+            'review' => ['nullable', 'boolean'],
         ]);
 
         $page = Invoice::query()
             ->with('workspace:id,name,slug')
-            ->when($filters['status'] ?? null, fn ($q, $s) => $s === 'open'
-                ? $q->whereIn('status', [Invoice::FINALIZED, Invoice::PARTIALLY_PAID])
-                : $q->where('status', $s))
+            ->when($filters['status'] ?? null, fn ($q, $s) => match ($s) {
+                'open' => $q->whereIn('status', [Invoice::FINALIZED, Invoice::PARTIALLY_PAID]),
+                // E-98: same rule as the dashboard tile.
+                'overdue' => $q->whereIn('id', RoleHome::overdueInvoices()->select('id')),
+                default => $q->where('status', $s),
+            })
+            ->when((bool) ($filters['review'] ?? false), fn ($q) => $q->whereNotNull('review_requested_at'))
             ->when($filters['workspace'] ?? null, fn ($q, $w) => $q->where('workspace_id', $w))
             ->latest('id')
             ->paginate(30)
