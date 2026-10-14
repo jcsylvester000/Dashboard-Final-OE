@@ -304,6 +304,7 @@ function rename(f: DriveRow): void {
                                     :alt="f.name"
                                     class="size-12 rounded object-cover"
                                     loading="lazy"
+                                    decoding="async"
                                 />
                                 <span
                                     v-else

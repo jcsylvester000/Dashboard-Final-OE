@@ -403,6 +403,7 @@ function size(bytes: number): string {
                             :alt="a.name"
                             class="size-10 rounded object-cover"
                             loading="lazy"
+                            decoding="async"
                         />
                         <span
                             v-else

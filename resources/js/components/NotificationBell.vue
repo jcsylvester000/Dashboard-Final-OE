@@ -3,13 +3,13 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { Bell } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { toast } from 'vue-sonner';
-import { getEcho } from '@/lib/echo';
+import { getEcho, onConnectionChange } from '@/lib/echo';
 import { index as inboxIndex } from '@/routes/inbox';
 import type { PushedNotification } from '@/types/notifications';
 
 /**
- * Header bell: unread count, live via Reverb when configured,
- * otherwise refreshed every 60 seconds. In-app only - no email.
+ * Header bell: unread count, live via Reverb when configured and connected,
+ * otherwise refreshed every 60 seconds (also while Reverb is down). In-app only - no email.
  */
 const page = usePage();
 const unread = computed(() => page.props.notifications?.unread ?? 0);
@@ -22,35 +22,59 @@ function refresh(): void {
     router.reload({ only: ['notifications'], showProgress: false });
 }
 
-onMounted(async () => {
-    const echo = await getEcho();
-
-    if (echo) {
-        channel = `App.Models.User.${userId.value}`;
-        echo.private(channel).notification((n: PushedNotification) => {
-            toast(n.title, {
-                description: n.body ?? undefined,
-                action: n.url
-                    ? { label: 'Open', onClick: () => router.visit(n.url) }
-                    : undefined,
-            });
-            refresh();
-        });
-
-        return;
-    }
-
-    poll = setInterval(() => {
+function startPolling(): void {
+    poll ??= setInterval(() => {
         if (document.visibilityState === 'visible') {
             refresh();
         }
     }, 60_000);
+}
+
+function stopPolling(): void {
+    if (poll) {
+        clearInterval(poll);
+        poll = undefined;
+    }
+}
+
+onMounted(async () => {
+    const echo = await getEcho();
+
+    if (!echo) {
+        startPolling();
+
+        return;
+    }
+
+    channel = `App.Models.User.${userId.value}`;
+    echo.private(channel).notification((n: PushedNotification) => {
+        toast(n.title, {
+            description: n.body ?? undefined,
+            action: n.url
+                ? { label: 'Open', onClick: () => router.visit(n.url) }
+                : undefined,
+        });
+        refresh();
+    });
+
+    // E-125: live while the WebSocket is up; poll every 60 s while it is down.
+    let wasPolling = false;
+    onConnectionChange(echo, (connected) => {
+        if (connected) {
+            stopPolling();
+            if (wasPolling) {
+                refresh(); // catch up on anything missed while offline
+            }
+            wasPolling = false;
+        } else {
+            startPolling();
+            wasPolling = true;
+        }
+    });
 });
 
 onBeforeUnmount(() => {
-    if (poll) {
-        clearInterval(poll);
-    }
+    stopPolling();
     const name = channel;
     if (name) {
         void getEcho().then((echo) => echo?.leave(name));

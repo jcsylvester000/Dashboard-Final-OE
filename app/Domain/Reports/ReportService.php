@@ -326,21 +326,22 @@ class ReportService
      */
     public function time(ReportFilters $f, string $group): array
     {
+        // E-129: read the pre-computed daily totals (time_daily) instead of every entry.
         $column = match ($group) {
-            'workspace' => 'time_entries.workspace_id',
-            'project' => 'time_entries.project_id',
-            'task' => 'time_entries.task_id',
-            'department' => 'time_entries.department_id',
-            default => 'time_entries.user_id',
+            'workspace' => 'time_daily.workspace_id',
+            'project' => 'time_daily.project_id',
+            'task' => 'time_daily.task_id',
+            'department' => 'time_daily.department_id',
+            default => 'time_daily.user_id',
         };
         $group = array_key_exists($group, self::TIME_GROUPS) ? $group : 'person';
 
-        $sums = $this->entries($f)
+        $sums = $this->daily($f)
             ->groupBy($column)
             ->selectRaw("{$column} as id")
-            ->selectRaw('sum(time_entries.minutes) as total')
-            ->selectRaw('sum(case when time_entries.is_billable then time_entries.minutes else 0 end) as billable')
-            ->selectRaw('sum(case when time_entries.approved_at is not null then time_entries.minutes else 0 end) as approved')
+            ->selectRaw('sum(time_daily.minutes) as total')
+            ->selectRaw('sum(time_daily.billable_minutes) as billable')
+            ->selectRaw('sum(time_daily.approved_minutes) as approved')
             ->get();
 
         $ids = $sums->pluck('id')->filter()->map(fn ($id) => (int) $id)->all();
@@ -476,6 +477,23 @@ class ReportService
     /**
      * Finished time entries (no running timers) dated inside the range.
      */
+    /**
+     * E-129: the daily totals with the same filters as entries() (finished, not deleted,
+     * live clients, the viewer's clients only).
+     */
+    private function daily(ReportFilters $f): Builder
+    {
+        return DB::table('time_daily')
+            ->join('workspaces', 'workspaces.id', '=', 'time_daily.workspace_id')
+            ->whereNull('workspaces.deleted_at')
+            ->whereDate('time_daily.entry_date', '>=', $f->from->toDateString())
+            ->whereDate('time_daily.entry_date', '<=', $f->to->toDateString())
+            ->when($f->allowedWorkspaceIds !== null, fn (Builder $q) => $q->whereIn('time_daily.workspace_id', $f->allowedWorkspaceIds ?? []))
+            ->when($f->workspaceId !== null, fn (Builder $q) => $q->where('time_daily.workspace_id', $f->workspaceId))
+            ->when($f->departmentId !== null, fn (Builder $q) => $q->where('time_daily.department_id', $f->departmentId))
+            ->when($f->projectId !== null, fn (Builder $q) => $q->where('time_daily.project_id', $f->projectId));
+    }
+
     private function entries(ReportFilters $f): Builder
     {
         return DB::table('time_entries')

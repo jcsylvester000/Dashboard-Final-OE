@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Domain\Billing\RateTemplateService;
 use App\Domain\Files\AttachmentService;
 use App\Domain\People\Capacity;
+use App\Domain\Reports\TimeAggregates;
 use App\Domain\Work\CommentService;
 use App\Models\BillingProfile;
 use App\Models\Department;
@@ -450,6 +451,8 @@ class DemoDataSeeder extends Seeder
         }
 
         DB::table('time_entries')->insert($rows);
+        // E-129: bulk inserts skip model events, so rebuild the daily totals reports read.
+        app(TimeAggregates::class)->rebuild();
     }
 
     private function waitsOn(Task $task, Task $on): void

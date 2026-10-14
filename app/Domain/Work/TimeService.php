@@ -4,6 +4,7 @@ namespace App\Domain\Work;
 
 use App\Domain\Billing\PeriodService;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Reports\TimeAggregates;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\TimeEntry;
@@ -168,6 +169,7 @@ class TimeService
 
         if ($count > 0) {
             $this->activity->log('time.approved', null, ['count' => $count, 'ids' => array_slice($ids, 0, 50)], $approver);
+            app(TimeAggregates::class)->refreshEntries($ids); // E-129: bulk update skips model events
         }
 
         return $count;
@@ -246,6 +248,7 @@ class TimeService
 
         if ($count > 0) {
             $this->activity->log('time.unapproved', null, ['count' => $count], $approver);
+            app(TimeAggregates::class)->refreshEntries($ids); // E-129
         }
 
         return $count;

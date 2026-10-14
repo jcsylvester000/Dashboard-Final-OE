@@ -33,6 +33,7 @@ class HealthChecks
             $this->disk(),
             $this->drive(),
             $this->backup(),
+            $this->opcache(),
             $this->version(),
         ];
     }
@@ -127,6 +128,27 @@ class HealthChecks
         $hours = (int) CarbonImmutable::parse($at)->diffInHours(now(), true);
 
         return $this->row('backup', 'Last backup', $hours > 36 ? 'fail' : 'ok', CarbonImmutable::parse($at)->format('M j, H:i')." ({$hours} h ago)", null);
+    }
+
+    /**
+     * @return array{key: string, label: string, status: string, value: string, detail: string|null}
+     */
+    private function opcache(): array
+    {
+        // E-115: production should run with OPcache on and a hit rate above 99 % once warm.
+        $production = app()->isProduction();
+        $status = function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
+        if (! is_array($status) || ! ($status['opcache_enabled'] ?? false)) {
+            return $this->row('opcache', 'PHP OPcache', $production ? 'warn' : 'ok', 'Off',
+                $production ? 'Turn on opcache.enable (see the Runbook: PHP runtime tuning).' : 'Fine locally; required in production.');
+        }
+        $stats = (array) ($status['opcache_statistics'] ?? []);
+        $rate = (float) ($stats['opcache_hit_rate'] ?? 0);
+        $memory = (array) ($status['memory_usage'] ?? []);
+        $free = (int) ($memory['free_memory'] ?? 0);
+
+        return $this->row('opcache', 'PHP OPcache', $rate >= 99 || ! $production ? 'ok' : 'warn',
+            sprintf('%.1f%% hits', $rate), self::bytes($free).' free; '.((int) ($stats['num_cached_scripts'] ?? 0)).' scripts cached');
     }
 
     /**

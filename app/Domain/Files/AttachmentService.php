@@ -170,11 +170,16 @@ class AttachmentService
         if ($download) {
             $params['download'] = 1;
         }
+        $expires = now()->addMinutes((int) config('files.link_minutes', 10));
         if ($thumbnail) {
             $params['thumb'] = 1;
+            // E-126: thumbnail links expire on a 10-minute boundary, so every page shown in
+            // that window uses the same URL and the browser serves the image from its cache.
+            $bucket = 600;
+            $expires = $expires->setTimestamp((intdiv($expires->getTimestamp(), $bucket) + 1) * $bucket);
         }
 
-        return URL::temporarySignedRoute('files.show', now()->addMinutes((int) config('files.link_minutes', 10)), $params, false);
+        return URL::temporarySignedRoute('files.show', $expires, $params, false);
     }
 
     /**

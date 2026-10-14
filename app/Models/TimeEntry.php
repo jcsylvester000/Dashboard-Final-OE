@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Reports\TimeAggregates;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +39,21 @@ class TimeEntry extends Model
 
     /** Longest single entry (a timer left running overnight is capped here). */
     public const MAX_MINUTES = 12 * 60;
+
+    protected static function booted(): void
+    {
+        // E-129: keep the daily aggregates current for the (person, day) slices a change touches.
+        $refresh = function (TimeEntry $e): void {
+            $old = $e->getOriginal('entry_date');
+            app(TimeAggregates::class)->refresh([
+                [$e->user_id, $e->entry_date->toDateString()],
+                [is_numeric($e->getOriginal('user_id')) ? (int) $e->getOriginal('user_id') : null, $old instanceof \DateTimeInterface ? $old->format('Y-m-d') : null],
+            ]);
+        };
+        static::saved($refresh);
+        static::deleted($refresh);
+        static::restored($refresh);
+    }
 
     /**
      * @return array<string, string>

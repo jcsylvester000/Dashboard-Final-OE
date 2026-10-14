@@ -136,6 +136,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
                         :alt="it.file.name"
                         class="size-full object-cover"
                         loading="lazy"
+                        decoding="async"
                     />
                     <FileText v-else class="size-6 text-muted-foreground" />
                 </div>

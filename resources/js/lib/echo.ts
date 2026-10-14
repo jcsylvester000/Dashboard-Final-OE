@@ -52,3 +52,35 @@ export function getEcho(): Promise<ReverbEcho | null> {
 
     return instance;
 }
+
+type ConnectionLike = {
+    state?: string;
+    bind: (
+        event: string,
+        callback: (states: { current: string }) => void,
+    ) => void;
+};
+
+/**
+ * E-125: tell the caller whether the WebSocket is connected now and whenever that changes,
+ * so the bell can fall back to polling while Reverb is down and stop again when it returns.
+ */
+export function onConnectionChange(
+    echo: ReverbEcho,
+    callback: (connected: boolean) => void,
+): void {
+    const connection = (
+        echo.connector as unknown as {
+            pusher?: { connection?: ConnectionLike };
+        }
+    ).pusher?.connection;
+    if (!connection) {
+        callback(false);
+
+        return;
+    }
+    callback(connection.state === 'connected');
+    connection.bind('state_change', (states) =>
+        callback(states.current === 'connected'),
+    );
+}
