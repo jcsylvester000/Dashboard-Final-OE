@@ -13,6 +13,7 @@ use App\Models\InvoiceHistory;
 use App\Models\InvoiceItem;
 use App\Models\InvoiceItemSource;
 use App\Models\Payment;
+use App\Models\PrepaidHours;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -32,6 +33,7 @@ class InvoiceService
         private readonly ActivityLogger $activity,
         private readonly FinanceSettings $finance,
         private readonly FxRates $fx,
+        private readonly PrepaidHoursService $prepaid,
     ) {}
 
     /**
@@ -40,6 +42,7 @@ class InvoiceService
      *
      * Lines:
      *  - retainer (if any); approved billable minutes up to the included hours are attached to it
+     *  - E-74: further hours draw on rolled-over hours, then prepaid blocks (no charge; whole-client only)
      *  - hours over the retainer, grouped by department (or project / person, see Invoice::GROUPINGS)
      *    and rate (unless the overage rule is "absorb")
      *  - fixed-fee projects that are completed or due by the period end, not yet billed
@@ -134,6 +137,10 @@ class InvoiceService
 
             $included = $retainer !== null ? $profile->included_minutes : 0;
             $absorb = $retainer !== null && $profile->overage_rule === 'absorb';
+            // E-74: hour balances usable on this invoice, and what each entry draws from them.
+            $balances = $project === null && ! $absorb ? $this->prepaid->available($workspace->id, $invoice->id) : [];
+            /** @var array<int, array{row: PrepaidHours, minutes: int, sources: list<array{0: TimeEntry, 1: int}>}> $draws */
+            $draws = [];
             /** @var array<string, array{department_id: int|null, label: string|null, rate: int, minutes: int, sources: list<array{0: TimeEntry, 1: int}>}> $groups */
             $groups = [];
             /** @var array<int|string, array{user_id: int|null, name: string, department_id: int|null, minutes: int, first: string, last: string}> $missing */
@@ -146,6 +153,22 @@ class InvoiceService
 
                 if ($retainer !== null && ($covered > 0 || ($absorb && $over > 0))) {
                     $this->source($retainer, $entry, $covered + ($absorb ? $over : 0), 0);
+                }
+                // A balance only covers work dated inside its own validity.
+                $date = $entry->entry_date->toDateString();
+                foreach ($balances as $i => $b) {
+                    if ($over === 0) {
+                        break;
+                    }
+                    if ($b['left'] <= 0 || $b['row']->starts_on->toDateString() > $date || ($b['row']->expires_on !== null && $b['row']->expires_on->toDateString() < $date)) {
+                        continue;
+                    }
+                    $take = min($b['left'], $over);
+                    $balances[$i]['left'] -= $take;
+                    $over -= $take;
+                    $draws[$b['row']->id] ??= ['row' => $b['row'], 'minutes' => 0, 'sources' => []];
+                    $draws[$b['row']->id]['minutes'] += $take;
+                    $draws[$b['row']->id]['sources'][] = [$entry, $take];
                 }
                 if ($over === 0 || $absorb) {
                     continue;
@@ -174,6 +197,22 @@ class InvoiceService
                 $groups[$key] ??= ['department_id' => $entry->department_id, 'label' => $label, 'rate' => $rate->rate_minor, 'minutes' => 0, 'sources' => []];
                 $groups[$key]['minutes'] += $over;
                 $groups[$key]['sources'][] = [$entry, $over];
+            }
+
+            foreach ($draws as $d) {
+                $line = $this->item($invoice, $position++, [
+                    'type' => 'prepaid',
+                    'description' => sprintf('%s – %s h used', $d['row']->label(), $this->hours($d['minutes'])),
+                    'minutes' => $d['minutes'],
+                    'quantity' => $this->hours($d['minutes']),
+                    'unit_minor' => 0,
+                    'amount_minor' => 0,
+                    'taxable' => false,
+                    'prepaid_hours_id' => $d['row']->id,
+                ]);
+                foreach ($d['sources'] as [$entry, $minutes]) {
+                    $this->source($line, $entry, $minutes, 0);
+                }
             }
 
             $departments = Department::query()->pluck('name', 'id');
@@ -316,6 +355,11 @@ class InvoiceService
 
             $this->markBilled($invoice, true);
 
+            // E-74: unused retainer hours roll over (whole-client invoices only; logged as billing.hours-rolled-over).
+            if ($profile !== null && $invoice->kind === 'invoice' && $invoice->project_id === null) {
+                $this->prepaid->rolloverFrom($invoice, $profile, $actor);
+            }
+
             // A project invoice leaves the period open for the client's other work.
             if ($invoice->billing_period_id !== null && $invoice->kind === 'invoice' && $invoice->project_id === null) {
                 BillingPeriod::query()->whereKey($invoice->billing_period_id)->update(['status' => BillingPeriod::INVOICED]);
@@ -343,6 +387,37 @@ class InvoiceService
     }
 
     /**
+     * E-74: a draft invoice that sells a prepaid hours block (no period; Finance finalizes it as usual).
+     */
+    public function draftForPrepaidBlock(PrepaidHours $block, User $actor): Invoice
+    {
+        $profile = BillingProfile::query()->firstOrNew(['workspace_id' => $block->workspace_id]);
+
+        return DB::transaction(function () use ($block, $profile, $actor) {
+            $invoice = Invoice::create([
+                'workspace_id' => $block->workspace_id,
+                'series' => $profile->invoice_series,
+                'currency' => $block->currency,
+                'tax_rate_bp' => $profile->tax_rate_bp,
+                'created_by' => $actor->id,
+            ]);
+            $this->item($invoice, 0, [
+                'type' => 'adjustment',
+                'description' => sprintf('Prepaid hours – %s h%s', $this->hours($block->minutes), $block->expires_on !== null ? ', use by '.$block->expires_on->format('M j, Y') : ''),
+                'quantity' => '1.00',
+                'unit_minor' => $block->amount_minor,
+                'amount_minor' => $block->amount_minor,
+                'manual' => true,
+            ]);
+            $this->recalculate($invoice);
+            $this->history($invoice, null, Invoice::DRAFT, 'Draft created for a prepaid hours block', $actor);
+            $block->forceFill(['invoice_id' => $invoice->id])->save();
+
+            return $invoice;
+        });
+    }
+
+    /**
      * Cancel a finalized, unpaid invoice. Its time, expenses and fixed fees become billable again.
      */
     public function void(Invoice $invoice, User $actor, string $reason): Invoice
@@ -358,6 +433,7 @@ class InvoiceService
             $from = $invoice->status;
             $invoice->forceFill(['status' => Invoice::VOID])->save();
             $this->markBilled($invoice, false);
+            $this->prepaid->dropRollover($invoice); // E-74
 
             // E-61: the period stays Invoiced while a live whole-client invoice still covers it
             // (voiding a project invoice must not re-open the client's invoiced period).

@@ -6,6 +6,7 @@ use App\Http\Controllers\Billing\ClientBillingController;
 use App\Http\Controllers\Billing\ExchangeRateController;
 use App\Http\Controllers\Billing\ExpenseController;
 use App\Http\Controllers\Billing\InvoiceController;
+use App\Http\Controllers\Billing\PrepaidHoursController;
 use App\Http\Controllers\Billing\RateCardController;
 use App\Http\Controllers\Billing\RateTemplateController;
 use App\Http\Controllers\Billing\StatementController;
@@ -55,6 +56,8 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
         Route::post('expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
         Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
         Route::put('projects/{project}/fixed-fee', [ClientBillingController::class, 'updateFixedFee'])->name('projects.fixed-fee');
+        Route::post('clients/{workspace:slug}/prepaid', [PrepaidHoursController::class, 'store'])->name('clients.prepaid.store'); // E-74
+        Route::delete('prepaid/{prepaidHours}', [PrepaidHoursController::class, 'destroy'])->name('prepaid.destroy');
     });
 
     // Signing off: finalize, send back, void, credit notes, approve expenses.
@@ -76,6 +79,7 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
         Route::delete('invoices/{invoice}/link', [InvoiceController::class, 'revokeLink'])->name('invoices.unlink');
         Route::post('clients/{workspace:slug}/statement-link', [StatementController::class, 'link'])->name('clients.statement-link');
         Route::delete('clients/{workspace:slug}/statement-link', [StatementController::class, 'unlink'])->name('clients.statement-unlink');
+        Route::post('clients/{workspace:slug}/deposits', [PrepaidHoursController::class, 'deposit'])->name('clients.deposits.store'); // E-74
     });
 
     // Setting up: client billing profiles, rates, rate templates.

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Workspaces;
 
+use App\Domain\Billing\PrepaidHoursService;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Identity\Permissions;
 use App\Domain\Reports\WorkspaceOverview;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
@@ -99,8 +101,13 @@ class WorkspaceController extends Controller
         $user = $request->user();
         $this->remember($user, $workspace);
 
+        // E-74: prepaid / rolled-over hours left (hours only) for leads and Finance.
+        $seePrepaid = $user->can(Permissions::BILLING_VIEW) || app(WorkspaceAccess::class)->canLead($user, $workspace);
+
         return Inertia::render('workspaces/Show', [
             'workspace' => $this->presenter->header($workspace, $user),
+            'prepaid' => $seePrepaid ? array_values(array_filter(app(PrepaidHoursService::class)->summary($workspace->id, false),
+                fn (array $p) => $p['left_minutes'] > 0 && ! $p['expired'])) : null,
             'stats' => [
                 'byStatus' => $workspace->projects()->toBase()->select('status', DB::raw('count(*) as total'))
                     ->groupBy('status')->pluck('total', 'status'),

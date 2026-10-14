@@ -26,11 +26,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $discount_bp percentage discount (basis points); the amount recomputes from it
  * @property int|null $applies_to_item_id a line discount's target line (null = whole invoice)
  * @property string|null $reason
+ * @property int|null $prepaid_hours_id E-74: the hour balance this line draws on
  */
-#[Fillable(['invoice_id', 'type', 'description', 'department_id', 'minutes', 'quantity', 'unit_minor', 'amount_minor', 'position', 'manual', 'taxable', 'discount_bp', 'applies_to_item_id', 'reason'])]
+#[Fillable(['invoice_id', 'type', 'description', 'department_id', 'minutes', 'quantity', 'unit_minor', 'amount_minor', 'position', 'manual', 'taxable', 'discount_bp', 'applies_to_item_id', 'reason', 'prepaid_hours_id'])]
 class InvoiceItem extends Model
 {
-    public const TYPES = ['retainer', 'hours', 'fixed', 'expense', 'credit', 'adjustment', 'discount'];
+    public const TYPES = ['retainer', 'prepaid', 'hours', 'fixed', 'expense', 'credit', 'adjustment', 'discount'];
 
     /**
      * @var array<string, mixed>

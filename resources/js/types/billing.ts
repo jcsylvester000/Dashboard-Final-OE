@@ -147,3 +147,20 @@ export type RateRow = {
     currency?: string;
     effective_from: string;
 };
+
+/** E-74: a rolled-over or prepaid hour balance (money fields only for Finance). */
+export type PrepaidRow = {
+    id: number;
+    kind: 'rollover' | 'block';
+    label: string;
+    minutes: number;
+    used_minutes: number;
+    left_minutes: number;
+    starts_on: string;
+    expires_on: string | null;
+    expired: boolean;
+    amount_minor?: number;
+    currency?: string;
+    invoice?: { id: number; number: string; status: string } | null;
+    can_delete?: boolean;
+};

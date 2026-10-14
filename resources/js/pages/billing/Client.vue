@@ -3,6 +3,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { Trash2 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import BillingNav from '@/components/billing/BillingNav.vue';
+import PrepaidHoursCard from '@/components/billing/PrepaidHoursCard.vue';
 import RateTable from '@/components/billing/RateTable.vue';
 import InputError from '@/components/InputError.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
@@ -45,7 +46,7 @@ import {
     unlock,
 } from '@/routes/billing/periods';
 import { fixedFee } from '@/routes/billing/projects';
-import type { RateRow } from '@/types/billing';
+import type { PrepaidRow, RateRow } from '@/types/billing';
 
 type Period = {
     id: number;
@@ -77,7 +78,12 @@ const props = defineProps<{
         invoice_series: string;
         bill_to: Record<string, string | null>;
         payment_instructions: string | null;
+        rollover_enabled: boolean;
+        rollover_cap_hours: string;
+        rollover_months: number;
     };
+    prepaid: PrepaidRow[];
+    paymentMethods: Record<string, string>;
     periods: Period[];
     rates: RateRow[];
     expenses: {
@@ -210,6 +216,10 @@ const form = useForm({
         contact: props.profile.bill_to.contact ?? '',
     },
     payment_instructions: props.profile.payment_instructions ?? '',
+    // E-74
+    rollover_enabled: props.profile.rollover_enabled,
+    rollover_cap_hours: props.profile.rollover_cap_hours,
+    rollover_months: props.profile.rollover_months,
 });
 
 const periodForm = useForm({ starts_on: '', ends_on: '' });
@@ -468,6 +478,40 @@ const statusText: Record<Period['status'], string> = {
                                 </option>
                             </NativeSelect>
                         </div>
+                        <!-- E-74: unused retainer hours roll over -->
+                        <label class="flex items-center gap-2 sm:col-span-2">
+                            <input
+                                v-model="form.rollover_enabled"
+                                type="checkbox"
+                            />
+                            Roll unused retainer hours over to later periods
+                        </label>
+                        <template v-if="form.rollover_enabled">
+                            <div class="grid gap-1">
+                                <Label
+                                    >Most hours rolled over (empty = all)</Label
+                                >
+                                <Input
+                                    v-model="form.rollover_cap_hours"
+                                    inputmode="decimal"
+                                />
+                                <InputError
+                                    :message="form.errors.rollover_cap_hours"
+                                />
+                            </div>
+                            <div class="grid gap-1">
+                                <Label>Usable for (months)</Label>
+                                <Input
+                                    v-model="form.rollover_months"
+                                    type="number"
+                                    min="1"
+                                    max="12"
+                                />
+                                <InputError
+                                    :message="form.errors.rollover_months"
+                                />
+                            </div>
+                        </template>
                         <div class="grid gap-1">
                             <Label>Payment terms (days)</Label>
                             <Input
@@ -830,6 +874,13 @@ const statusText: Record<Period['status'], string> = {
                 </Card>
             </div>
         </div>
+
+        <PrepaidHoursCard
+            :slug="workspace.slug"
+            :currency="profile.currency"
+            :rows="prepaid"
+            :methods="paymentMethods"
+        />
 
         <Card>
             <CardHeader>

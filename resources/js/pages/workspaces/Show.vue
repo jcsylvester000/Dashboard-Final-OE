@@ -18,6 +18,7 @@ import {
     roleLabel,
     timeAgo,
     departmentDot,
+    formatMinutes,
 } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { index as membersIndex } from '@/routes/workspaces/members';
@@ -26,6 +27,7 @@ import {
     index as projectsIndex,
     show as projectShow,
 } from '@/routes/workspaces/projects';
+import type { PrepaidRow } from '@/types/billing';
 import type { LinkRow, WorkspaceHeader as Header } from '@/types/workspace';
 
 const props = defineProps<{
@@ -84,6 +86,8 @@ const props = defineProps<{
     };
     projectTypes: Record<string, string>;
     projectStatuses: Record<string, string>;
+    /** E-74: prepaid / rolled-over hours left (leads and Finance; null for others). */
+    prepaid: PrepaidRow[] | null;
 }>();
 
 defineOptions({
@@ -402,6 +406,37 @@ const openCount = () =>
                                     >{{ formatDate(p.due_on) }}</span
                                 >
                             </div>
+                        </li>
+                    </ul>
+                </CardContent>
+            </Card>
+
+            <Card v-if="prepaid && prepaid.length">
+                <CardHeader>
+                    <CardTitle class="text-base">Prepaid hours left</CardTitle>
+                    <CardDescription
+                        >Used before hours are billed at rates.</CardDescription
+                    >
+                </CardHeader>
+                <CardContent>
+                    <ul class="space-y-1.5 text-sm">
+                        <li
+                            v-for="p in prepaid"
+                            :key="p.id"
+                            class="flex items-baseline justify-between gap-2"
+                        >
+                            <span
+                                >{{ p.label }}
+                                <span
+                                    v-if="p.expires_on"
+                                    class="text-xs text-muted-foreground"
+                                    >· use by
+                                    {{ formatDate(p.expires_on) }}</span
+                                ></span
+                            >
+                            <span class="font-medium tabular-nums">{{
+                                formatMinutes(p.left_minutes)
+                            }}</span>
                         </li>
                     </ul>
                 </CardContent>

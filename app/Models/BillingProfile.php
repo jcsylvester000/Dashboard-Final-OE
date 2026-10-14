@@ -26,8 +26,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $rate_template_applied_at
  * @property string|null $statement_token client link to the statement of account (E-69)
  * @property Carbon|null $statement_token_expires_at
+ * @property bool $rollover_enabled E-74: unused retainer hours roll over
+ * @property int|null $rollover_cap_minutes most minutes that roll over each period (null = all)
+ * @property int $rollover_months how many months rolled-over hours stay usable
  */
-#[Fillable(['workspace_id', 'currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions'])]
+#[Fillable(['workspace_id', 'currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions', 'rollover_enabled', 'rollover_cap_minutes', 'rollover_months'])]
 class BillingProfile extends Model
 {
     /** Always available; config('billing.currencies') can add more (E-101). */
@@ -62,6 +65,8 @@ class BillingProfile extends Model
         'terms_days' => 15,
         'tax_rate_bp' => 0,
         'invoice_series' => 'INV',
+        'rollover_enabled' => false,
+        'rollover_months' => 1,
     ];
 
     /**
@@ -77,6 +82,9 @@ class BillingProfile extends Model
             'bill_to' => 'array',
             'rate_template_applied_at' => 'datetime',
             'statement_token_expires_at' => 'datetime',
+            'rollover_enabled' => 'boolean',
+            'rollover_cap_minutes' => 'integer',
+            'rollover_months' => 'integer',
         ];
     }
 

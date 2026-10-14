@@ -6,6 +6,7 @@ use App\Domain\Billing\BillingException;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
 use App\Domain\Billing\PeriodService;
+use App\Domain\Billing\PrepaidHoursService;
 use App\Domain\Billing\RateTemplateService;
 use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
@@ -15,6 +16,7 @@ use App\Models\ClientCredit;
 use App\Models\Department;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Project;
 use App\Models\RateCard;
 use App\Models\RateTemplate;
@@ -96,7 +98,14 @@ class ClientBillingController extends Controller
                 'invoice_series' => $profile->invoice_series,
                 'bill_to' => $profile->bill_to ?? ['name' => $workspace->name, 'address' => null, 'tax_id' => null, 'contact' => $workspace->primary_contact_name],
                 'payment_instructions' => $profile->payment_instructions,
+                // E-74
+                'rollover_enabled' => $profile->rollover_enabled,
+                'rollover_cap_hours' => $profile->rollover_cap_minutes !== null ? sprintf('%d.%02d', intdiv($profile->rollover_cap_minutes, 60), intdiv(($profile->rollover_cap_minutes % 60) * 100 + 30, 60)) : '',
+                'rollover_months' => $profile->rollover_months,
             ],
+            // E-74: rolled-over hours and prepaid blocks, with what is used and left.
+            'prepaid' => app(PrepaidHoursService::class)->summary($workspace->id, true),
+            'paymentMethods' => Payment::METHODS,
             'periods' => BillingPeriod::query()->with(['invoices:id,billing_period_id,project_id,status,series,number,total_minor,currency', 'invoices.project:id,name'])
                 ->where('workspace_id', $workspace->id)->latest('starts_on')->limit(24)->get()
                 ->map(fn (BillingPeriod $p): array => [
@@ -171,10 +180,14 @@ class ClientBillingController extends Controller
             'bill_to.tax_id' => ['nullable', 'string', 'max:50'],
             'bill_to.contact' => ['nullable', 'string', 'max:255'],
             'payment_instructions' => ['nullable', 'string', 'max:2000'],
+            // E-74 (optional: older forms leave the rollover settings as they are)
+            'rollover_enabled' => ['sometimes', 'boolean'],
+            'rollover_cap_hours' => ['sometimes', 'nullable', 'regex:/^\d{1,5}(\.\d{1,2})?$/'],
+            'rollover_months' => ['sometimes', 'integer', 'min:1', 'max:12'],
         ]);
 
         $profile = BillingProfile::query()->firstOrNew(['workspace_id' => $workspace->id]);
-        $before = $profile->exists ? $profile->only(['currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions']) : [];
+        $before = $profile->exists ? $profile->only(['currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions', 'rollover_enabled', 'rollover_cap_minutes', 'rollover_months']) : [];
         $currencyChanged = $profile->exists && $profile->currency !== $data['currency'];
 
         // E-111: change currency only between billing rounds; history keeps its own currency.
@@ -194,7 +207,18 @@ class ClientBillingController extends Controller
             'invoice_series' => $data['invoice_series'],
             'bill_to' => $data['bill_to'],
             'payment_instructions' => $data['payment_instructions'] ?? null,
-        ])->save();
+        ]);
+        if (array_key_exists('rollover_enabled', $data)) {
+            $profile->rollover_enabled = (bool) $data['rollover_enabled'];
+        }
+        if (array_key_exists('rollover_cap_hours', $data)) {
+            $cap = $data['rollover_cap_hours'];
+            $profile->rollover_cap_minutes = $cap !== null && $cap !== '' ? intdiv(Money::parse((string) $cap) * 60, 100) : null;
+        }
+        if (array_key_exists('rollover_months', $data)) {
+            $profile->rollover_months = (int) $data['rollover_months'];
+        }
+        $profile->save();
 
         // E-62: log what changed (before -> after) on the client.
         $after = $profile->only(array_keys($before) ?: ['currency']);
