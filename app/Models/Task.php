@@ -51,6 +51,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $review_requested_at when the task last entered In Review (E-33)
  * @property array<string, string|null>|null $bug_report steps, expected, actual, environment, severity (E-21)
  * @property array<string, mixed>|null $custom_values B-07: custom field key => value
+ * @property int|null $delivery_spec_id E-18: video spec chosen for this task (else matched by channel)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -262,7 +263,11 @@ class Task extends Model implements Mentionable
         return $this->belongsToMany(User::class, 'task_watchers');
     }
 
-    /** E-29: sources captured on the task. @return HasMany<TaskCitation, $this> */
+    /**
+     * E-29: sources captured on the task.
+     *
+     * @return HasMany<TaskCitation, $this>
+     */
     public function citations(): HasMany
     {
         return $this->hasMany(TaskCitation::class)->orderBy('id');

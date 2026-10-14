@@ -18,6 +18,7 @@ use App\Http\Requests\Work\SaveTaskRequest;
 use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\DeliverySpec;
 use App\Models\Project;
 use App\Models\RecordLink;
 use App\Models\SavedView;
@@ -289,6 +290,7 @@ class TaskController extends Controller
                 // E-58: alerts about this task snoozed by me until (ISO), if any.
                 'muted_until' => app(QuietHours::class)->mutedUntil($user, $task->id)?->toIso8601String(),
                 // E-29: sources.
+                'delivery_spec_id' => $task->delivery_spec_id, // E-18
                 'citations' => $task->citations()->get()->map(fn (TaskCitation $c): array => [
                     'id' => $c->id, 'url' => $c->url, 'title' => $c->title, 'site' => $c->site,
                     'accessed_at' => $c->accessed_at->toIso8601String(), 'archive_url' => $c->archiveUrl(),
@@ -321,6 +323,8 @@ class TaskController extends Controller
             // S2-13: the project needs a lead's sign-off before Done.
             'reviewRequired' => $task->project_id !== null && (bool) Project::query()->whereKey($task->project_id)->value('review_required'),
             'fileLimits' => app(AttachmentPresenter::class)->limits(),
+            // E-18: delivery specs this client has (the task can pick one for its videos).
+            'deliverySpecs' => DeliverySpec::query()->where('workspace_id', $workspace->id)->orderBy('name')->get(['id', 'name', 'channel', 'deliverable']),
         ]);
     }
 

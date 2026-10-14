@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Workspaces\DeliverySpecController;
 use App\Http\Controllers\Workspaces\LabelController;
 use App\Http\Controllers\Workspaces\ProjectBudgetController;
 use App\Http\Controllers\Workspaces\ProjectController;
@@ -27,6 +28,10 @@ Route::middleware('auth')->group(function () {
         // E-34: default reviewers (leads).
         Route::post('settings/review-rules', [ReviewRuleController::class, 'store'])->name('review-rules.store');
         Route::delete('settings/review-rules/{reviewRule}', [ReviewRuleController::class, 'destroy'])->name('review-rules.destroy');
+        // E-18: delivery specs videos are checked against (leads).
+        Route::post('settings/delivery-specs', [DeliverySpecController::class, 'store'])->name('delivery-specs.store');
+        Route::put('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'update'])->name('delivery-specs.update');
+        Route::delete('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'destroy'])->name('delivery-specs.destroy');
         Route::get('settings', [WorkspaceController::class, 'edit'])->name('edit');
         Route::put('/', [WorkspaceController::class, 'update'])->name('update');
 

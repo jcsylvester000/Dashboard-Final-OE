@@ -122,6 +122,12 @@ class Attachment extends Model
         return $this->version_root_id ?? $this->id;
     }
 
+    /** @return HasMany<AttachmentCaption, $this> E-19: caption tracks on this video version */
+    public function captions(): HasMany
+    {
+        return $this->hasMany(AttachmentCaption::class)->orderBy('id');
+    }
+
     /** @return HasMany<Annotation, $this> E-04: pins and drawings on this version */
     public function annotations(): HasMany
     {

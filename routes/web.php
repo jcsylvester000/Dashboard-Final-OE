@@ -4,6 +4,7 @@ use App\Http\Controllers\AnnotationController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
+use App\Http\Controllers\CaptionController;
 use App\Http\Controllers\ClientReviewLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GettingStartedController;
@@ -60,6 +61,10 @@ Route::middleware('auth')->group(function () {
         ->middleware(['signed:relative', 'throttle:1200,1'])->name('video-uploads.part'); // local driver only
     Route::post('video-uploads/{attachment}/complete', [VideoUploadController::class, 'complete'])->name('video-uploads.complete');
     Route::delete('video-uploads/{attachment}', [VideoUploadController::class, 'abort'])->name('video-uploads.abort');
+    // E-19: caption tracks on a video version (JSON); the player loads them by signed link.
+    Route::post('attachments/{attachment}/captions', [CaptionController::class, 'store'])->middleware('throttle:30,1')->name('attachments.captions.store');
+    Route::delete('captions/{caption}', [CaptionController::class, 'destroy'])->name('captions.destroy');
+    Route::get('captions/{caption}', [CaptionController::class, 'show'])->middleware('signed:relative')->name('captions.show');
 
     // In-app alerts inbox (P4)
     Route::get('inbox', [InboxController::class, 'index'])->name('inbox.index');

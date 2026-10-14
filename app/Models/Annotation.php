@@ -19,6 +19,10 @@ use Illuminate\Support\Carbon;
  * @property int|null $number
  * @property string|null $x
  * @property string|null $y
+ * @property int|null $time_ms E-15: position on a video's timeline
+ * @property int|null $end_ms E-15: end of a range comment
+ * @property int|null $carried_from_id E-17: the open comment on the previous cut this continues
+ * @property int|null $carried_from_version
  * @property list<array<string, mixed>>|null $shapes
  * @property string|null $color
  * @property string $body
@@ -27,7 +31,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['attachment_id', 'parent_id', 'user_id', 'client_name', 'number', 'x', 'y', 'shapes', 'color', 'body'])]
+#[Fillable(['attachment_id', 'parent_id', 'user_id', 'client_name', 'number', 'x', 'y', 'time_ms', 'end_ms', 'carried_from_id', 'carried_from_version', 'shapes', 'color', 'body'])]
 class Annotation extends Model
 {
     /** Colour-blind-safe palette (Okabe-Ito), also used for pins. */
@@ -46,6 +50,9 @@ class Annotation extends Model
             'shapes' => 'array',
             'resolved_at' => 'datetime',
             'number' => 'integer',
+            'time_ms' => 'integer',
+            'end_ms' => 'integer',
+            'carried_from_version' => 'integer',
         ];
     }
 

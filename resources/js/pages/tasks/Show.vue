@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import BugReportCard from '@/components/work/BugReportCard.vue';
+import TaskDeliverySpecController from '@/actions/App/Http/Controllers/Work/TaskDeliverySpecController';
 import ChecklistCard from '@/components/work/ChecklistCard.vue';
 import CitationsCard from '@/components/work/CitationsCard.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
@@ -93,6 +94,13 @@ const props = defineProps<
             Record<string, [string, string, string[]?]>
         >;
         customFields?: CustomField[];
+        /** E-18 */
+        deliverySpecs?: {
+            id: number;
+            name: string;
+            channel: string | null;
+            deliverable: string | null;
+        }[];
     }
 >();
 
@@ -1351,6 +1359,14 @@ function describe(entry: TimelineEntry): string {
                         :limits="fileLimits"
                         :can-upload="can"
                         :annotate-on-paste="task.type === 'bug'"
+                        :delivery-specs="deliverySpecs ?? []"
+                        :delivery-spec-id="task.delivery_spec_id ?? null"
+                        :delivery-spec-url="
+                            TaskDeliverySpecController.update.url({
+                                workspace: ws,
+                                task: task.id,
+                            })
+                        "
                     />
 
                     <AttachmentsPanel

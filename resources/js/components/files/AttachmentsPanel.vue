@@ -65,6 +65,15 @@ const props = defineProps<{
     description?: string;
     /** E-22: on bug tasks a pasted screenshot opens straight in annotate mode. */
     annotateOnPaste?: boolean;
+    /** E-18: delivery specs the task's videos are checked against. */
+    deliverySpecs?: {
+        id: number;
+        name: string;
+        channel: string | null;
+        deliverable: string | null;
+    }[];
+    deliverySpecId?: number | null;
+    deliverySpecUrl?: string;
 }>();
 
 const page = usePage();
@@ -131,6 +140,19 @@ async function sendVideo(file: File, versionOf?: number): Promise<boolean> {
     }
 
     return ok;
+}
+// E-18: pick the spec this task's videos must meet (blank = match by channel).
+const hasVideo = computed(() => props.attachments.some((a) => a.video));
+function chooseSpec(e: Event): void {
+    if (!props.deliverySpecUrl) {
+        return;
+    }
+    const v = (e.target as HTMLSelectElement).value;
+    router.put(
+        props.deliverySpecUrl,
+        { delivery_spec_id: v === '' ? null : Number(v) },
+        { preserveScroll: true, only: ['task', 'attachments'] },
+    );
 }
 function percent(v: VideoUploadState): number {
     return v.total ? Math.floor((v.loaded / v.total) * 100) : 0;
@@ -501,6 +523,34 @@ function size(bytes: number): string {
                         >
                     </li>
                 </ul>
+                <label
+                    v-if="
+                        hasVideo &&
+                        deliverySpecs?.length &&
+                        deliverySpecUrl &&
+                        canUpload
+                    "
+                    class="flex flex-wrap items-center gap-2 text-xs"
+                >
+                    <span class="text-muted-foreground"
+                        >Check videos against</span
+                    >
+                    <select
+                        :value="deliverySpecId ?? ''"
+                        class="h-7 rounded-md border bg-background px-2"
+                        aria-label="Delivery spec for this task's videos"
+                        @change="chooseSpec"
+                    >
+                        <option value="">Matching specs (by channel)</option>
+                        <option
+                            v-for="d in deliverySpecs"
+                            :key="d.id"
+                            :value="d.id"
+                        >
+                            {{ d.name }}
+                        </option>
+                    </select>
+                </label>
                 <ul v-if="videoUploads.length" class="space-y-2 text-xs">
                     <li
                         v-for="(v, i) in videoUploads"
@@ -694,6 +744,28 @@ function size(bytes: number): string {
                             class="rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
                             :title="a.review_note ?? ''"
                             >Changes requested</span
+                        >
+                        <span
+                            v-for="c in (a.video?.spec_checks ?? []).filter(
+                                (x) => x.pass === false,
+                            )"
+                            :key="`spec${c.spec_id}`"
+                            class="mr-1 rounded bg-rose-100 px-1 text-[10px] font-medium text-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                            :title="`${c.spec}: ${c.issues.join('; ')}`"
+                            >{{ c.issues[0]
+                            }}<template v-if="c.issues.length > 1">
+                                +{{ c.issues.length - 1 }}</template
+                            ></span
+                        >
+                        <span
+                            v-if="
+                                (a.video?.spec_checks ?? []).length &&
+                                (a.video?.spec_checks ?? []).every(
+                                    (x) => x.pass === true,
+                                )
+                            "
+                            class="mr-1 rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+                            >Meets spec</span
                         >
                         <span
                             v-if="a.video?.status === 'processing'"

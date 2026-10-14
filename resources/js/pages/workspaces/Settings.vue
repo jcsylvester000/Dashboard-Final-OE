@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DeliverySpecsCard from '@/components/workspaces/DeliverySpecsCard.vue';
+import type { DeliverySpecRow } from '@/components/workspaces/DeliverySpecsCard.vue';
 import { Form, Head, router, useForm } from '@inertiajs/vue3';
 import { Trash2 } from '@lucide/vue';
 import LabelController from '@/actions/App/Http/Controllers/Workspaces/LabelController';
@@ -52,6 +54,9 @@ const props = defineProps<{
     taskTypes?: Record<string, string>;
     // E-25 / E-34
     checklistDefaults?: Record<string, string>;
+    // E-18
+    deliverySpecs?: DeliverySpecRow[];
+    channelOptions?: string[];
     reviewRules?: {
         id: number;
         project: string | null;
@@ -717,5 +722,13 @@ async function removeLabel(label: {
                 </form>
             </CardContent>
         </Card>
+
+        <DeliverySpecsCard
+            v-if="workspace.can.lead && deliverySpecs"
+            :workspace-slug="workspace.slug"
+            :specs="deliverySpecs"
+            :channels="channelOptions ?? []"
+            :deliverables="deliverableTypes ?? []"
+        />
     </div>
 </template>

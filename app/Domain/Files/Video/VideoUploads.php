@@ -5,6 +5,7 @@ namespace App\Domain\Files\Video;
 use App\Domain\Files\AttachmentService;
 use App\Domain\Identity\ActivityLogger;
 use App\Jobs\ProcessVideo;
+use App\Models\Annotation;
 use App\Models\Attachment;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
@@ -158,7 +159,13 @@ class VideoUploads
         DB::transaction(function () use ($attachment) {
             if ($attachment->version_root_id !== null) {
                 $stack = $attachment->version_root_id;
+                // E-17: the cut this one replaces hands its open comments over.
+                $previous = Attachment::query()->where(fn ($q) => $q->whereKey($stack)->orWhere('version_root_id', $stack))
+                    ->where('is_latest', true)->where('id', '!=', $attachment->id)->first();
                 Attachment::query()->where(fn ($q) => $q->whereKey($stack)->orWhere('version_root_id', $stack))->update(['is_latest' => false]);
+                if ($previous !== null) {
+                    $this->carryOver($previous, $attachment);
+                }
             }
             $attachment->forceFill(['upload_state' => null, 'upload_id' => null, 'is_latest' => true, 'media_status' => 'processing'])->save();
         });
@@ -169,6 +176,35 @@ class VideoUploads
         ProcessVideo::dispatch($attachment->id);
 
         return $attachment;
+    }
+
+    /**
+     * E-17: copy the previous cut's unresolved comments (pins, drawings, timecodes) onto the
+     * new cut, marked "from vN", so the editor ticks them off there. Replies stay on the old cut.
+     */
+    public function carryOver(Attachment $from, Attachment $to): int
+    {
+        $open = Annotation::query()->where('attachment_id', $from->id)->whereNull('parent_id')->whereNull('resolved_at')->orderBy('number')->get();
+        $number = (int) Annotation::query()->where('attachment_id', $to->id)->whereNull('parent_id')->max('number');
+        foreach ($open as $a) {
+            Annotation::query()->create([
+                'attachment_id' => $to->id,
+                'user_id' => $a->user_id,
+                'client_name' => $a->client_name,
+                'number' => ++$number,
+                'x' => $a->x,
+                'y' => $a->y,
+                'time_ms' => $a->time_ms,
+                'end_ms' => $a->end_ms,
+                'shapes' => $a->shapes,
+                'color' => $a->color,
+                'body' => $a->body,
+                'carried_from_id' => $a->id,
+                'carried_from_version' => $from->version,
+            ]);
+        }
+
+        return $open->count();
     }
 
     /** Cancel an unfinished upload and free its quota. */

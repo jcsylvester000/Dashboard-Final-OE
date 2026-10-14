@@ -21,6 +21,10 @@ import {
     watch,
 } from 'vue';
 import type { Tool } from '@/components/files/AnnotationCanvas.vue';
+import type { Marker } from '@/components/files/VideoReviewPlayer.vue';
+import { frameOf, timecode } from '@/lib/timecode';
+import { store as storeCaption } from '@/routes/attachments/captions';
+import { destroy as destroyCaption } from '@/routes/captions';
 import AnnotationPanel from '@/components/files/AnnotationPanel.vue';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/format';
@@ -46,6 +50,13 @@ const AnnotationCanvas = defineAsyncComponent(
 );
 const CompareView = defineAsyncComponent(
     () => import('@/components/files/CompareView.vue'),
+);
+// E-14..E-17: video review player and synced compare.
+const VideoReviewPlayer = defineAsyncComponent(
+    () => import('@/components/files/VideoReviewPlayer.vue'),
+);
+const VideoCompare = defineAsyncComponent(
+    () => import('@/components/files/VideoCompare.vue'),
 );
 
 /**
@@ -225,6 +236,54 @@ const showPins = computed(() =>
     pins.value.filter((p) => !p.resolved || p.id === selectedId.value),
 );
 
+/* ---------- E-14..E-16: video review ---------- */
+const player = ref<{
+    seek: (ms: number) => void;
+    pause: () => void;
+} | null>(null);
+const playMs = ref(0);
+const videoRange = ref<{ in: number; out: number } | null>(null);
+const fps = computed(() => item.value.video?.fps || 25);
+/** Pins and drawings show only on their frame (or inside their range). */
+const framePins = computed(() =>
+    kind.value !== 'video'
+        ? showPins.value
+        : showPins.value.filter((p) => {
+              if (p.time_ms === null || p.time_ms === undefined) {
+                  return true; // whole-video comment
+              }
+              if (p.end_ms) {
+                  return playMs.value >= p.time_ms && playMs.value <= p.end_ms;
+              }
+              return (
+                  frameOf(playMs.value / 1000, fps.value) ===
+                  frameOf(p.time_ms / 1000, fps.value)
+              );
+          }),
+);
+const markers = computed<Marker[]>(() =>
+    pins.value
+        .filter((p) => p.time_ms !== null && p.time_ms !== undefined)
+        .map((p) => ({
+            id: p.id,
+            number: p.number,
+            time_ms: p.time_ms as number,
+            end_ms: p.end_ms ?? null,
+            color: p.color,
+            resolved: p.resolved,
+        })),
+);
+function setRange(r: { in: number; out: number } | null): void {
+    videoRange.value = r;
+}
+const draftLabel = computed(() =>
+    kind.value !== 'video'
+        ? ''
+        : videoRange.value
+          ? `for ${timecode(videoRange.value.in, fps.value)} – ${timecode(videoRange.value.out, fps.value)}`
+          : `at ${timecode(playMs.value, fps.value)}`,
+);
+
 function xsrf(): string {
     return decodeURIComponent(
         document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
@@ -266,7 +325,7 @@ async function loadPins(): Promise<void> {
     pins.value = [];
     selectedId.value = null;
     cancelDraft();
-    if (kind.value === 'image') {
+    if (kind.value === 'image' || kind.value === 'video') {
         await call(annotationsIndex.url(shown.value.id), 'GET');
     }
 }
@@ -278,11 +337,13 @@ function cancelDraft(): void {
     undone.value = [];
 }
 function place(x: number, y: number): void {
+    player.value?.pause(); // E-16: comment on a still frame
     draftPin.value = { x, y };
     selectedId.value = null;
 }
 function addShape(s: AnnotationShape): void {
     if (draftShapes.value.length < 50) {
+        player.value?.pause();
         draftShapes.value.push(s);
         undone.value = [];
     }
@@ -318,6 +379,15 @@ async function savePin(body: string): Promise<void> {
         y: draftPin.value?.y ?? null,
         color: color.value,
         shapes: draftShapes.value.length ? draftShapes.value : null,
+        // E-15: the frame (or in-out range) on a video.
+        time_ms:
+            kind.value === 'video'
+                ? Math.round(videoRange.value?.in ?? playMs.value)
+                : null,
+        end_ms:
+            kind.value === 'video' && videoRange.value
+                ? Math.round(videoRange.value.out)
+                : null,
     });
     if (ok) {
         const n = pins.value[pins.value.length - 1]?.number;
@@ -355,6 +425,15 @@ async function remove(id: number): Promise<void> {
 function select(id: number | null): void {
     selectedId.value = id;
     const p = pins.value.find((x) => x.id === id);
+    if (
+        kind.value === 'video' &&
+        p &&
+        p.time_ms !== null &&
+        p.time_ms !== undefined
+    ) {
+        player.value?.seek(p.time_ms);
+        player.value?.pause();
+    }
     if (p && p.x !== null && p.y !== null && scale.value > 1) {
         resetZoom(); // bring the pin into view
     }
@@ -384,6 +463,62 @@ function startCompare(): void {
     cancelDraft();
     mode.value = 'compare';
     compareWith.value = compareTarget.value?.id ?? null;
+}
+
+/* ---------- E-19: caption tracks ---------- */
+const captionInput = ref<HTMLInputElement | null>(null);
+const captionLabel = ref('');
+const captionLang = ref('');
+const captionError = ref('');
+async function uploadCaption(): Promise<void> {
+    const file = captionInput.value?.files?.[0];
+    if (!file) {
+        return;
+    }
+    captionError.value = '';
+    const form = new FormData();
+    form.append('file', file);
+    if (captionLabel.value.trim()) {
+        form.append('label', captionLabel.value.trim());
+    }
+    if (captionLang.value.trim()) {
+        form.append('language', captionLang.value.trim());
+    }
+    busy.value = true;
+    try {
+        const res = await fetch(storeCaption.url(shown.value.id), {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-XSRF-TOKEN': xsrf() },
+            body: form,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            captionError.value =
+                data?.errors?.file?.[0] ??
+                data?.errors?.language?.[0] ??
+                data?.message ??
+                'Could not add the captions.';
+            return;
+        }
+        announce.value = 'Captions added.';
+        captionLabel.value = '';
+        captionLang.value = '';
+        if (captionInput.value) {
+            captionInput.value.value = '';
+        }
+        router.reload({ only: ['attachments'] });
+    } finally {
+        busy.value = false;
+    }
+}
+async function removeCaption(id: number): Promise<void> {
+    if (
+        window.confirm('Remove this caption track?') &&
+        (await call(destroyCaption.url(id), 'DELETE'))
+    ) {
+        announce.value = 'Caption track removed.';
+        router.reload({ only: ['attachments'] });
+    }
 }
 
 /* ---------- keyboard and focus (E-60) ---------- */
@@ -497,8 +632,17 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             class="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden"
             @wheel="onWheel"
         >
+            <VideoCompare
+                v-if="mode === 'compare' && compareTarget && kind === 'video'"
+                :left="{
+                    url: compareTarget.url,
+                    label: `v${compareTarget.version}`,
+                }"
+                :right="{ url: shown.url, label: `v${shown.version}` }"
+                :fps="fps"
+            />
             <CompareView
-                v-if="mode === 'compare' && compareTarget"
+                v-else-if="mode === 'compare' && compareTarget"
                 :left="{
                     url: compareTarget.url,
                     label: `v${compareTarget.version}`,
@@ -560,18 +704,44 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                 class="h-full w-full bg-white"
                 :title="item.name"
             />
-            <video
+            <VideoReviewPlayer
                 v-else-if="kind === 'video'"
+                ref="player"
                 :key="shown.url"
                 :src="shown.url"
-                :poster="
-                    shown.latest ? (item.thumb_url ?? undefined) : undefined
+                :poster="shown.latest ? (item.thumb_url ?? null) : null"
+                :fps="fps"
+                :captions="shown.latest ? (item.video?.captions ?? []) : []"
+                :markers="markers"
+                :selected-id="selectedId"
+                @time="(t: number) => (playMs = t)"
+                @range="setRange"
+                @select-marker="
+                    (id: number) => {
+                        mode = 'annotate';
+                        select(id);
+                    }
                 "
-                controls
-                playsinline
-                preload="metadata"
-                class="max-h-full max-w-full"
-            />
+            >
+                <AnnotationCanvas
+                    v-if="mode === 'annotate' || framePins.length"
+                    :pins="framePins"
+                    :draft-shapes="draftShapes"
+                    :draft-pin="draftPin"
+                    :tool="mode === 'annotate' ? tool : 'move'"
+                    :color="color"
+                    :selected-id="selectedId"
+                    :scale="1"
+                    @place="place"
+                    @shape="addShape"
+                    @select="
+                        (id) => {
+                            mode = 'annotate';
+                            select(id);
+                        }
+                    "
+                />
+            </VideoReviewPlayer>
             <p
                 v-if="
                     kind === 'video' &&
@@ -657,7 +827,7 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             </div>
 
             <div
-                v-if="kind === 'image'"
+                v-if="kind === 'image' || kind === 'video'"
                 class="grid grid-cols-3 gap-1"
                 role="tablist"
                 aria-label="Viewer mode"
@@ -694,7 +864,8 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                         tool = canWrite ? 'pin' : 'move';
                     "
                 >
-                    <MessageSquarePlus class="size-3.5" /> Pins
+                    <MessageSquarePlus class="size-3.5" />
+                    {{ kind === 'video' ? 'Comments' : 'Pins' }}
                     <span
                         v-if="pins.filter((p) => !p.resolved).length"
                         class="rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-black"
@@ -766,7 +937,7 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                         </option>
                     </select>
                 </label>
-                <div class="grid grid-cols-2 gap-1">
+                <div v-if="kind === 'image'" class="grid grid-cols-2 gap-1">
                     <Button
                         size="sm"
                         :variant="
@@ -787,7 +958,12 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             </div>
 
             <AnnotationPanel
-                v-if="mode === 'annotate' && kind === 'image'"
+                v-if="
+                    mode === 'annotate' &&
+                    (kind === 'image' || kind === 'video')
+                "
+                :fps="kind === 'video' ? fps : null"
+                :draft-label="draftLabel"
                 v-model:tool="tool"
                 v-model:color="color"
                 :pins="pins"
@@ -813,6 +989,116 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                 Pins and drawing work on images. PDFs open in the browser's
                 viewer.
             </p>
+
+            <!-- E-18: delivery spec check (before anyone reviews). -->
+            <div
+                v-if="
+                    kind === 'video' &&
+                    shown.latest &&
+                    item.video?.spec_checks?.length
+                "
+                class="space-y-1 text-xs"
+            >
+                <div
+                    v-for="c in item.video.spec_checks"
+                    :key="c.spec_id"
+                    class="rounded px-2 py-1"
+                    :class="
+                        c.pass === null
+                            ? 'bg-white/10'
+                            : c.pass
+                              ? 'bg-emerald-900/60'
+                              : 'bg-rose-900/70'
+                    "
+                >
+                    <p class="font-medium">
+                        {{ c.spec }}:
+                        {{
+                            c.pass === null
+                                ? 'checked once processed'
+                                : c.pass
+                                  ? 'meets the spec'
+                                  : 'does not meet the spec'
+                        }}
+                    </p>
+                    <ul v-if="c.issues.length" class="list-disc pl-4">
+                        <li v-for="(m, i) in c.issues" :key="i">{{ m }}</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- E-19: caption tracks on this cut. -->
+            <div
+                v-if="kind === 'video' && shown.latest"
+                class="space-y-2 border-t border-white/10 pt-2 text-xs"
+            >
+                <p class="font-medium">Captions</p>
+                <ul v-if="item.video?.captions?.length" class="space-y-1">
+                    <li
+                        v-for="c in item.video.captions"
+                        :key="c.id"
+                        class="flex items-center justify-between gap-2"
+                    >
+                        <span
+                            >{{ c.label
+                            }}<span class="text-white/50">
+                                · {{ c.cues }} lines</span
+                            ></span
+                        >
+                        <button
+                            v-if="canWrite"
+                            type="button"
+                            class="text-rose-300 underline"
+                            :aria-label="`Remove captions ${c.label}`"
+                            @click="removeCaption(c.id)"
+                        >
+                            Remove
+                        </button>
+                    </li>
+                </ul>
+                <p v-else class="text-white/50">No caption track yet.</p>
+                <form
+                    v-if="canWrite"
+                    class="grid gap-1"
+                    @submit.prevent="uploadCaption"
+                >
+                    <input
+                        ref="captionInput"
+                        type="file"
+                        accept=".vtt,.srt"
+                        aria-label="Caption file (.vtt or .srt)"
+                        class="text-xs"
+                    />
+                    <div class="flex gap-1">
+                        <input
+                            v-model="captionLabel"
+                            type="text"
+                            maxlength="60"
+                            placeholder="Label (English)"
+                            aria-label="Caption label"
+                            class="h-7 min-w-0 flex-1 rounded border border-white/20 bg-neutral-900 px-2"
+                        />
+                        <input
+                            v-model="captionLang"
+                            type="text"
+                            maxlength="12"
+                            placeholder="en"
+                            aria-label="Language code"
+                            class="h-7 w-14 rounded border border-white/20 bg-neutral-900 px-2"
+                        />
+                    </div>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        variant="secondary"
+                        :disabled="busy"
+                        >Add captions</Button
+                    >
+                    <p v-if="captionError" class="text-rose-300" role="alert">
+                        {{ captionError }}
+                    </p>
+                </form>
+            </div>
 
             <p
                 v-if="shown.review_status === 'approved'"
@@ -896,7 +1182,14 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                 class="inline-flex items-center gap-1 text-xs text-white/80 underline"
                 ><Download class="size-3.5" /> Download this version</a
             >
-            <p class="hidden text-[11px] text-white/40 md:block">
+            <p
+                v-if="kind === 'video'"
+                class="hidden text-[11px] text-white/40 md:block"
+            >
+                K play · J back 1 s · L faster · , . frame · I O range · ← →
+                files · Esc close
+            </p>
+            <p v-else class="hidden text-[11px] text-white/40 md:block">
                 ← → files · + − 0 zoom · Ctrl+Z undo · Esc close
             </p>
             <p class="text-[11px] text-white/40 md:hidden">

@@ -2,13 +2,18 @@
 
 namespace App\Domain\Files;
 
+use App\Domain\Files\Video\DeliverySpecs;
 use App\Domain\Files\Video\VideoUploads;
 use App\Models\Attachment;
+use App\Models\AttachmentCaption;
+use App\Models\DeliverySpec;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Attachment rows for pages, with fresh signed links.
@@ -25,8 +30,10 @@ class AttachmentPresenter
         $canLead = Gate::forUser($user)->allows('lead', $workspace);
         $canApprove = ! $readOnly && $this->canApprove($record, $workspace, $user);
 
+        // E-18: delivery specs for this task's videos (checked live, so spec edits apply at once).
+        $specs = $record instanceof Task ? app(DeliverySpecs::class)->forTask($record) : new Collection;
         $all = Attachment::query()
-            ->with(['uploader:id,name', 'approver:id,name'])
+            ->with(['uploader:id,name', 'approver:id,name', 'captions'])
             // E-04: open pins per version, for the badge on each file.
             ->withCount(['annotations as open_pins' => fn ($q) => $q->whereNull('parent_id')->whereNull('resolved_at')])
             ->where('attachable_type', $record->getMorphClass())
@@ -70,7 +77,7 @@ class AttachmentPresenter
                 'thumb_url' => $a->thumbnail_key !== null ? $this->files->url($a, thumbnail: true) : null,
                 'previewable' => $a->previewable(),
                 'text_url' => $a->isText() ? $this->files->url($a, text: true) : null,
-                'video' => self::video($a),
+                'video' => self::video($a, $specs),
                 'can_delete' => ! $readOnly && ($a->uploaded_by === $user->id || $canLead),
                 'approved' => $a->approved_at !== null,
                 'approved_by' => $a->approver?->name,
@@ -138,14 +145,16 @@ class AttachmentPresenter
     /**
      * E-13: processing state and details of a video (null for other files).
      *
-     * @return array{status: string|null, duration_ms: int|null, width: int|null, height: int|null, fps: float|null, error: string|null}|null
+     * @param  Collection<int, DeliverySpec>|null  $specs
+     * @return array<string, mixed>|null
      */
-    public static function video(Attachment $a): ?array
+    public static function video(Attachment $a, ?Collection $specs = null): ?array
     {
         if (! $a->isVideoAsset()) {
             return null;
         }
         $m = $a->media ?? [];
+        $captions = self::captions($a);
 
         return [
             'status' => $a->media_status,
@@ -154,7 +163,27 @@ class AttachmentPresenter
             'height' => $m['height'] ?? null,
             'fps' => $m['fps'] ?? null,
             'error' => $a->media_error,
+            'captions' => $captions, // E-19
+            'spec_checks' => $specs !== null ? app(DeliverySpecs::class)->check($a, $specs, count($captions)) : [], // E-18
         ];
+    }
+
+    /**
+     * E-19: caption tracks with short-lived same-origin links for <track>.
+     *
+     * @return list<array{id: int, label: string, language: string|null, cues: int, url: string}>
+     */
+    public static function captions(Attachment $a): array
+    {
+        $list = $a->relationLoaded('captions') ? $a->captions : $a->captions()->get();
+
+        return $list->map(fn (AttachmentCaption $c): array => [
+            'id' => $c->id,
+            'label' => $c->label,
+            'language' => $c->language,
+            'cues' => $c->cues,
+            'url' => URL::temporarySignedRoute('captions.show', now()->addMinutes((int) config('files.link_minutes', 10)), ['caption' => $c->id], false),
+        ])->values()->all();
     }
 
     /**

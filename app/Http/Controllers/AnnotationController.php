@@ -60,11 +60,21 @@ class AnnotationController extends Controller
             'shapes.*.points.*' => ['array', 'size:2'],
             'shapes.*.points.*.*' => ['numeric', 'between:0,1'],
             'shapes.*.text' => ['nullable', 'string', 'max:200'],
+            // E-15 / E-16: on a video, the frame (or range) the comment is about.
+            'time_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
+            'end_ms' => ['nullable', 'integer', 'gt:time_ms', 'max:86400000'],
         ]);
+        $video = $attachment->isVideoAsset() || str_starts_with($attachment->mime, 'video/');
+        if (isset($data['time_ms']) && ! $video) {
+            throw ValidationException::withMessages(['time_ms' => __('Timecodes go on videos.')]);
+        }
+        if (isset($data['end_ms']) && ! isset($data['time_ms'])) {
+            throw ValidationException::withMessages(['end_ms' => __('A range needs a start.')]);
+        }
         /** @var User $user */
         $user = $request->user();
         $isReply = isset($data['parent_id']);
-        if ($isReply && (isset($data['x']) || isset($data['shapes']))) {
+        if ($isReply && (isset($data['x']) || isset($data['shapes']) || isset($data['time_ms']))) {
             throw ValidationException::withMessages(['parent_id' => __('Replies go on an existing pin.')]);
         }
 
@@ -78,6 +88,8 @@ class AnnotationController extends Controller
                 'number' => $number,
                 'x' => isset($data['x']) ? round((float) $data['x'], 5) : null,
                 'y' => isset($data['y']) ? round((float) $data['y'], 5) : null,
+                'time_ms' => isset($data['time_ms']) ? (int) $data['time_ms'] : null,
+                'end_ms' => isset($data['end_ms']) ? (int) $data['end_ms'] : null,
                 'shapes' => isset($data['shapes']) ? $this->cleanShapes($data['shapes']) : null,
                 'color' => $data['color'] ?? null,
                 'body' => trim((string) $data['body']),
@@ -180,6 +192,9 @@ class AnnotationController extends Controller
                 'y' => $a->y !== null ? (float) $a->y : null,
                 'color' => $a->color ?? Annotation::COLORS[0],
                 'shapes' => $a->shapes ?? [],
+                'time_ms' => $a->time_ms,
+                'end_ms' => $a->end_ms,
+                'carried_from_version' => $a->carried_from_version, // E-17
                 'body' => $a->body,
                 // E-08: client pins say so (the client's own name, marked Client).
                 'author' => $a->client_name ?? ($a->author->name ?? 'Former member'),

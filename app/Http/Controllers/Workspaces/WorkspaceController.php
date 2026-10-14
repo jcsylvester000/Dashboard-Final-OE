@@ -12,6 +12,7 @@ use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
+use App\Models\DeliverySpec;
 use App\Models\Project;
 use App\Models\ReviewRule;
 use App\Models\Task;
@@ -178,6 +179,10 @@ class WorkspaceController extends Controller
                     'mode' => $r->mode, 'reviewers' => User::query()->whereIn('id', $r->user_ids)->orderBy('name')->pluck('name')->values(),
                 ])->values(),
             'reviewModes' => ReviewRule::MODES,
+            // E-18: delivery specs (leads).
+            'deliverySpecs' => DeliverySpec::query()->where('workspace_id', $workspace->id)->orderBy('name')->get()
+                ->map(fn (DeliverySpec $d): array => $d->only(['id', 'name', 'channel', 'deliverable', 'aspect', 'min_width', 'min_height', 'max_duration_s', 'max_size_mb', 'captions_required']))->values(),
+            'channelOptions' => Task::WORK_DETAIL_FIELDS['marketing']['channel'][2],
             'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2],
             'projectOptions' => $workspace->projects()->where('status', '!=', 'archived')->orderBy('name')->get(['id', 'name']),
             'memberOptions' => $this->presenter->memberOptions($workspace),

@@ -14,6 +14,7 @@ import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import type { Tool } from '@/components/files/AnnotationCanvas.vue';
 import { timeAgo } from '@/lib/format';
+import { timecode } from '@/lib/timecode';
 import type { AnnotationPin } from '@/types/files';
 import { ANNOTATION_COLORS } from '@/types/files';
 
@@ -33,6 +34,10 @@ const props = defineProps<{
     tool: Tool;
     color: string;
     busy: boolean;
+    /** E-15: set on videos; comments then show and sort by timecode. */
+    fps?: number | null;
+    /** E-15: "at 00:00:35:12" for the comment being written */
+    draftLabel?: string;
 }>();
 const emit = defineEmits<{
     'update:tool': [tool: Tool];
@@ -74,8 +79,20 @@ const body = ref('');
 const replyTo = ref<number | null>(null);
 const replyBody = ref('');
 const showResolved = ref(false);
-const visible = computed(() =>
-    props.pins.filter((p) => showResolved.value || !p.resolved),
+const visible = computed(() => {
+    const list = props.pins.filter((p) => showResolved.value || !p.resolved);
+
+    return props.fps
+        ? [...list].sort(
+              (a, b) =>
+                  (a.time_ms ?? Number.MAX_SAFE_INTEGER) -
+                  (b.time_ms ?? Number.MAX_SAFE_INTEGER),
+          )
+        : list;
+});
+const carried = computed(
+    () =>
+        props.pins.filter((p) => p.carried_from_version && !p.resolved).length,
 );
 const resolvedCount = computed(
     () => props.pins.filter((p) => p.resolved).length,
@@ -167,7 +184,9 @@ defineExpose({ showResolved });
                 class="space-y-2 rounded border border-white/20 p-2"
             >
                 <p class="text-xs text-white/70">
-                    New comment<template v-if="draftCount">
+                    New comment<template v-if="draftLabel">
+                        {{ draftLabel }}</template
+                    ><template v-if="draftCount">
                         · {{ draftCount }} drawing{{
                             draftCount === 1 ? '' : 's'
                         }}</template
@@ -239,6 +258,13 @@ defineExpose({ showResolved });
             >
         </div>
 
+        <p
+            v-if="carried"
+            class="rounded bg-sky-900/50 px-2 py-1 text-xs text-sky-100"
+        >
+            {{ carried }} open comment{{ carried === 1 ? '' : 's' }} carried
+            over from the previous cut. Resolve each one once it's fixed.
+        </p>
         <div class="flex items-center justify-between text-xs text-white/60">
             <span
                 >{{ visible.length }} pin{{
@@ -276,6 +302,24 @@ defineExpose({ showResolved });
                         >{{ p.number }}</span
                     >
                     <span class="min-w-0 flex-1">
+                        <span
+                            v-if="
+                                fps &&
+                                p.time_ms !== null &&
+                                p.time_ms !== undefined
+                            "
+                            class="mr-1 rounded bg-white/10 px-1 font-mono text-[10px]"
+                            >{{ timecode(p.time_ms, fps)
+                            }}<template v-if="p.end_ms">
+                                – {{ timecode(p.end_ms, fps) }}</template
+                            ></span
+                        ><span
+                            v-if="p.carried_from_version"
+                            class="mr-1 rounded border border-sky-300/60 px-1 text-[10px] text-sky-200"
+                            >Carried over · from v{{
+                                p.carried_from_version
+                            }}</span
+                        >
                         <span
                             class="block text-sm break-words whitespace-pre-line"
                             :class="

@@ -17,6 +17,10 @@ export type AttachmentRow = {
         height: number | null;
         fps: number | null;
         error: string | null;
+        /** E-19 */
+        captions?: VideoCaption[];
+        /** E-18: one result per matching delivery spec (pass null = not checked yet) */
+        spec_checks?: SpecCheck[];
     } | null;
     /** E-23: same-origin plain-text link for logs, JSON, CSV, Markdown. */
     text_url?: string | null;
@@ -82,6 +86,11 @@ export type AnnotationPin = {
     y: number | null;
     color: string;
     shapes: AnnotationShape[];
+    /** E-15: frame (ms) on a video, and the end of a range comment */
+    time_ms?: number | null;
+    end_ms?: number | null;
+    /** E-17: carried over from this earlier cut */
+    carried_from_version?: number | null;
     body: string;
     author: string;
     author_id: number | null;
@@ -111,3 +120,20 @@ export const ANNOTATION_COLORS = [
     '#000000',
     '#FFFFFF',
 ];
+
+/** E-19: a caption track on a video version. */
+export type VideoCaption = {
+    id: number;
+    label: string;
+    language: string | null;
+    cues: number;
+    url: string;
+};
+
+/** E-18: result of checking a video against a delivery spec. */
+export type SpecCheck = {
+    spec_id: number;
+    spec: string;
+    pass: boolean | null;
+    issues: string[];
+};

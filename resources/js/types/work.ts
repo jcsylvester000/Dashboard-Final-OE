@@ -96,6 +96,8 @@ export type TaskDetail = TaskRow & {
         done: boolean;
         done_by: string | null;
     }[];
+    /** E-18: delivery spec chosen for this task's videos (null = match by channel). */
+    delivery_spec_id?: number | null;
     /** E-29: sources pasted on the task (shown in the work report). */
     citations?: TaskCitation[];
     work_details: Record<string, string | null>;
