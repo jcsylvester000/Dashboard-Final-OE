@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { ShieldAlert } from '@lucide/vue';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -20,7 +19,6 @@ import { dashboard } from '@/routes';
 import { index as inboxIndex, open as openAlert } from '@/routes/inbox';
 import { mine } from '@/routes/tasks';
 import { index as activityIndex } from '@/routes/admin/activity';
-import { edit as securityEdit } from '@/routes/security';
 import {
     index as workspacesIndex,
     show as workspaceShow,
@@ -37,7 +35,6 @@ defineProps<{
         departments: DepartmentOption[];
         roles: string[];
         lastLoginAt: string | null;
-        twoFactorEnabled: boolean;
     };
     team: {
         activeMembers: number;
@@ -102,25 +99,6 @@ defineOptions({
                 · {{ profile.roles.map(roleLabel).join(', ') || 'No role' }}
             </p>
         </div>
-
-        <Card
-            v-if="!profile.twoFactorEnabled"
-            class="border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
-        >
-            <CardContent class="flex items-center gap-3 py-3 text-sm">
-                <ShieldAlert class="size-5 shrink-0 text-amber-600" />
-                <span class="flex-1">
-                    Protect your account: turn on two-factor authentication or
-                    add a passkey.
-                </span>
-                <Link
-                    :href="securityEdit()"
-                    class="font-medium underline underline-offset-4"
-                >
-                    Security settings
-                </Link>
-            </CardContent>
-        </Card>
 
         <div class="grid gap-4 md:grid-cols-3">
             <Card>

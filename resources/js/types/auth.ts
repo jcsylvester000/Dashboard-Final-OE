@@ -9,7 +9,6 @@ export type User = {
     must_change_password?: boolean;
     last_login_at?: string | null;
     email_verified_at: string | null;
-    two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
     [key: string]: unknown;
@@ -45,22 +44,6 @@ export type Auth = {
     /** Can approve time entries (workspace owner/lead or workspace manager). */
     leads: boolean;
     leadsDepartment?: boolean;
-    /** E-87: two-factor sign-in due by (ISO date) while the grace period runs. */
-    twoFactorDue?: string | null;
     /** The user's primary department, for the department queue link. */
     department: { id: number; name: string; slug: string } | null;
-};
-
-export type Passkey = {
-    id: number;
-    name: string;
-    authenticator: string | null;
-    created_at_diff: string;
-    last_used_at_diff: string | null;
-};
-
-export type TwoFactorConfigContent = {
-    title: string;
-    description: string;
-    buttonText: string;
 };

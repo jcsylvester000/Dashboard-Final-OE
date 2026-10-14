@@ -13,9 +13,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Laravel\Fortify\Contracts\PasskeyUser;
-use Laravel\Fortify\PasskeyAuthenticatable;
-use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -34,21 +31,17 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $deactivated_at
  * @property Carbon|null $access_ends_on planned last day of access (E-93); deactivated the day after
  * @property Carbon|null $access_end_alerted_at
- * @property Carbon|null $two_factor_deadline two-factor setup due (E-87)
- * @property string|null $two_factor_secret
- * @property string|null $two_factor_recovery_codes
- * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
  * @property array<string, string>|null $notification_preferences
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable(['name', 'email', 'title', 'primary_department_id', 'password'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'notification_preferences'])]
-class User extends Authenticatable implements PasskeyUser
+#[Hidden(['password', 'remember_token', 'notification_preferences'])]
+class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable;
 
     /**
      * Role that bypasses every permission check (see AppServiceProvider Gate::before).
@@ -74,14 +67,12 @@ class User extends Authenticatable implements PasskeyUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
             'deactivated_at' => 'datetime',
             'access_ends_on' => 'date',
             'access_end_alerted_at' => 'datetime',
-            'two_factor_deadline' => 'datetime',
             'notification_preferences' => 'array',
         ];
     }

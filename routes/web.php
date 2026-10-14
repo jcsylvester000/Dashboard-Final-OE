@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AnnotationController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
@@ -29,6 +30,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
     Route::post('attachments/{attachment}/approve', [AttachmentController::class, 'approve'])->name('attachments.approve');
     Route::post('attachments/{attachment}/review', [AttachmentController::class, 'review'])->name('attachments.review');
+    // E-04 / E-05: pins, threads and drawings on a file version (JSON).
+    Route::get('attachments/{attachment}/annotations', [AnnotationController::class, 'index'])->name('attachments.annotations.index');
+    Route::post('attachments/{attachment}/annotations', [AnnotationController::class, 'store'])->middleware('throttle:120,1')->name('attachments.annotations.store');
+    Route::patch('annotations/{annotation}', [AnnotationController::class, 'update'])->name('annotations.update');
+    Route::delete('annotations/{annotation}', [AnnotationController::class, 'destroy'])->name('annotations.destroy');
     Route::post('attachments/from-drive', [AttachmentController::class, 'fromDrive'])->middleware('throttle:60,1')->name('attachments.from-drive');
     Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
 

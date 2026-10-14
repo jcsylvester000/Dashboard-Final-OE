@@ -3,14 +3,7 @@ import type { Device, SignIn } from '@/components/security/SignedInDevices.vue';
 import SignedInDevices from '@/components/security/SignedInDevices.vue';
 import { destroy as destroyUserSession } from '@/routes/admin/users/sessions';
 import { Form, Head, Link, router } from '@inertiajs/vue3';
-import {
-    KeyRound,
-    Link2,
-    LogOut,
-    ShieldOff,
-    UserCheck,
-    UserX,
-} from '@lucide/vue';
+import { KeyRound, Link2, LogOut, UserCheck, UserX } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import { Badge } from '@/components/ui/badge';
@@ -67,7 +60,6 @@ const busy = ref<string | null>(null);
 type Action =
     | 'issueAccessLink'
     | 'temporaryPassword'
-    | 'resetTwoFactor'
     | 'signOut'
     | 'deactivate'
     | 'reactivate';
@@ -75,8 +67,6 @@ type Action =
 const confirmations: Partial<Record<Action, string>> = {
     temporaryPassword:
         'Replace their password with a temporary one and sign them out everywhere?',
-    resetTwoFactor:
-        'Turn off two-factor for this member? They can set it up again after logging in.',
     signOut: 'Sign this member out of every browser and device?',
     deactivate:
         'Deactivate this member? Their open work is handed over, they are signed out immediately and cannot log in until reactivated.',
@@ -182,9 +172,6 @@ const statusVariant: Record<
                 >
                     {{ member.is_active ? 'Active' : 'Deactivated' }}
                 </Badge>
-                <Badge variant="outline">
-                    2FA {{ member.two_factor ? 'on' : 'off' }}
-                </Badge>
                 <Badge v-if="member.must_change_password" variant="outline">
                     Must change password
                 </Badge>
@@ -253,14 +240,6 @@ const statusVariant: Record<
                         @click="run('temporaryPassword')"
                     >
                         <KeyRound /> Temporary password
-                    </Button>
-                    <Button
-                        v-if="member.two_factor"
-                        variant="outline"
-                        :disabled="busy !== null"
-                        @click="run('resetTwoFactor')"
-                    >
-                        <ShieldOff /> Reset 2FA
                     </Button>
                     <Button
                         v-if="!member.is_self"

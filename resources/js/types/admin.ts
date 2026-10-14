@@ -26,7 +26,6 @@ export type UserRow = {
     is_active: boolean;
     role: string | null;
     department: DepartmentOption | null;
-    two_factor: boolean;
     last_login_at: string | null;
 };
 
@@ -46,7 +45,6 @@ export type Member = MemberForm & {
     id: number;
     is_active: boolean;
     must_change_password: boolean;
-    two_factor: boolean;
     last_login_at: string | null;
     created_at: string | null;
     is_self: boolean;

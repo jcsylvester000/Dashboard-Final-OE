@@ -38,7 +38,6 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::post('users/{user}/reactivate', [UserController::class, 'reactivate'])->name('users.reactivate');
         Route::post('users/{user}/access-link', [UserController::class, 'issueAccessLink'])->name('users.access-link');
         Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->name('users.temporary-password');
-        Route::post('users/{user}/reset-two-factor', [UserController::class, 'resetTwoFactor'])->name('users.reset-two-factor');
         Route::post('users/{user}/sign-out', [UserController::class, 'signOut'])->name('users.sign-out');
         Route::delete('users/{user}/sessions/{userSession}', [UserController::class, 'destroySession'])->name('users.sessions.destroy');
         Route::get('users/{user}/personal-data', [UserController::class, 'exportData'])->name('users.export-data');

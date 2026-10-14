@@ -1293,6 +1293,7 @@ function describe(entry: TimelineEntry): string {
                         :attachments="attachments ?? []"
                         :limits="fileLimits"
                         :can-upload="can"
+                        :annotate-on-paste="task.type === 'bug'"
                     />
 
                     <AttachmentsPanel

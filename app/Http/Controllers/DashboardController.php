@@ -40,7 +40,6 @@ class DashboardController extends Controller
                 'departments' => $user->departments->map->only(['id', 'name', 'color'])->values(),
                 'roles' => $user->getRoleNames()->values(),
                 'lastLoginAt' => $user->last_login_at?->toIso8601String(),
-                'twoFactorEnabled' => $user->two_factor_confirmed_at !== null,
             ],
             'team' => $canSeeTeam ? [
                 'activeMembers' => User::active()->count(),

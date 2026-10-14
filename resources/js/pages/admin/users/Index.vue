@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { Plus, ShieldCheck } from '@lucide/vue';
+import { Plus } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import Pagination from '@/components/Pagination.vue';
@@ -307,14 +307,7 @@ watch(form, apply);
                             </div>
                         </td>
                         <td class="px-4 py-2">
-                            <span class="inline-flex items-center gap-1">
-                                {{ roleLabel(u.role) }}
-                                <ShieldCheck
-                                    v-if="u.two_factor"
-                                    class="size-3.5 text-emerald-600"
-                                    aria-label="Two-factor on"
-                                />
-                            </span>
+                            {{ roleLabel(u.role) }}
                         </td>
                         <td class="px-4 py-2">
                             <span

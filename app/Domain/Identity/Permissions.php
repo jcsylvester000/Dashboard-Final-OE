@@ -215,14 +215,4 @@ final class Permissions
     {
         return array_keys(self::roles());
     }
-
-    /**
-     * E-87: roles holding any of these must use two-factor sign-in.
-     *
-     * @return list<string>
-     */
-    public static function requiresTwoFactor(): array
-    {
-        return [self::USERS_MANAGE, self::ROLES_MANAGE, self::BILLING_MANAGE, self::BILLING_FINALIZE, self::BILLING_PAYMENTS, self::BILLING_SETTINGS, self::SYSTEM_MANAGE];
-    }
 }

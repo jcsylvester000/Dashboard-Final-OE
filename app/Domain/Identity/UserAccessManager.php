@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 /**
  * Account-level admin actions: deactivate, reactivate, sign out everywhere,
- * reset 2FA, temporary password.
+ * temporary password.
  */
 class UserAccessManager
 {
@@ -50,17 +50,6 @@ class UserAccessManager
         if ($log) {
             $this->activity->log('user.sessions-revoked', $user, actor: $by);
         }
-    }
-
-    public function resetTwoFactor(User $user, User $by): void
-    {
-        $user->forceFill([
-            'two_factor_secret' => null,
-            'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at' => null,
-        ])->save();
-
-        $this->activity->log('user.two-factor-reset', $user, actor: $by);
     }
 
     /**

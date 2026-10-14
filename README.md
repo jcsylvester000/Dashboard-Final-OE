@@ -4,7 +4,7 @@ Internal marketing and task-tracking platform for the agency. Team members only:
 there is no public sign-up and the app never sends email.
 
 **Stack:** PHP 8.3+ (8.5 recommended, matches Forge) · Laravel 13 · Inertia 3 · Vue 3.5 (TypeScript, Composition API) ·
-Tailwind CSS 4 + shadcn-vue · PostgreSQL 18 · Valkey (Redis-compatible) · Fortify (login, 2FA, passkeys) ·
+Tailwind CSS 4 + shadcn-vue · PostgreSQL 18 · Valkey (Redis-compatible) · Fortify (email + password login) ·
 spatie/laravel-permission 8. Deploys to Laravel Forge.
 
 Build status: **P0 Foundation**, **P1 Auth, Admin & Access Control** (verified) and **P2 Workspaces, Projects & Tagging** (verified) **P3a Unified workflow** (verified) and **P3b Time tracking** are in place.
@@ -114,7 +114,7 @@ CI (GitHub Actions) runs the same tests against PostgreSQL 18.
 - **Lost the admin password?** From the app folder: `php artisan user:reset-link admin@overeasy.local | Set-Clipboard`, then paste the link into the browser (single use, 24 h; a newer link cancels older ones).
 - **Forgot password?** An admin opens the member and clicks **Issue reset link** (24 h, single use)
   or **Temporary password** (member must change it at next login).
-- Admins can also **Reset 2FA**, **Sign out everywhere**, and **Deactivate** (immediate sign-out; no deletes).
+- Admins can also **Sign out everywhere** (or end one device), and **Deactivate** (immediate sign-out; no deletes).
 - **Roles** (global): Super Admin, Admin, Finance, Department Lead, Member, Viewer.
   Edit the permission matrix in **Admin › Roles & access** (Super Admin only by default).
 - **Departments:** Development, Research, Product, Marketing, SEO (editable).

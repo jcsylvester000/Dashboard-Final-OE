@@ -76,6 +76,16 @@ async function uploadImages(files: File[]): Promise<void> {
                     'Upload failed.';
             } else {
                 insertAtCaret(`\n${data.token}\n`);
+                // E-22: let the file panel open it for annotating (bug tasks).
+                window.dispatchEvent(
+                    new CustomEvent('oe:pasted-file', {
+                        detail: {
+                            id: data.id,
+                            type: props.pasteTarget?.type,
+                            attachableId: props.pasteTarget?.id,
+                        },
+                    }),
+                );
             }
         } catch {
             uploadError.value = 'Upload failed (network).';

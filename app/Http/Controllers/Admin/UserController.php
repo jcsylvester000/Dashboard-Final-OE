@@ -72,7 +72,6 @@ class UserController extends Controller
                 'is_active' => $u->is_active,
                 'role' => $u->getRoleNames()->first(),
                 'department' => $u->primaryDepartment?->only(['id', 'name', 'color']),
-                'two_factor' => $u->two_factor_confirmed_at !== null,
                 'last_login_at' => $u->last_login_at?->toIso8601String(),
             ]);
 
@@ -151,7 +150,6 @@ class UserController extends Controller
                 'department_ids' => $user->departments->pluck('id')->values(),
                 'is_active' => $user->is_active,
                 'must_change_password' => $user->must_change_password,
-                'two_factor' => $user->two_factor_confirmed_at !== null,
                 'last_login_at' => $user->last_login_at?->toIso8601String(),
                 'access_ends_on' => $user->access_ends_on?->toDateString(),
                 'created_at' => $user->created_at?->toIso8601String(),
@@ -324,17 +322,6 @@ class UserController extends Controller
             'value' => $password,
             'expiresAt' => null,
         ]);
-    }
-
-    public function resetTwoFactor(Request $request, User $user): RedirectResponse
-    {
-        Gate::authorize('update', $user);
-
-        $this->access->resetTwoFactor($user, $request->user());
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Two-factor authentication was reset.')]);
-
-        return back();
     }
 
     /** E-88: end one of this person's sessions. */

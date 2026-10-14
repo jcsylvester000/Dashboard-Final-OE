@@ -7,24 +7,15 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/security';
-import type { Props as ManagePasskeysProps } from '@/components/ManagePasskeys.vue';
-import ManagePasskeys from '@/components/ManagePasskeys.vue';
-import type { Props as ManageTwoFactorProps } from '@/components/ManageTwoFactor.vue';
-import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
 import type { Device, SignIn } from '@/components/security/SignedInDevices.vue';
 import SignedInDevices from '@/components/security/SignedInDevices.vue';
-import { formatDate } from '@/lib/format';
 import { destroy as destroySession, destroyOthers } from '@/routes/sessions';
 
-// oxfmt-ignore
 type Props = {
     passwordRules: string;
-    twoFactorRequired: boolean;
-    twoFactorDeadline: string | null;
     devices: Device[];
     loginHistory: SignIn[];
-} & ManagePasskeysProps &
-    ManageTwoFactorProps;
+};
 
 const props = defineProps<Props>();
 
@@ -44,17 +35,6 @@ defineOptions({
     <Head title="Security settings" />
 
     <h1 class="sr-only">Security settings</h1>
-
-    <div
-        v-if="twoFactorDeadline"
-        class="mb-6 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-        role="alert"
-    >
-        Your role can change money, people or system settings, so it needs
-        two-factor sign-in. Turn on an authenticator app or add a passkey below
-        by {{ formatDate(twoFactorDeadline) }}. After that date, this page is
-        the only one you can open until it is set up.
-    </div>
 
     <div class="space-y-6">
         <Heading
@@ -125,17 +105,6 @@ defineOptions({
             </div>
         </Form>
     </div>
-
-    <ManageTwoFactor
-        :canManageTwoFactor="canManageTwoFactor"
-        :requiresConfirmation="requiresConfirmation"
-        :twoFactorEnabled="twoFactorEnabled"
-    />
-
-    <ManagePasskeys
-        :canManagePasskeys="canManagePasskeys"
-        :passkeys="passkeys"
-    />
 
     <SignedInDevices
         class="mt-10"

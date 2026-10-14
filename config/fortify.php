@@ -1,7 +1,5 @@
 <?php
 
-use Laravel\Fortify\Features;
-
 return [
 
     /*
@@ -160,17 +158,9 @@ return [
     |
     */
 
-    // Internal-only app: no registration, no email verification and no
+    // Internal-only app: email + password sign-in only (owner decision 2026-10-14:
+    // no two-factor, no passkeys). No registration, no email verification and no
     // self-service password reset. Admins issue one-time links instead.
-    'features' => [
-        Features::twoFactorAuthentication([
-            'confirm' => true,
-            'confirmPassword' => true,
-            // 'window' => 0
-        ]),
-        Features::passkeys([
-            'confirmPassword' => true,
-        ]),
-    ],
+    'features' => [],
 
 ];

@@ -12,7 +12,6 @@ use Database\Seeders\DepartmentSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -33,32 +32,6 @@ class EnhancementBatchE7aTest extends TestCase
         $this->seed([RolesAndPermissionsSeeder::class, DepartmentSeeder::class]);
         Storage::fake('local');
         $this->travelTo('2026-11-03 09:00:00');
-    }
-
-    public function test_sensitive_roles_get_a_grace_period_then_only_reach_the_security_page()
-    {
-        config(['security.enforce_two_factor' => true, 'security.two_factor_grace_days' => 7]);
-        $finance = User::factory()->withRole('finance')->create();
-        $member = User::factory()->withRole('member')->create();
-
-        $this->actingAs($finance)->get(route('billing.invoices.index'))->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('auth.twoFactorDue', fn ($d) => str_starts_with((string) $d, '2026-11-10')));
-
-        $this->travelTo('2026-11-11 09:00:00');
-        $this->actingAs($finance)->get(route('billing.invoices.index'))->assertRedirect(route('security.edit'));
-        $this->actingAs($finance)->get(route('dashboard'))->assertRedirect(route('security.edit'));
-        $this->actingAs($finance)->post(route('logout'))->assertRedirect();
-        $this->actingAs($member)->get(route('dashboard'))->assertOk(); // members aren't asked
-
-        // An authenticator app (or a passkey) lifts it.
-        $finance->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
-        $this->actingAs($finance)->get(route('billing.invoices.index'))->assertOk();
-        $this->assertNull($finance->fresh()?->two_factor_deadline);
-
-        $admin = User::factory()->withRole('admin')->create(['two_factor_deadline' => now()->subDay()]);
-        $this->actingAs($admin)->get(route('dashboard'))->assertRedirect(route('security.edit'));
-        DB::table('passkeys')->insert(['user_id' => $admin->id, 'name' => 'YubiKey', 'credential_id' => 'abc', 'credential' => '{}', 'created_at' => now(), 'updated_at' => now()]);
-        $this->actingAs($admin)->get(route('dashboard'))->assertOk();
     }
 
     public function test_people_see_their_devices_and_can_end_one_or_all_others()

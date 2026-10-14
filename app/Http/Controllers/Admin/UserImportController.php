@@ -92,14 +92,14 @@ class UserImportController extends Controller
             if ($out === false) {
                 return;
             }
-            fputcsv($out, ['name', 'email', 'title', 'role', 'department', 'status', 'last_login', 'access_ends_on', 'two_factor']);
+            fputcsv($out, ['name', 'email', 'title', 'role', 'department', 'status', 'last_login', 'access_ends_on']);
             User::query()->with(['roles:id,name', 'primaryDepartment:id,name'])->orderBy('name')->chunkById(500, function ($users) use ($out) {
                 foreach ($users as $u) {
                     /** @var User $u */
                     fputcsv($out, [
                         $u->name, $u->email, $u->title ?? '', $u->getRoleNames()->first() ?? '', $u->primaryDepartment->name ?? '',
                         $u->is_active ? 'active' : 'deactivated', $u->last_login_at?->toDateString() ?? '',
-                        $u->access_ends_on?->toDateString() ?? '', $u->two_factor_confirmed_at !== null ? 'yes' : 'no',
+                        $u->access_ends_on?->toDateString() ?? '',
                     ]);
                 }
             });

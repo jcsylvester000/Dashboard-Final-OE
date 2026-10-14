@@ -155,15 +155,6 @@ class UserManagementTest extends TestCase
         $this->assertTrue(Hash::check($temporary, $member->password));
     }
 
-    public function test_admin_can_reset_two_factor()
-    {
-        $member = User::factory()->withRole('member')->withTwoFactor()->create();
-
-        $this->actingAs($this->admin())->post(route('admin.users.reset-two-factor', $member))->assertRedirect();
-
-        $this->assertNull($member->refresh()->two_factor_confirmed_at);
-    }
-
     public function test_admins_cannot_change_their_own_role()
     {
         $admin = $this->admin();

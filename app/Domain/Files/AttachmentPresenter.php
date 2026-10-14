@@ -26,6 +26,8 @@ class AttachmentPresenter
 
         $all = Attachment::query()
             ->with(['uploader:id,name', 'approver:id,name'])
+            // E-04: open pins per version, for the badge on each file.
+            ->withCount(['annotations as open_pins' => fn ($q) => $q->whereNull('parent_id')->whereNull('resolved_at')])
             ->where('attachable_type', $record->getMorphClass())
             ->where('attachable_id', $record->getKey())
             ->get();
@@ -71,6 +73,7 @@ class AttachmentPresenter
                 'approved_at' => $a->approved_at?->toIso8601String(),
                 'can_approve' => $canApprove,
                 'from_drive' => $a->drive_file_id !== null,
+                'open_pins' => (int) $a->getAttribute('open_pins'),
             ])
             ->values()
             ->all();

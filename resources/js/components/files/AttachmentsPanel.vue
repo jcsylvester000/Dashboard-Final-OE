@@ -8,7 +8,7 @@ import {
     Paperclip,
     Trash2,
 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MediaViewer from '@/components/files/MediaViewer.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,8 @@ const props = defineProps<{
     canUpload: boolean;
     title?: string;
     description?: string;
+    /** E-22: on bug tasks a pasted screenshot opens straight in annotate mode. */
+    annotateOnPaste?: boolean;
 }>();
 
 const page = usePage();
@@ -148,14 +150,47 @@ function attachFromDrive(id: number): void {
 
 // E-01: open previewable files in the in-app viewer.
 const viewing = ref<number | null>(null);
+const viewerMode = ref<'view' | 'annotate'>('view');
 const viewable = computed(() => props.attachments.filter((a) => a.previewable));
 function open(a: AttachmentRow, e: MouseEvent): void {
     if (!a.previewable || e.ctrlKey || e.metaKey || e.shiftKey) {
         return; // let the link open normally
     }
     e.preventDefault();
+    viewerMode.value = 'view';
     viewing.value = viewable.value.findIndex((v) => v.id === a.id);
 }
+// E-04 / E-22: one click to annotate an image.
+function annotate(a: AttachmentRow): void {
+    viewerMode.value = 'annotate';
+    viewing.value = viewable.value.findIndex((v) => v.id === a.id);
+}
+const pendingAnnotate = ref<number | null>(null);
+function onPasted(e: Event): void {
+    const detail = (
+        e as CustomEvent<{ id: number; type: string; attachableId: number }>
+    ).detail;
+    if (
+        props.annotateOnPaste &&
+        detail.type === props.attachableType &&
+        detail.attachableId === props.attachableId
+    ) {
+        pendingAnnotate.value = detail.id;
+        router.reload({ only: ['attachments'] });
+    }
+}
+watch(
+    () => props.attachments,
+    () => {
+        const a = props.attachments.find((x) => x.id === pendingAnnotate.value);
+        if (a) {
+            pendingAnnotate.value = null;
+            annotate(a);
+        }
+    },
+);
+onMounted(() => window.addEventListener('oe:pasted-file', onPasted));
+onBeforeUnmount(() => window.removeEventListener('oe:pasted-file', onPasted));
 
 // E-02: upload a new version of a file.
 const versionInput = ref<HTMLInputElement | null>(null);
@@ -374,6 +409,19 @@ function size(bytes: number): string {
                             @click="open(a, $event)"
                             >{{ a.name }}</a
                         >
+                        <button
+                            v-if="a.mime.startsWith('image/')"
+                            type="button"
+                            class="mr-1 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-900 hover:underline dark:bg-amber-950 dark:text-amber-200"
+                            :aria-label="`Annotate ${a.name}${a.open_pins ? `, ${a.open_pins} open pins` : ''}`"
+                            @click="annotate(a)"
+                        >
+                            {{
+                                a.open_pins
+                                    ? `${a.open_pins} pin${a.open_pins === 1 ? '' : 's'}`
+                                    : 'Annotate'
+                            }}
+                        </button>
                         <span
                             v-if="(a.version ?? 1) > 1 || a.versions?.length"
                             class="mr-1 rounded bg-muted px-1 text-[10px] font-medium"
@@ -463,6 +511,7 @@ function size(bytes: number): string {
             v-if="viewing !== null && viewing >= 0 && viewable.length"
             :items="viewable"
             :start="viewing"
+            :initial-mode="viewerMode"
             @close="viewing = null"
         />
     </Teleport>

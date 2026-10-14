@@ -144,8 +144,8 @@ class AppServiceProvider extends ServiceProvider
     protected function configureAuthAuditing(): void
     {
         Event::listen(function (Login $event): void {
-            // Deactivated accounts are refused by Fortify::authenticateUsing; passkey logins are
-            // signed out by EnsureUserIsActive on the next request, so don't record them as logins.
+            // Deactivated accounts are refused by Fortify::authenticateUsing (and signed out by
+            // EnsureUserIsActive if anything slips through), so only active sign-ins are recorded.
             if ($event->user instanceof User && $event->user->is_active) {
                 $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
                 app(ActivityLogger::class)->log('auth.login', $event->user, actor: $event->user);
