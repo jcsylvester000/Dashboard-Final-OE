@@ -142,7 +142,7 @@ const agencyNavItems = computed<NavItem[]>(() => {
     if (page.props.auth.leadsDepartment || can.value['reports.view-all']) {
         items.push({ title: 'Workload', href: workload(), icon: Activity });
     }
-    if (can.value['billing.manage'] || can.value['reports.view-all']) {
+    if (can.value['billing.view'] || can.value['reports.view-all']) {
         items.push({
             title: 'People report',
             href: peopleReport(),
@@ -190,7 +190,7 @@ const workspaceNavItems = computed<NavItem[]>(() => {
 const adminNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [];
 
-    if (can.value['billing.manage']) {
+    if (can.value['billing.view']) {
         items.push({
             title: 'Billing',
             href: billingInvoices(),
@@ -234,7 +234,7 @@ const adminNavItems = computed<NavItem[]>(() => {
         });
     }
 
-    if (can.value['system.manage'] || can.value['billing.manage']) {
+    if (can.value['system.manage'] || can.value['billing.settings']) {
         items.push({
             title: 'Company',
             href: companySettings(),
@@ -242,17 +242,21 @@ const adminNavItems = computed<NavItem[]>(() => {
         });
     }
 
-    if (can.value['system.manage']) {
+    if (can.value['system.holidays']) {
         items.push({
             title: 'Holidays',
             href: holidaysIndex(),
             icon: PartyPopper,
         });
+    }
+    if (can.value['system.files']) {
         items.push({
             title: 'File settings',
             href: fileSettings(),
             icon: Paperclip,
         });
+    }
+    if (can.value['system.jobs']) {
         items.push({
             title: 'Failed jobs',
             href: failedJobsIndex(),

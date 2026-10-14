@@ -7,12 +7,14 @@ use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Offboarding;
 use App\Domain\Identity\Permissions;
 use App\Domain\Identity\PersonalData;
+use App\Domain\Identity\SessionTracker;
 use App\Domain\Identity\UserAccessManager;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveUserRequest;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\UserAccessLink;
+use App\Models\UserSession;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -152,6 +154,9 @@ class UserController extends Controller
                 'created_at' => $user->created_at?->toIso8601String(),
                 'is_self' => $user->is($request->user()),
             ],
+            // E-88: where this person is signed in, and recent sign-ins.
+            'devices' => app(SessionTracker::class)->devices($user, $user->is($request->user()) ? $request->session()->getId() : null),
+            'loginHistory' => app(SessionTracker::class)->history($user),
             'accessLinks' => $user->accessLinks()
                 ->with('creator:id,name')
                 ->latest('id')
@@ -325,6 +330,20 @@ class UserController extends Controller
         return back();
     }
 
+    /** E-88: end one of this person's sessions. */
+    public function destroySession(Request $request, User $user, UserSession $userSession): RedirectResponse
+    {
+        Gate::authorize('update', $user);
+        abort_unless($userSession->user_id === $user->id, 404);
+        abort_if($userSession->session_id === $request->session()->getId(), 422, 'Use Log out to end your own session.');
+        /** @var User $actor */
+        $actor = $request->user();
+        app(SessionTracker::class)->revoke($userSession, $actor);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('That device is signed out.')]);
+
+        return back();
+    }
+
     public function signOut(Request $request, User $user): RedirectResponse
     {
         Gate::authorize('update', $user);
@@ -356,12 +375,10 @@ class UserController extends Controller
      */
     private function roleOptions(): array
     {
-        $labels = array_map(fn (array $r) => $r['label'], Permissions::roles());
-
-        // Only offer roles the current admin is allowed to grant.
-        return Role::query()->orderBy('id')->pluck('name')
-            ->filter(fn (string $name) => Gate::allows('assignRole', [User::class, $name]))
-            ->map(fn (string $name) => ['value' => $name, 'label' => $labels[$name] ?? $name])
+        // Only offer roles the current admin is allowed to grant (custom roles included, E-89).
+        return Role::query()->orderBy('id')->get()
+            ->filter(fn (Role $role) => Gate::allows('assignRole', [User::class, $role->name]))
+            ->map(fn (Role $role) => ['value' => $role->name, 'label' => RoleController::label($role)])
             ->values()
             ->all();
     }

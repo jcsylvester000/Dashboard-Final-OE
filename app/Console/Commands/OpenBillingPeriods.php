@@ -69,7 +69,7 @@ class OpenBillingPeriods extends Command
                     continue;
                 }
                 $period->forceFill(['auto_drafted_at' => now()])->save();
-                $finance ??= User::query()->active()->get()->filter(fn (User $u) => $u->can(Permissions::BILLING_MANAGE))->pluck('id')->all();
+                $finance ??= User::query()->active()->get()->filter(fn (User $u) => $u->can(Permissions::BILLING_DRAFT))->pluck('id')->all();
                 $notifier->send($finance, NotificationKind::BillingDraft, $workspace, [
                     'title' => __(':c: retainer draft ready', ['c' => $workspace->name]),
                     'body' => __(':s – :e · :t. Check it and finalize.', ['s' => $period->starts_on->format('M j'), 'e' => $period->ends_on->format('M j, Y'), 't' => Money::format($draft->total_minor, $draft->currency)]),

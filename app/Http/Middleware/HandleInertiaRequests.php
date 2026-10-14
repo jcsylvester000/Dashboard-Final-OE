@@ -43,6 +43,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'roles' => fn () => $user?->getRoleNames()->values()->all() ?? [],
                 'can' => fn () => $this->abilities($user),
+                // E-87: two-factor sign-in due by this date (set by EnsureTwoFactorIsSetUp).
+                'twoFactorDue' => fn () => ($d = $request->attributes->get('two_factor_deadline')) instanceof \DateTimeInterface ? $d->format(DATE_ATOM) : null,
                 // True when the user can approve time (owner/lead somewhere, a department lead, or manages workspaces).
                 'leads' => fn () => $user !== null && (
                     $user->can(Permissions::WORKSPACES_MANAGE)

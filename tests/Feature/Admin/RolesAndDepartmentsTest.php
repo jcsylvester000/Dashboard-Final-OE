@@ -29,7 +29,7 @@ class RolesAndDepartmentsTest extends TestCase
             Department::pluck('slug')->all(),
         );
         $this->assertEqualsCanonicalizing(
-            ['super-admin', 'admin', 'finance', 'dept-lead', 'member', 'viewer'],
+            ['super-admin', 'admin', 'finance', 'bookkeeper', 'dept-lead', 'member', 'viewer'], // bookkeeper: E-89
             Role::pluck('name')->all(),
         );
     }

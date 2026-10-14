@@ -12,7 +12,10 @@ use Illuminate\Support\Str;
  */
 class UserAccessManager
 {
-    public function __construct(private readonly ActivityLogger $activity) {}
+    public function __construct(
+        private readonly ActivityLogger $activity,
+        private readonly SessionTracker $sessions,
+    ) {}
 
     public function deactivate(User $user, User $by): void
     {
@@ -40,6 +43,8 @@ class UserAccessManager
     public function signOutEverywhere(User $user, ?User $by = null, bool $log = true): void
     {
         DB::table('sessions')->where('user_id', $user->getKey())->delete();
+        // E-88: sessions live in Redis in production; end each tracked one in the store too.
+        $this->sessions->revokeAll($user);
         $user->forceFill(['remember_token' => Str::random(60)])->save();
 
         if ($log) {

@@ -1,23 +1,43 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { Lock } from '@lucide/vue';
-import { reactive, ref } from 'vue';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Copy, Lock, Trash2 } from '@lucide/vue';
+import { computed, reactive, ref } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
+import InputError from '@/components/InputError.vue';
+import NativeSelect from '@/components/NativeSelect.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { confirmDialog } from '@/composables/useConfirm';
 import { index } from '@/routes/admin/roles';
 
+/**
+ * E-89: roles and what each can do. Permissions are grouped with plain descriptions;
+ * an umbrella ("Everything in billing") includes the parts under it. Roles can be
+ * created from scratch or copied; built-in roles can't be deleted, nor can a role
+ * people still hold.
+ */
 type RoleRow = {
     id: number;
     name: string;
     label: string;
+    description: string | null;
     users: number;
     locked: boolean;
+    built_in: boolean;
     permissions: string[];
+};
+type PermissionRow = {
+    name: string;
+    label: string;
+    description: string | null;
+    parent: string | null;
+    requires: string | null;
 };
 
 const props = defineProps<{
     roles: RoleRow[];
-    permissions: { name: string; label: string }[];
+    permissions: PermissionRow[];
+    groups: Record<string, string[]>;
 }>();
 
 defineOptions({
@@ -25,6 +45,18 @@ defineOptions({
         breadcrumbs: [{ title: 'Roles & access', href: index() }],
     },
 });
+
+const page = usePage();
+const errors = computed(
+    () => (page.props.errors ?? {}) as Record<string, string | undefined>,
+);
+const byName = computed(
+    () =>
+        Object.fromEntries(props.permissions.map((p) => [p.name, p])) as Record<
+            string,
+            PermissionRow
+        >,
+);
 
 // Editable copy of each role's permission list.
 const matrix = reactive<Record<number, string[]>>(
@@ -40,6 +72,12 @@ function toggle(roleId: number, permission: string): void {
     } else {
         list.splice(at, 1);
     }
+}
+
+/** Ticked through its umbrella (e.g. "Everything in billing"). */
+function implied(roleId: number, permission: string): boolean {
+    const parent = byName.value[permission]?.parent;
+    return !!parent && matrix[roleId].includes(parent);
 }
 
 function isDirty(role: RoleRow): boolean {
@@ -58,6 +96,24 @@ function save(role: RoleRow): void {
         },
     );
 }
+
+const createForm = useForm({
+    label: '',
+    description: '',
+    copy_from: '' as string | number,
+});
+function copyRole(role: RoleRow): void {
+    createForm.label = `${role.label} (copy)`;
+    createForm.copy_from = role.id;
+    document.getElementById('new-role-label')?.focus();
+}
+async function removeRole(role: RoleRow): Promise<void> {
+    if (await confirmDialog(`Delete the role "${role.label}"?`)) {
+        router.delete(RoleController.destroy.url(role.id), {
+            preserveScroll: true,
+        });
+    }
+}
 </script>
 
 <template>
@@ -67,11 +123,56 @@ function save(role: RoleRow): void {
         <div>
             <h1 class="text-xl font-semibold tracking-tight">Roles & access</h1>
             <p class="text-sm text-muted-foreground">
-                Global permissions per role. Super Admin always has full access.
-                Client-workspace roles (Lead, Member, Guest) are set per
-                workspace.
+                What each role can do across the agency. Super Admin always has
+                full access. Client-workspace roles (Lead, Member, Guest) are
+                set per workspace.
             </p>
         </div>
+
+        <form
+            class="flex flex-wrap items-end gap-2 rounded-lg border p-3 text-sm"
+            @submit.prevent="
+                createForm.post(RoleController.store.url(), {
+                    preserveScroll: true,
+                    onSuccess: () => createForm.reset(),
+                })
+            "
+        >
+            <label class="grid gap-1 text-xs text-muted-foreground"
+                >New role
+                <Input
+                    id="new-role-label"
+                    v-model="createForm.label"
+                    class="h-9 w-56"
+                    placeholder="e.g. Bookkeeper"
+            /></label>
+            <label class="grid gap-1 text-xs text-muted-foreground"
+                >Start from
+                <NativeSelect v-model="createForm.copy_from" class="h-9 w-48">
+                    <option value="">No permissions</option>
+                    <option
+                        v-for="r in roles.filter((x) => !x.locked)"
+                        :key="r.id"
+                        :value="r.id"
+                    >
+                        Copy of {{ r.label }}
+                    </option>
+                </NativeSelect>
+            </label>
+            <label
+                class="grid min-w-0 flex-1 gap-1 text-xs text-muted-foreground"
+                >Description (optional)
+                <Input v-model="createForm.description" class="h-9"
+            /></label>
+            <Button
+                type="submit"
+                size="sm"
+                :disabled="createForm.processing || !createForm.label.trim()"
+                >Create role</Button
+            >
+            <InputError class="w-full" :message="createForm.errors.label" />
+        </form>
+        <InputError :message="errors.role ?? errors.permissions" />
 
         <div class="overflow-x-auto rounded-lg border">
             <table class="w-full text-sm">
@@ -94,17 +195,59 @@ function save(role: RoleRow): void {
                                     role.users === 1 ? '' : 's'
                                 }}
                             </div>
+                            <div
+                                v-if="!role.locked"
+                                class="mt-1 flex justify-center gap-1"
+                            >
+                                <button
+                                    type="button"
+                                    class="rounded p-0.5 hover:bg-muted"
+                                    :aria-label="`Copy ${role.label}`"
+                                    title="Copy this role"
+                                    @click="copyRole(role)"
+                                >
+                                    <Copy class="size-3.5" />
+                                </button>
+                                <button
+                                    v-if="!role.built_in"
+                                    type="button"
+                                    class="rounded p-0.5 text-rose-600 hover:bg-muted"
+                                    :aria-label="`Delete ${role.label}`"
+                                    title="Delete this role"
+                                    @click="removeRole(role)"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                </button>
+                            </div>
                         </th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
-                    <tr v-for="p in permissions" :key="p.name">
-                        <td class="px-4 py-2">
-                            <div class="font-medium">{{ p.label }}</div>
+                <tbody
+                    v-for="(names, group) in groups"
+                    :key="group"
+                    class="divide-y"
+                >
+                    <tr class="bg-muted/30">
+                        <th
+                            :colspan="roles.length + 1"
+                            class="px-4 py-1.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                        >
+                            {{ group }}
+                        </th>
+                    </tr>
+                    <tr v-for="name in names" :key="name">
+                        <td
+                            class="px-4 py-2"
+                            :class="byName[name]?.parent ? 'pl-8' : ''"
+                        >
+                            <div class="font-medium">
+                                {{ byName[name]?.label ?? name }}
+                            </div>
                             <div
-                                class="font-mono text-xs text-muted-foreground"
+                                v-if="byName[name]?.description"
+                                class="max-w-md text-xs text-muted-foreground"
                             >
-                                {{ p.name }}
+                                {{ byName[name]?.description }}
                             </div>
                         </td>
                         <td
@@ -115,13 +258,21 @@ function save(role: RoleRow): void {
                             <input
                                 type="checkbox"
                                 class="size-4"
-                                :aria-label="`${role.label}: ${p.label}`"
+                                :aria-label="`${role.label}: ${byName[name]?.label ?? name}`"
                                 :checked="
                                     role.locked ||
-                                    matrix[role.id].includes(p.name)
+                                    matrix[role.id].includes(name) ||
+                                    implied(role.id, name)
                                 "
-                                :disabled="role.locked"
-                                @change="toggle(role.id, p.name)"
+                                :disabled="
+                                    role.locked || implied(role.id, name)
+                                "
+                                :title="
+                                    implied(role.id, name)
+                                        ? 'Included by the umbrella permission above'
+                                        : ''
+                                "
+                                @change="toggle(role.id, name)"
                             />
                         </td>
                     </tr>

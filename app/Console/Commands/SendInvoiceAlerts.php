@@ -27,7 +27,7 @@ class SendInvoiceAlerts extends Command
     public function handle(Notifier $notifier): int
     {
         $finance = User::query()->active()->get()
-            ->filter(fn (User $u) => $u->can(Permissions::BILLING_MANAGE))
+            ->filter(fn (User $u) => $u->can(Permissions::BILLING_PAYMENTS))
             ->pluck('id')
             ->all();
 

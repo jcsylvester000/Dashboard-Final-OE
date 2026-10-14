@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { Device, SignIn } from '@/components/security/SignedInDevices.vue';
+import SignedInDevices from '@/components/security/SignedInDevices.vue';
+import { destroy as destroyUserSession } from '@/routes/admin/users/sessions';
 import { Form, Head, Link, router } from '@inertiajs/vue3';
 import {
     KeyRound,
@@ -46,6 +49,8 @@ const props = defineProps<{
         running_timers: number;
     } | null;
     handoverTo: { id: number; name: string; title: string | null }[];
+    devices: Device[];
+    loginHistory: SignIn[];
 }>();
 
 const offboarding = ref(false);
@@ -436,6 +441,23 @@ const statusVariant: Record<
                         </span>
                     </li>
                 </ul>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardContent class="pt-6">
+                <SignedInDevices
+                    :title="`Where ${member.name} is signed in`"
+                    :devices="devices"
+                    :history="loginHistory"
+                    :revoke-url="
+                        (id: number) =>
+                            destroyUserSession.url({
+                                user: member.id,
+                                userSession: id,
+                            })
+                    "
+                />
             </CardContent>
         </Card>
 

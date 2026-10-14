@@ -72,8 +72,8 @@ class UserPolicy
      */
     private function covers(User $actor, array $permissions): bool
     {
-        $own = $actor->getAllPermissions()->pluck('name')->all();
+        $own = Permissions::expand($actor->getAllPermissions()->pluck('name')->all());
 
-        return array_diff($permissions, $own) === [];
+        return array_diff(Permissions::expand($permissions), $own) === [];
     }
 }

@@ -2,11 +2,13 @@
 
 use App\Domain\Billing\BillingException;
 use App\Http\Middleware\EnsurePasswordIsChanged;
+use App\Http\Middleware\EnsureTwoFactorIsSetUp;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PerformanceHeaders;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\TrackUserSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -40,6 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
             EnsureUserIsActive::class,
             EnsurePasswordIsChanged::class,
+            // E-88 / E-87: signed-in devices, then two-factor setup for sensitive roles.
+            TrackUserSession::class,
+            EnsureTwoFactorIsSetUp::class,
         ]);
 
         // Guests hitting protected pages go to the login screen; the app has no public pages.

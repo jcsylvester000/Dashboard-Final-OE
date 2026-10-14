@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Identity\SessionTracker;
+use App\Domain\Identity\TwoFactorPolicy;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -16,9 +19,18 @@ class SecurityController extends Controller
     /**
      * Show the user's security settings page.
      */
-    public function edit(TwoFactorAuthenticationRequest $request): Response
+    public function edit(TwoFactorAuthenticationRequest $request, SessionTracker $sessions, TwoFactorPolicy $twoFactor): Response
     {
+        /** @var User $user */
+        $user = $request->user();
+        $deadline = $twoFactor->deadline($user);
         $props = [
+            // E-87: why two-factor matters for this person, and by when.
+            'twoFactorRequired' => $twoFactor->required($user),
+            'twoFactorDeadline' => $deadline?->toIso8601String(),
+            // E-88: signed-in devices and recent sign-ins.
+            'devices' => $sessions->devices($user, $request->session()->getId()),
+            'loginHistory' => $sessions->history($user),
             'canManageTwoFactor' => Features::canManageTwoFactorAuthentication(),
             'canManagePasskeys' => Features::canManagePasskeys(),
             'passkeys' => Features::canManagePasskeys()

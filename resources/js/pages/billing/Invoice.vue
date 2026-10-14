@@ -66,6 +66,8 @@ defineOptions({
 });
 
 const page = usePage();
+// E-89: show only what this person's role can do (the server checks every request).
+const can = computed(() => page.props.auth.can);
 const billingError = computed(
     () => (page.props.errors as Record<string, string> | undefined)?.billing,
 );
@@ -255,7 +257,10 @@ async function removeDraft(): Promise<void> {
                     <a :href="workReport.url(inv.id)">Work report PDF</a>
                 </Button>
             </div>
-            <div v-if="inv.status === 'draft'" class="flex flex-wrap gap-2">
+            <div
+                v-if="inv.status === 'draft' && can['billing.draft']"
+                class="flex flex-wrap gap-2"
+            >
                 <label
                     class="flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
@@ -299,7 +304,9 @@ async function removeDraft(): Promise<void> {
                     @click="showSendBack = !showSendBack"
                     >Send back</Button
                 >
-                <template v-if="inv.review.can_finalize">
+                <template
+                    v-if="inv.review.can_finalize && can['billing.finalize']"
+                >
                     <label
                         class="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
@@ -757,7 +764,7 @@ async function removeDraft(): Promise<void> {
                     </CardContent>
                 </Card>
 
-                <Card v-if="inv.status === 'draft'">
+                <Card v-if="inv.status === 'draft' && can['billing.draft']">
                     <CardHeader>
                         <CardTitle class="text-base"
                             >Adjust the draft</CardTitle
@@ -902,7 +909,13 @@ async function removeDraft(): Promise<void> {
                     </CardContent>
                 </Card>
 
-                <Card v-if="isOpen && inv.kind === 'invoice'">
+                <Card
+                    v-if="
+                        isOpen &&
+                        inv.kind === 'invoice' &&
+                        can['billing.payments']
+                    "
+                >
                     <CardHeader>
                         <CardTitle class="text-base"
                             >Record a payment</CardTitle
@@ -1090,7 +1103,13 @@ async function removeDraft(): Promise<void> {
                     </CardContent>
                 </Card>
 
-                <Card v-if="isOpen && inv.kind === 'invoice'">
+                <Card
+                    v-if="
+                        isOpen &&
+                        inv.kind === 'invoice' &&
+                        can['billing.payments']
+                    "
+                >
                     <CardHeader>
                         <CardTitle class="text-base">Follow-up</CardTitle>
                         <CardDescription>
@@ -1176,7 +1195,7 @@ async function removeDraft(): Promise<void> {
                     </CardContent>
                 </Card>
 
-                <Card v-if="canCredit">
+                <Card v-if="canCredit && can['billing.finalize']">
                     <CardHeader>
                         <CardTitle class="text-base">Credit note</CardTitle>
                         <CardDescription
@@ -1215,7 +1234,7 @@ async function removeDraft(): Promise<void> {
                     </CardContent>
                 </Card>
 
-                <Card v-if="canVoid">
+                <Card v-if="canVoid && can['billing.finalize']">
                     <CardHeader>
                         <CardTitle class="text-base">Void</CardTitle>
                         <CardDescription

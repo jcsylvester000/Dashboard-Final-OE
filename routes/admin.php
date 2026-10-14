@@ -35,6 +35,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->name('users.temporary-password');
         Route::post('users/{user}/reset-two-factor', [UserController::class, 'resetTwoFactor'])->name('users.reset-two-factor');
         Route::post('users/{user}/sign-out', [UserController::class, 'signOut'])->name('users.sign-out');
+        Route::delete('users/{user}/sessions/{userSession}', [UserController::class, 'destroySession'])->name('users.sessions.destroy');
         Route::get('users/{user}/personal-data', [UserController::class, 'exportData'])->name('users.export-data');
         Route::post('users/{user}/anonymise', [UserController::class, 'anonymise'])->name('users.anonymise');
     });
@@ -42,7 +43,9 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     // Roles & permissions
     Route::middleware('can:'.Permissions::ROLES_MANAGE)->group(function () {
         Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::post('roles', [RoleController::class, 'store'])->name('roles.store');
         Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
+        Route::delete('roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
     });
 
     // Departments
@@ -57,14 +60,18 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         ->middleware('can:'.Permissions::ACTIVITY_VIEW)
         ->name('activity.index');
 
-    // Failed background jobs (P4)
-    Route::middleware('can:'.Permissions::SYSTEM_MANAGE)->group(function () {
+    // System (E-89: each part has its own permission; system.manage includes all).
+    Route::middleware('can:'.Permissions::SYSTEM_JOBS)->group(function () {
         Route::get('failed-jobs', [FailedJobController::class, 'index'])->name('failed-jobs.index');
         Route::post('failed-jobs/retry', [FailedJobController::class, 'retry'])->name('failed-jobs.retry');
         Route::post('failed-jobs/discard', [FailedJobController::class, 'destroy'])->name('failed-jobs.destroy');
+    });
+    Route::middleware('can:'.Permissions::SYSTEM_HOLIDAYS)->group(function () {
         Route::get('holidays', [HolidayController::class, 'index'])->name('holidays.index');
         Route::post('holidays', [HolidayController::class, 'store'])->name('holidays.store');
         Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
+    });
+    Route::middleware('can:'.Permissions::SYSTEM_FILES)->group(function () {
         Route::get('files', [FileSettingsController::class, 'edit'])->name('files.edit');
         Route::put('files', [FileSettingsController::class, 'update'])->name('files.update');
     });

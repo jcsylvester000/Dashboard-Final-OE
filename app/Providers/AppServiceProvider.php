@@ -17,6 +17,7 @@ use App\Models\Project;
 use App\Models\Task;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Models\UserSession;
 use App\Models\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Failed;
@@ -124,12 +125,20 @@ class AppServiceProvider extends ServiceProvider
     protected function configureAuthorization(): void
     {
         // Super Admin passes every Gate / policy check.
-        Gate::before(fn (User $user): ?bool => $user->isSuperAdmin() ? true : null);
+        Gate::before(function (User $user, string $ability): ?bool {
+            if ($user->isSuperAdmin()) {
+                return true;
+            }
+            // E-89: an umbrella permission (billing.manage, system.manage) includes its parts.
+            $parent = Permissions::parentOf($ability);
+
+            return $parent !== null && $user->checkPermissionTo($parent) ? true : null;
+        });
 
         // E-130: Laravel Pulse dashboard (/pulse) for admins who manage the system.
-        Gate::define('viewPulse', fn (User $user): bool => $user->can(Permissions::SYSTEM_MANAGE));
+        Gate::define('viewPulse', fn (User $user): bool => $user->can(Permissions::SYSTEM_JOBS));
         // E-92: company details on documents: system admins and Finance.
-        Gate::define('manage-company', fn (User $user): bool => $user->can(Permissions::SYSTEM_MANAGE) || $user->can(Permissions::BILLING_MANAGE));
+        Gate::define('manage-company', fn (User $user): bool => $user->can(Permissions::SYSTEM_MANAGE) || $user->can(Permissions::BILLING_SETTINGS));
     }
 
     protected function configureAuthAuditing(): void
@@ -146,6 +155,10 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(function (Logout $event): void {
             if ($event->user instanceof User) {
                 app(ActivityLogger::class)->log('auth.logout', $event->user, actor: $event->user);
+                // E-88: this device drops off the signed-in list.
+                if (request()->hasSession()) {
+                    UserSession::query()->where('session_id', request()->session()->getId())->update(['revoked_at' => now()]);
+                }
             }
         });
 

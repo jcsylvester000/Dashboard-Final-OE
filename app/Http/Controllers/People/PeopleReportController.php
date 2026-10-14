@@ -60,7 +60,7 @@ class PeopleReportController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        abort_unless($user->can(Permissions::BILLING_MANAGE) || $user->can(Permissions::REPORTS_VIEW_ALL), 403);
+        abort_unless($user->can(Permissions::BILLING_VIEW) || $user->can(Permissions::REPORTS_VIEW_ALL), 403);
         $q = $request->validate(['month' => ['nullable', 'date_format:Y-m'], 'department' => ['nullable', 'integer']]);
 
         return [$q['month'] ?? now()->format('Y-m'), isset($q['department']) ? (int) $q['department'] : null];

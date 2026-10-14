@@ -26,7 +26,16 @@ export type Permission =
     | 'workspaces.manage'
     | 'reports.view-all'
     | 'billing.manage'
-    | 'system.manage';
+    | 'billing.view'
+    | 'billing.draft'
+    | 'billing.finalize'
+    | 'billing.payments'
+    | 'billing.settings'
+    | 'system.manage'
+    | 'system.jobs'
+    | 'system.holidays'
+    | 'system.files'
+    | 'system.health';
 
 export type Auth = {
     user: User;
@@ -36,6 +45,8 @@ export type Auth = {
     /** Can approve time entries (workspace owner/lead or workspace manager). */
     leads: boolean;
     leadsDepartment?: boolean;
+    /** E-87: two-factor sign-in due by (ISO date) while the grace period runs. */
+    twoFactorDue?: string | null;
     /** The user's primary department, for the department queue link. */
     department: { id: number; name: string; slug: string } | null;
 };

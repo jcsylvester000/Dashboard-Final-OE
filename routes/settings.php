@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\SessionController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
         ->name('security.edit');
+
+    // E-88: end one session, or every other session.
+    Route::delete('settings/sessions/{userSession}', [SessionController::class, 'destroy'])->name('sessions.destroy');
+    Route::post('settings/sessions/others', [SessionController::class, 'destroyOthers'])->name('sessions.destroy-others');
 
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')

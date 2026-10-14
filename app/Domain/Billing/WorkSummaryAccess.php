@@ -16,7 +16,7 @@ final class WorkSummaryAccess
     public static function allows(User $user, Workspace $workspace): bool
     {
         return $user->can(Permissions::REPORTS_VIEW_ALL)
-            || $user->can(Permissions::BILLING_MANAGE)
+            || $user->can(Permissions::BILLING_VIEW)
             || app(WorkspaceAccess::class)->canLead($user, $workspace)
             || app(WorkspaceAccess::class)->canOwn($user, $workspace);
     }
