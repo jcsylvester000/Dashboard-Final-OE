@@ -17,7 +17,7 @@ class UserAccessManager
         private readonly SessionTracker $sessions,
     ) {}
 
-    public function deactivate(User $user, User $by): void
+    public function deactivate(User $user, ?User $by): void
     {
         DB::transaction(function () use ($user) {
             $user->forceFill(['is_active' => false, 'deactivated_at' => now()])->save();

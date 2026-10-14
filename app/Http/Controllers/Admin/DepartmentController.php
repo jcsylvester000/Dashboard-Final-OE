@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Identity\ActivityLogger;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -21,6 +23,7 @@ class DepartmentController extends Controller
     {
         return Inertia::render('admin/departments/Index', [
             'departments' => Department::with('lead:id,name')
+                ->withCount(['tasks as open_tasks' => fn ($q) => $q->whereNull('completed_at')])
                 ->withCount(['members' => fn ($q) => $q->where('is_active', true)])
                 ->orderBy('position')
                 ->get()
@@ -33,6 +36,8 @@ class DepartmentController extends Controller
                     'lead_user_id' => $d->lead_user_id,
                     'lead' => $d->lead?->name,
                     'members' => $d->members_count,
+                    'open_tasks' => (int) $d->getAttribute('open_tasks'),
+                    'archived' => $d->archived_at !== null,
                 ]),
             'leads' => User::active()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name]),
@@ -62,6 +67,43 @@ class DepartmentController extends Controller
 
         $activity->log('department.updated', $department, ['changed' => array_keys($department->getChanges())]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Department saved.')]);
+
+        return back();
+    }
+
+    /**
+     * E-94: archive a department. Its people and open tasks move to another department
+     * first; finished work and time keep the old department so reports stay true.
+     */
+    public function archive(Request $request, Department $department, ActivityLogger $activity): RedirectResponse
+    {
+        $data = $request->validate([
+            'move_to' => ['required', 'integer', Rule::exists('departments', 'id')->whereNull('archived_at'), Rule::notIn([$department->id])],
+        ]);
+        abort_if($department->archived_at !== null, 422, 'Already archived.');
+        $to = Department::query()->findOrFail((int) $data['move_to']);
+
+        $moved = DB::transaction(function () use ($department, $to) {
+            $memberIds = $department->members()->pluck('users.id')->all();
+            $to->members()->syncWithoutDetaching($memberIds);
+            $department->members()->detach();
+            $primary = User::query()->where('primary_department_id', $department->id)->update(['primary_department_id' => $to->id]);
+            $tasks = Task::query()->where('department_id', $department->id)->whereNull('completed_at')->update(['department_id' => $to->id]);
+            $department->forceFill(['archived_at' => now(), 'lead_user_id' => null])->save();
+
+            return ['members' => count($memberIds), 'primary' => $primary, 'tasks' => $tasks];
+        });
+
+        $activity->log('department.archived', $department, ['moved_to' => $to->name, ...$moved]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __(':d archived. :m people and :t open tasks moved to :to.', ['d' => $department->name, 'm' => $moved['members'], 't' => $moved['tasks'], 'to' => $to->name])]);
+
+        return back();
+    }
+
+    public function restore(Department $department, ActivityLogger $activity): RedirectResponse
+    {
+        $department->forceFill(['archived_at' => null])->save();
+        $activity->log('department.restored', $department);
 
         return back();
     }

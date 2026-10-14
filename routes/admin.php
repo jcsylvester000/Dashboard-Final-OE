@@ -2,13 +2,16 @@
 
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\ApiTokenAdminController;
 use App\Http\Controllers\Admin\CompanySettingsController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\FailedJobController;
 use App\Http\Controllers\Admin\FileSettingsController;
 use App\Http\Controllers\Admin\HolidayController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\UserImportController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -22,11 +25,13 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     // Team members
     Route::middleware('can:'.Permissions::USERS_VIEW)->group(function () {
         Route::get('users', [UserController::class, 'index'])->name('users.index');
+        Route::get('users/export', [UserImportController::class, 'export'])->name('users.csv');
     });
 
     Route::middleware('can:'.Permissions::USERS_MANAGE)->group(function () {
         Route::get('users/create', [UserController::class, 'create'])->name('users.create');
         Route::post('users', [UserController::class, 'store'])->name('users.store');
+        Route::post('users/import', [UserImportController::class, 'import'])->name('users.bulk-import');
         Route::get('users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
         Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::post('users/{user}/deactivate', [UserController::class, 'deactivate'])->name('users.deactivate');
@@ -53,12 +58,17 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::get('departments', [DepartmentController::class, 'index'])->name('departments.index');
         Route::post('departments', [DepartmentController::class, 'store'])->name('departments.store');
         Route::put('departments/{department}', [DepartmentController::class, 'update'])->name('departments.update');
+        Route::post('departments/{department}/archive', [DepartmentController::class, 'archive'])->name('departments.archive');
+        Route::post('departments/{department}/restore', [DepartmentController::class, 'restore'])->name('departments.restore');
     });
 
     // Audit log
     Route::get('activity', [ActivityLogController::class, 'index'])
         ->middleware('can:'.Permissions::ACTIVITY_VIEW)
         ->name('activity.index');
+    Route::get('activity/export', [ActivityLogController::class, 'export'])
+        ->middleware('can:'.Permissions::ACTIVITY_VIEW)
+        ->name('activity.csv');
 
     // System (E-89: each part has its own permission; system.manage includes all).
     Route::middleware('can:'.Permissions::SYSTEM_JOBS)->group(function () {
@@ -69,7 +79,14 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::middleware('can:'.Permissions::SYSTEM_HOLIDAYS)->group(function () {
         Route::get('holidays', [HolidayController::class, 'index'])->name('holidays.index');
         Route::post('holidays', [HolidayController::class, 'store'])->name('holidays.store');
+        Route::post('holidays/import', [HolidayController::class, 'import'])->name('holidays.bulk'); // "import" is a JS keyword
         Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
+    });
+    Route::get('health', SystemHealthController::class)->middleware('can:'.Permissions::SYSTEM_HEALTH)->name('health');
+    // E-97: every API token in the agency (owner, abilities, last used) with revoke.
+    Route::middleware('can:'.Permissions::USERS_MANAGE)->group(function () {
+        Route::get('api-tokens', [ApiTokenAdminController::class, 'index'])->name('api-tokens.index');
+        Route::delete('api-tokens/{token}', [ApiTokenAdminController::class, 'destroy'])->whereNumber('token')->name('api-tokens.destroy');
     });
     Route::middleware('can:'.Permissions::SYSTEM_FILES)->group(function () {
         Route::get('files', [FileSettingsController::class, 'edit'])->name('files.edit');

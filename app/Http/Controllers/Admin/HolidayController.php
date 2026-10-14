@@ -27,6 +27,8 @@ class HolidayController extends Controller
             'holidays' => Holiday::query()->whereYear('date', $year)->orderBy('date')->get()
                 ->map(fn (Holiday $h) => ['id' => $h->id, 'date' => $h->date->toDateString(), 'name' => $h->name, 'kind' => $h->kind])->values(),
             'kinds' => Holiday::KINDS,
+            // E-95: preview / result of the last pasted list.
+            'importResult' => $request->session()->get('holidayImport'),
         ]);
     }
 
@@ -44,6 +46,71 @@ class HolidayController extends Controller
         $activity->log('holiday.added', $holiday, $data);
 
         return back();
+    }
+
+    /**
+     * E-95: paste next year's proclamation, one holiday per line:
+     *   2027-01-01, New Year's Day, regular
+     *   2027-02-25, EDSA People Power Revolution Anniversary, special working
+     * The kind is optional (regular by default). Dates already in the calendar are skipped.
+     * "preview" checks without saving.
+     */
+    public function import(Request $request, ActivityLogger $activity): RedirectResponse
+    {
+        $data = $request->validate([
+            'text' => ['required', 'string', 'max:20000'],
+            'preview' => ['boolean'],
+        ]);
+        $rows = [];
+        $seen = [];
+        foreach (preg_split('/\R/', (string) $data['text']) ?: [] as $n => $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $parts = array_map('trim', str_getcsv(str_replace("\t", ',', $line)));
+            [$date, $name, $kind] = [$parts[0], $parts[1] ?? '', self::kind($parts[2] ?? 'regular')];
+            $row = ['line' => $n + 1, 'date' => $date, 'name' => $name, 'kind' => $kind, 'status' => 'new', 'error' => null];
+            $valid = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 && checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4));
+            if (! $valid) {
+                $row = [...$row, 'status' => 'error', 'error' => __('Date must look like 2027-01-01.')];
+            } elseif ($name === '' || mb_strlen($name) > 120) {
+                $row = [...$row, 'status' => 'error', 'error' => __('Add the holiday name (up to 120 characters).')];
+            } elseif ($kind === null) {
+                $row = [...$row, 'status' => 'error', 'error' => __('Kind must be regular, special or special working.')];
+            } elseif (isset($seen[$date]) || Holiday::query()->whereDate('date', $date)->exists()) {
+                $row = [...$row, 'status' => 'duplicate'];
+            }
+            $seen[$date] = true;
+            $rows[] = $row;
+        }
+
+        $created = 0;
+        if (! $request->boolean('preview')) {
+            foreach ($rows as $row) {
+                if ($row['status'] === 'new') {
+                    Holiday::create(['date' => $row['date'], 'name' => $row['name'], 'kind' => $row['kind']]);
+                    $created++;
+                }
+            }
+            $activity->log('holiday.imported', null, ['created' => $created, 'skipped' => count($rows) - $created]);
+            Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('{0} No new holidays added.|{1} 1 holiday added.|[2,*] :count holidays added.', $created, ['count' => $created])]);
+        }
+
+        return back()->with('holidayImport', ['preview' => $request->boolean('preview'), 'created' => $created, 'rows' => $rows]);
+    }
+
+    /** "special working" / "Special Non-Working Day" / "regular holiday" -> a kind key. */
+    private static function kind(string $raw): ?string
+    {
+        $k = strtolower(trim($raw));
+
+        return match (true) {
+            $k === '' || str_starts_with($k, 'regular') => 'regular',
+            str_contains($k, 'working') && ! str_contains($k, 'non') => 'special_working',
+            str_starts_with($k, 'special') => 'special',
+            default => null,
+        };
     }
 
     public function destroy(Holiday $holiday, ActivityLogger $activity): RedirectResponse

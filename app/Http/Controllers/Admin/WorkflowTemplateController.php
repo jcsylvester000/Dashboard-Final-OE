@@ -39,7 +39,7 @@ class WorkflowTemplateController extends Controller
                         'depends_on_previous' => $s->depends_on_previous,
                     ])->values(),
                 ]),
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name', 'color']),
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name', 'color']),
         ]);
     }
 

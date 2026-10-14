@@ -79,7 +79,7 @@ class QueueController extends Controller
             'filters' => $filters,
             'workspaces' => Workspace::query()->visibleTo($user)->where('status', '!=', 'archived')
                 ->orderBy('name')->get(['id', 'name']),
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name', 'slug', 'color']),
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name', 'slug', 'color']),
         ]);
     }
 }

@@ -32,6 +32,9 @@ use Spatie\Permission\Traits\HasRoles;
  * @property bool $must_change_password
  * @property Carbon|null $last_login_at
  * @property Carbon|null $deactivated_at
+ * @property Carbon|null $access_ends_on planned last day of access (E-93); deactivated the day after
+ * @property Carbon|null $access_end_alerted_at
+ * @property Carbon|null $two_factor_deadline two-factor setup due (E-87)
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
@@ -76,6 +79,9 @@ class User extends Authenticatable implements PasskeyUser
             'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'access_ends_on' => 'date',
+            'access_end_alerted_at' => 'datetime',
+            'two_factor_deadline' => 'datetime',
             'notification_preferences' => 'array',
         ];
     }

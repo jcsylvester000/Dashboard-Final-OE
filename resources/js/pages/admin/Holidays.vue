@@ -18,6 +18,7 @@ import { formatDate } from '@/lib/format';
 import {
     destroy,
     index as holidaysIndex,
+    bulk as importRoute,
     store,
 } from '@/routes/admin/holidays';
 
@@ -28,6 +29,18 @@ const props = defineProps<{
     year: number;
     holidays: { id: number; date: string; name: string; kind: string }[];
     kinds: Record<string, string>;
+    importResult: {
+        preview: boolean;
+        created: number;
+        rows: {
+            line: number;
+            date: string;
+            name: string;
+            kind: string | null;
+            status: 'new' | 'duplicate' | 'error';
+            error: string | null;
+        }[];
+    } | null;
 }>();
 
 defineOptions({
@@ -45,6 +58,19 @@ async function remove(id: number, name: string): Promise<void> {
     if (await confirmDialog(`Remove ${name}?`)) {
         router.delete(destroy.url(id), { preserveScroll: true });
     }
+}
+// E-95: paste a year's proclamation list, preview, then add.
+const importForm = useForm({ text: '', preview: true });
+function runImport(preview: boolean): void {
+    importForm.preview = preview;
+    importForm.post(importRoute.url(), {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (!preview) {
+                importForm.reset();
+            }
+        },
+    });
 }
 const goYear = (y: number) =>
     router.get(
@@ -159,6 +185,101 @@ const goYear = (y: number) =>
                         class="w-full"
                     />
                 </form>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Import a year's list</CardTitle>
+                <CardDescription
+                    >Paste the proclamation, one holiday per line: date, name,
+                    kind (regular, special or special working). Dates already in
+                    the calendar are skipped.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="space-y-3 text-sm">
+                <textarea
+                    v-model="importForm.text"
+                    rows="6"
+                    class="w-full rounded-md border bg-transparent p-2 font-mono text-xs"
+                    placeholder="2027-01-01, New Year's Day, regular&#10;2027-02-25, EDSA People Power Revolution Anniversary, special working"
+                    aria-label="Holiday list"
+                />
+                <InputError :message="importForm.errors.text" />
+                <div class="flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="
+                            importForm.processing || !importForm.text.trim()
+                        "
+                        @click="runImport(true)"
+                        >Preview</Button
+                    >
+                    <Button
+                        size="sm"
+                        :disabled="
+                            importForm.processing || !importForm.text.trim()
+                        "
+                        @click="runImport(false)"
+                        >Add holidays</Button
+                    >
+                </div>
+                <div v-if="importResult" class="rounded-md border">
+                    <p class="border-b px-3 py-2 text-xs text-muted-foreground">
+                        <template v-if="importResult.preview"
+                            >Preview:
+                            {{
+                                importResult.rows.filter(
+                                    (r) => r.status === 'new',
+                                ).length
+                            }}
+                            to add,
+                        </template>
+                        <template v-else
+                            >Added {{ importResult.created }},
+                        </template>
+                        {{
+                            importResult.rows.filter(
+                                (r) => r.status === 'duplicate',
+                            ).length
+                        }}
+                        already there,
+                        {{
+                            importResult.rows.filter(
+                                (r) => r.status === 'error',
+                            ).length
+                        }}
+                        with problems.
+                    </p>
+                    <ul class="max-h-64 divide-y overflow-y-auto text-xs">
+                        <li
+                            v-for="r in importResult.rows"
+                            :key="r.line"
+                            class="flex justify-between gap-2 px-3 py-1"
+                            :class="{
+                                'text-muted-foreground':
+                                    r.status === 'duplicate',
+                                'text-rose-700 dark:text-rose-300':
+                                    r.status === 'error',
+                            }"
+                        >
+                            <span
+                                >{{ r.date }} · {{ r.name
+                                }}<template v-if="r.kind">
+                                    · {{ kinds[r.kind] ?? r.kind }}</template
+                                ></span
+                            >
+                            <span>{{
+                                r.status === 'error'
+                                    ? `Line ${r.line}: ${r.error}`
+                                    : r.status === 'duplicate'
+                                      ? 'already there'
+                                      : 'new'
+                            }}</span>
+                        </li>
+                    </ul>
+                </div>
             </CardContent>
         </Card>
     </div>

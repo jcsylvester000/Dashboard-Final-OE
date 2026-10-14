@@ -15,6 +15,9 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // E-96: shown on System health (set per deploy, e.g. the git tag or commit).
+    'version' => env('APP_VERSION', 'dev'),
+
     /*
     | First Super Admin created by `php artisan db:seed` (only if none exists).
     */

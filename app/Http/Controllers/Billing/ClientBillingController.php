@@ -144,7 +144,7 @@ class ClientBillingController extends Controller
                 'name' => RateTemplate::query()->whereKey($profile->rate_template_id)->value('name'),
                 'applied_at' => $profile->rate_template_applied_at?->toDateString(),
             ] : null,
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name']),
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name']),
             'members' => $workspace->members()->orderBy('name')->get(['users.id', 'users.name'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'options' => [

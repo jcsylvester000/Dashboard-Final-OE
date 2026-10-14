@@ -86,6 +86,21 @@ const primaryDepartment = ref<string | number>(
             <InputError :message="errors.primary_department_id" />
         </div>
 
+        <div class="grid gap-2">
+            <Label for="access_ends_on">Access ends on (optional)</Label>
+            <Input
+                id="access_ends_on"
+                name="access_ends_on"
+                type="date"
+                :default-value="member?.access_ends_on ?? ''"
+            />
+            <p class="text-xs text-muted-foreground">
+                For contractors. Their lead is reminded a week before; the
+                account is deactivated the next day.
+            </p>
+            <InputError :message="errors.access_ends_on" />
+        </div>
+
         <fieldset class="grid gap-2">
             <legend class="mb-2 text-sm font-medium">Also works with</legend>
             <div class="flex flex-wrap gap-x-4 gap-y-2">

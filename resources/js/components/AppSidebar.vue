@@ -12,6 +12,8 @@ import {
     Gauge,
     Briefcase,
     AlertTriangle,
+    HeartPulse,
+    KeyRound,
     BadgeCheck,
     Building2,
     CheckSquare,
@@ -48,7 +50,9 @@ import {
 import { dashboard, directory, workload } from '@/routes';
 import { index as holidaysIndex } from '@/routes/admin/holidays';
 import { index as leaveIndex } from '@/routes/leave';
+import { health } from '@/routes/admin';
 import { index as activityIndex } from '@/routes/admin/activity';
+import { index as apiTokensAdmin } from '@/routes/admin/api-tokens';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { edit as companySettings } from '@/routes/admin/company';
 import { index as reviewsIndex } from '@/routes/reviews';
@@ -261,6 +265,20 @@ const adminNavItems = computed<NavItem[]>(() => {
             title: 'Failed jobs',
             href: failedJobsIndex(),
             icon: AlertTriangle,
+        });
+    }
+    if (can.value['system.health']) {
+        items.push({
+            title: 'System health',
+            href: health(),
+            icon: HeartPulse,
+        });
+    }
+    if (can.value['users.manage']) {
+        items.push({
+            title: 'API tokens',
+            href: apiTokensAdmin(),
+            icon: KeyRound,
         });
     }
 

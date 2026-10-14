@@ -64,7 +64,7 @@ class RateTemplateController extends Controller
                     'rate' => $money($byUser->get($u->id)?->rate_minor),
                     'cost' => $money($byUser->get($u->id)?->cost_minor),
                 ])->values(),
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name'])
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name'])
                 ->map(fn (Department $d) => [
                     'id' => $d->id,
                     'name' => $d->name,

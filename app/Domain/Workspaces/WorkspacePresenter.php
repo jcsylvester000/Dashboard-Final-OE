@@ -64,7 +64,7 @@ class WorkspacePresenter
      */
     public function departmentOptions(): array
     {
-        return Department::query()->orderBy('position')->get(['id', 'name', 'color'])
+        return Department::query()->active()->orderBy('position')->get(['id', 'name', 'color'])
             ->map(fn (Department $d) => ['id' => $d->id, 'name' => $d->name, 'color' => $d->color])
             ->values()
             ->all();

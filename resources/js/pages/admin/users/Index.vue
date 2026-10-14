@@ -2,14 +2,14 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import { Plus, ShieldCheck } from '@lucide/vue';
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import Pagination from '@/components/Pagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { departmentDot, roleLabel, timeAgo } from '@/lib/format';
-import { create, edit, index } from '@/routes/admin/users';
+import { bulkImport, create, csv, edit, index } from '@/routes/admin/users';
 import type {
     DepartmentOption,
     Option,
@@ -28,7 +28,43 @@ const props = defineProps<{
     roles: Option[];
     departments: DepartmentOption[];
     canManage: boolean;
+    importResult: {
+        preview: boolean;
+        rows: {
+            line: number;
+            name: string;
+            email: string;
+            role: string;
+            department: string;
+            errors: string[];
+            status: string;
+        }[];
+        created: { name: string; email: string; link: string }[];
+    } | null;
 }>();
+
+// E-93: add many people from a CSV (preview first; setup links shown once).
+const showImport = ref(false);
+const importFile = ref<File | null>(null);
+const importing = ref(false);
+function runImport(preview: boolean): void {
+    if (!importFile.value) {
+        return;
+    }
+    importing.value = true;
+    router.post(
+        bulkImport.url(),
+        { file: importFile.value, preview },
+        {
+            forceFormData: true,
+            preserveScroll: true,
+            onFinish: () => (importing.value = false),
+        },
+    );
+}
+function copy(text: string): void {
+    void navigator.clipboard?.writeText(text);
+}
 
 defineOptions({
     layout: {
@@ -82,9 +118,119 @@ watch(form, apply);
                     one-time access links.
                 </p>
             </div>
-            <Button v-if="canManage" as-child>
-                <Link :href="create()"><Plus /> Add member</Link>
-            </Button>
+            <div class="flex flex-wrap gap-2">
+                <Button variant="outline" as-child>
+                    <a :href="csv.url()">Export CSV</a>
+                </Button>
+                <Button
+                    v-if="canManage"
+                    variant="outline"
+                    @click="showImport = !showImport"
+                    >Import CSV</Button
+                >
+                <Button v-if="canManage" as-child>
+                    <Link :href="create()"><Plus /> Add member</Link>
+                </Button>
+            </div>
+        </div>
+
+        <div
+            v-if="canManage && (showImport || importResult)"
+            class="space-y-3 rounded-lg border p-4 text-sm"
+        >
+            <p class="font-medium">Add people from a CSV</p>
+            <p class="text-xs text-muted-foreground">
+                Header row, then one person per line:
+                <code>name, email, role, department, title, access_ends_on</code
+                >. Role and department use their names (e.g. Finance,
+                Marketing). Preview first; each new person gets a one-time setup
+                link to send them yourself.
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+                <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    class="text-xs"
+                    aria-label="CSV file"
+                    @change="
+                        importFile =
+                            ($event.target as HTMLInputElement).files?.[0] ??
+                            null
+                    "
+                />
+                <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="!importFile || importing"
+                    @click="runImport(true)"
+                    >Preview</Button
+                >
+                <Button
+                    size="sm"
+                    :disabled="!importFile || importing"
+                    @click="runImport(false)"
+                    >Add the valid rows</Button
+                >
+            </div>
+            <div v-if="importResult" class="rounded-md border">
+                <p class="border-b px-3 py-2 text-xs text-muted-foreground">
+                    {{
+                        importResult.preview
+                            ? `${importResult.rows.filter((r) => !r.errors.length).length} ready to add`
+                            : `${importResult.created.length} added`
+                    }}
+                    ·
+                    {{
+                        importResult.rows.filter((r) => r.errors.length).length
+                    }}
+                    with problems
+                </p>
+                <ul class="max-h-72 divide-y overflow-y-auto text-xs">
+                    <li
+                        v-for="r in importResult.rows"
+                        :key="r.line"
+                        class="px-3 py-1.5"
+                        :class="
+                            r.errors.length
+                                ? 'text-rose-700 dark:text-rose-300'
+                                : ''
+                        "
+                    >
+                        Line {{ r.line }}: {{ r.name || '—' }} ·
+                        {{ r.email || '—' }} · {{ r.role }}
+                        <template v-if="r.department">
+                            · {{ r.department }}</template
+                        >
+                        <template v-if="r.errors.length">
+                            — {{ r.errors.join(' ') }}</template
+                        >
+                    </li>
+                </ul>
+                <div
+                    v-if="importResult.created.length"
+                    class="space-y-1 border-t p-3"
+                >
+                    <p class="text-xs font-medium">
+                        Setup links (shown once; send each to the person):
+                    </p>
+                    <div
+                        v-for="c in importResult.created"
+                        :key="c.email"
+                        class="flex items-center gap-2 text-xs"
+                    >
+                        <span class="w-48 shrink-0 truncate">{{ c.name }}</span>
+                        <Input
+                            :model-value="c.link"
+                            readonly
+                            class="h-7 min-w-0 flex-1 text-xs"
+                            :aria-label="`Setup link for ${c.name}`"
+                        />
+                        <Button size="sm" variant="ghost" @click="copy(c.link)"
+                            >Copy</Button
+                        >
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

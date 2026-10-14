@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
-import { Pencil, Plus, X } from '@lucide/vue';
-import { ref } from 'vue';
+import { Form, Head, router } from '@inertiajs/vue3';
+import { Archive, Pencil, Plus, X } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
 import InputError from '@/components/InputError.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
@@ -21,9 +21,11 @@ type DepartmentRow = {
     lead_user_id: number | null;
     lead: string | null;
     members: number;
+    open_tasks: number;
+    archived: boolean;
 };
 
-defineProps<{
+const props = defineProps<{
     departments: DepartmentRow[];
     leads: { id: number; name: string }[];
     colors: string[];
@@ -37,6 +39,24 @@ defineOptions({
 
 /** id of the row being edited, 0 = new department form, null = none. */
 const editing = ref<number | null>(null);
+
+// E-94: archive with reassignment of people and open tasks.
+const active = computed(() => props.departments.filter((d) => !d.archived));
+const archiving = ref<number | null>(null);
+const moveTo = ref<number | ''>('');
+function archive(d: DepartmentRow): void {
+    router.post(
+        DepartmentController.archive.url(d.id),
+        { move_to: moveTo.value },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                archiving.value = null;
+                moveTo.value = '';
+            },
+        },
+    );
+}
 </script>
 
 <template>
@@ -155,7 +175,8 @@ const editing = ref<number | null>(null);
                 <li
                     v-for="d in departments"
                     :key="d.id"
-                    class="flex items-center justify-between gap-3 px-4 py-3"
+                    class="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    :class="d.archived ? 'opacity-60' : ''"
                 >
                     <div class="flex min-w-0 items-center gap-3">
                         <span
@@ -167,18 +188,75 @@ const editing = ref<number | null>(null);
                             <div class="truncate text-xs text-muted-foreground">
                                 {{ d.description || 'No description' }} · Lead:
                                 {{ d.lead ?? 'none' }} · {{ d.members }} active
-                                members
+                                members · {{ d.open_tasks }} open tasks
+                                <template v-if="d.archived">
+                                    · archived</template
+                                >
                             </div>
                         </div>
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`Edit ${d.name}`"
-                        @click="editing = d.id"
+                    <div v-if="d.archived">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            @click="
+                                router.post(
+                                    DepartmentController.restore.url(d.id),
+                                    {},
+                                    { preserveScroll: true },
+                                )
+                            "
+                            >Restore</Button
+                        >
+                    </div>
+                    <div v-else class="flex items-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            :aria-label="`Edit ${d.name}`"
+                            @click="editing = d.id"
+                        >
+                            <Pencil />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            :aria-label="`Archive ${d.name}`"
+                            @click="
+                                archiving = archiving === d.id ? null : d.id
+                            "
+                        >
+                            <Archive />
+                        </Button>
+                    </div>
+                    <div
+                        v-if="archiving === d.id"
+                        class="flex w-full flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2 text-sm"
                     >
-                        <Pencil />
-                    </Button>
+                        Move {{ d.members }} people and {{ d.open_tasks }} open
+                        tasks to
+                        <NativeSelect v-model="moveTo" class="h-8 w-44">
+                            <option value="">Choose…</option>
+                            <option
+                                v-for="o in active.filter((x) => x.id !== d.id)"
+                                :key="o.id"
+                                :value="o.id"
+                            >
+                                {{ o.name }}
+                            </option>
+                        </NativeSelect>
+                        <Button
+                            size="sm"
+                            variant="destructive"
+                            :disabled="!moveTo"
+                            @click="archive(d)"
+                            >Archive {{ d.name }}</Button
+                        >
+                        <span class="w-full text-xs text-muted-foreground"
+                            >Finished work and logged time keep {{ d.name }} so
+                            reports stay correct.</span
+                        >
+                    </div>
                 </li>
             </ul>
         </div>

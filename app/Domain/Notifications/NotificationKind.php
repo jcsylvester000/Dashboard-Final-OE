@@ -24,6 +24,7 @@ enum NotificationKind: string
     case InvoiceOverdue = 'invoice_overdue';
     case FileShared = 'file_shared';
     case BillingDraft = 'billing_draft';
+    case System = 'system';
 
     public const MODE_REALTIME = 'realtime';
 
@@ -51,6 +52,7 @@ enum NotificationKind: string
             self::InvoiceOverdue => 'Client invoice overdue (Finance)',
             self::FileShared => 'Files shared with me',
             self::BillingDraft => 'Retainer drafts ready to check (Finance)',
+            self::System => 'System notices: health, holidays, access ending (admins)',
         };
     }
 
@@ -66,6 +68,6 @@ enum NotificationKind: string
     /** Kinds listed under "Needs my attention" even after being read. */
     public function needsAction(): bool
     {
-        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue, self::BillingDraft], true);
+        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue, self::BillingDraft, self::System], true);
     }
 }

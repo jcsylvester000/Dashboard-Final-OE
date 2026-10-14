@@ -32,7 +32,7 @@ class RateCardController extends Controller
             'rates' => RateCard::query()->with(['department:id,name', 'user:id,name'])
                 ->whereNull('workspace_id')->latest('effective_from')->get()
                 ->map(fn (RateCard $r): array => ClientBillingController::rateRow($r))->values(),
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name']),
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name']),
             'people' => User::query()->active()->orderBy('name')->get(['id', 'name']),
             'currencies' => BillingProfile::currencies(),
             'templates' => RateTemplate::query()->withCount('items')->orderBy('name')->get(['id', 'name', 'description', 'currency', 'updated_at'])

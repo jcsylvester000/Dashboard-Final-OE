@@ -52,6 +52,8 @@ class SaveUserRequest extends FormRequest
             'primary_department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')],
             'department_ids' => ['array'],
             'department_ids.*' => ['integer', Rule::exists('departments', 'id')],
+            // E-93: contractors: last day with access (deactivated the day after).
+            'access_ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
         ];
     }
 

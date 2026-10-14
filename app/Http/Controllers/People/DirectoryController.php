@@ -55,7 +55,7 @@ class DirectoryController extends Controller
                 'clients' => $clients[$u->id] ?? [],
                 'out_until' => $out[$u->id] ?? null,
             ])->values(),
-            'departments' => Department::query()->orderBy('position')->get(['id', 'name']),
+            'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name']),
             'filters' => array_filter($q),
         ]);
     }

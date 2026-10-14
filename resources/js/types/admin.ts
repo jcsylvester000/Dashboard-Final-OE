@@ -38,6 +38,8 @@ export type MemberForm = {
     role: string | null;
     primary_department_id: number | null;
     department_ids: number[];
+    /** E-93: last day with access (deactivated the day after). */
+    access_ends_on?: string | null;
 };
 
 export type Member = MemberForm & {

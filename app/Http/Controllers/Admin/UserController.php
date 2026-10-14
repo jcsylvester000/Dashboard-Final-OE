@@ -82,6 +82,8 @@ class UserController extends Controller
             'roles' => $this->roleOptions(),
             'departments' => $this->departmentOptions(),
             'canManage' => $request->user()->can(Permissions::USERS_MANAGE),
+            // E-93: preview / result of the last CSV import (setup links are shown once).
+            'importResult' => $request->session()->get('userImport'),
         ]);
     }
 
@@ -107,7 +109,7 @@ class UserController extends Controller
                 // Unusable random password until the member opens their setup link.
                 'password' => bin2hex(random_bytes(32)),
             ]);
-            $user->forceFill(['email_verified_at' => now()])->save();
+            $user->forceFill(['email_verified_at' => now(), 'access_ends_on' => $data['access_ends_on'] ?? null])->save();
 
             $user->syncRoles([$data['role']]);
             $user->departments()->sync($this->departmentIds($data));
@@ -151,6 +153,7 @@ class UserController extends Controller
                 'must_change_password' => $user->must_change_password,
                 'two_factor' => $user->two_factor_confirmed_at !== null,
                 'last_login_at' => $user->last_login_at?->toIso8601String(),
+                'access_ends_on' => $user->access_ends_on?->toDateString(),
                 'created_at' => $user->created_at?->toIso8601String(),
                 'is_self' => $user->is($request->user()),
             ],
@@ -204,6 +207,10 @@ class UserController extends Controller
                 'title' => $data['title'] ?? null,
                 'primary_department_id' => $data['primary_department_id'] ?? null,
             ])->save();
+            $ends = $data['access_ends_on'] ?? null;
+            if ($ends !== $user->access_ends_on?->toDateString()) {
+                $user->forceFill(['access_ends_on' => $ends, 'access_end_alerted_at' => null])->save();
+            }
 
             $user->syncRoles([$data['role']]);
             $user->departments()->sync($this->departmentIds($data));
@@ -388,7 +395,7 @@ class UserController extends Controller
      */
     private function departmentOptions(): array
     {
-        return Department::query()->orderBy('position')->get(['id', 'name', 'color'])
+        return Department::query()->active()->orderBy('position')->get(['id', 'name', 'color'])
             ->map(fn (Department $d) => ['id' => $d->id, 'name' => $d->name, 'color' => $d->color])
             ->all();
     }
