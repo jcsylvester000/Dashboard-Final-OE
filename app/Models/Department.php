@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Support\ReferenceData;
 use Database\Factories\DepartmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,6 +30,13 @@ class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        // E-119: department lists are cached; any change clears them.
+        static::saved(fn () => ReferenceData::forgetDepartments());
+        static::deleted(fn () => ReferenceData::forgetDepartments());
+    }
 
     /**
      * @return array<string, string>

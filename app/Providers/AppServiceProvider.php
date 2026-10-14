@@ -27,12 +27,14 @@ use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -96,6 +98,19 @@ class AppServiceProvider extends ServiceProvider
         Date::use(CarbonImmutable::class);
 
         DB::prohibitDestructiveCommands(app()->isProduction());
+
+        // E-117: log slow queries (DB_SLOW_QUERY_MS, default 100 ms; 0 turns it off) so the
+        // worst ones can be EXPLAINed. Pulse shows them too when it runs.
+        $slowMs = (int) config('database.slow_query_ms', 100);
+        if ($slowMs > 0) {
+            DB::listen(function (QueryExecuted $query) use ($slowMs) {
+                if ($query->time >= $slowMs) {
+                    Log::channel((string) config('logging.slow_query_channel', 'stack'))->warning('Slow query', [
+                        'ms' => $query->time, 'sql' => $query->sql, 'connection' => $query->connectionName,
+                    ]);
+                }
+            });
+        }
 
         // E-90: while a super admin views as someone, model saves and deletes are dropped
         // (the ViewAsUser middleware already refuses every write request).

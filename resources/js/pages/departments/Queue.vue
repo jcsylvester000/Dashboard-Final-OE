@@ -231,6 +231,7 @@ const byStatus = computed(() =>
                     >
                         <div class="min-w-0">
                             <Link
+                                prefetch
                                 :href="
                                     show({
                                         workspace: t.workspace.slug,
@@ -265,6 +266,7 @@ const byStatus = computed(() =>
             <ul class="divide-y rounded-lg border">
                 <li v-for="t in g.tasks" :key="t.id" class="px-4 py-3">
                     <Link
+                        prefetch
                         :href="
                             show({ workspace: t.workspace.slug, task: t.id })
                         "

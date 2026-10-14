@@ -228,6 +228,7 @@ function onDrop(statusId: number): void {
                                 class="mb-1 flex items-start justify-between gap-2"
                             >
                                 <Link
+                                    prefetch
                                     :href="
                                         show({
                                             workspace: workspace.slug,

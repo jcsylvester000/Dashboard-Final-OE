@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Support\ReferenceData;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,21 @@ class Holiday extends Model
 
     /** Kinds that are days off. */
     public const DAYS_OFF = ['regular', 'special'];
+
+    protected static function booted(): void
+    {
+        // E-119: days off are cached per year; a change clears the year(s) it touches.
+        $forget = function (Holiday $h): void {
+            $years = [(int) $h->date->format('Y')];
+            $old = $h->getOriginal('date');
+            if ($old instanceof \DateTimeInterface) {
+                $years[] = (int) $old->format('Y');
+            }
+            ReferenceData::forgetHolidays(...array_unique($years));
+        };
+        static::saved($forget);
+        static::deleted($forget);
+    }
 
     /**
      * @return array<string, string>

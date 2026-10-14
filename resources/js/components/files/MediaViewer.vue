@@ -13,16 +13,15 @@ import {
 } from '@lucide/vue';
 import {
     computed,
+    defineAsyncComponent,
     nextTick,
     onBeforeUnmount,
     onMounted,
     ref,
     watch,
 } from 'vue';
-import AnnotationCanvas from '@/components/files/AnnotationCanvas.vue';
 import type { Tool } from '@/components/files/AnnotationCanvas.vue';
 import AnnotationPanel from '@/components/files/AnnotationPanel.vue';
-import CompareView from '@/components/files/CompareView.vue';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/format';
 import {
@@ -40,6 +39,14 @@ import type {
     AttachmentRow,
 } from '@/types/files';
 import { ANNOTATION_COLORS } from '@/types/files';
+
+// E-123: heavy viewer modes load only when first used.
+const AnnotationCanvas = defineAsyncComponent(
+    () => import('@/components/files/AnnotationCanvas.vue'),
+);
+const CompareView = defineAsyncComponent(
+    () => import('@/components/files/CompareView.vue'),
+);
 
 /**
  * E-01: review files without leaving the task. Images zoom and pan, PDFs use the

@@ -547,6 +547,7 @@ async function destroy(): Promise<void> {
                     >
                         <div class="min-w-0 space-y-1">
                             <Link
+                                prefetch
                                 :href="
                                     taskShow({
                                         workspace: workspace.slug,

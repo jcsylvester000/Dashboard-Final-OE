@@ -141,6 +141,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
                 </div>
                 <div class="min-w-0 flex-1 space-y-1">
                     <Link
+                        prefetch
                         :href="
                             show({ workspace: it.workspace.slug, task: it.id })
                         "
@@ -174,6 +175,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
                     >
                         {{ error.message }}
                         <Link
+                            prefetch
                             :href="
                                 show({
                                     workspace: it.workspace.slug,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Play, Plus, Square, Trash2 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import LabelBadge from '@/components/LabelBadge.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
-import Burndown from '@/components/work/Burndown.vue';
 import TaskMeta from '@/components/work/TaskMeta.vue';
 import { confirmDialog } from '@/composables/useConfirm';
 import { addDays, formatDate, localToday } from '@/lib/format';
@@ -24,6 +23,11 @@ import { close, destroy, start, store } from '@/routes/workspaces/sprints';
 import { show, update as updateTask } from '@/routes/workspaces/tasks';
 import type { TaskRow } from '@/types/work';
 import type { WorkspaceHeader as Header } from '@/types/workspace';
+
+// E-123: the chart loads only when a sprint has burndown data.
+const Burndown = defineAsyncComponent(
+    () => import('@/components/work/Burndown.vue'),
+);
 
 type SprintRow = {
     id: number;
@@ -379,6 +383,7 @@ const daysLeft = (end: string) =>
                     >
                         <div class="min-w-0 space-y-0.5">
                             <Link
+                                prefetch
                                 :href="show({ workspace: ws, task: t.id })"
                                 class="font-medium hover:underline"
                                 :class="{
@@ -474,6 +479,7 @@ const daysLeft = (end: string) =>
                     >
                         <div class="min-w-0 space-y-0.5">
                             <Link
+                                prefetch
                                 :href="show({ workspace: ws, task: t.id })"
                                 class="font-medium hover:underline"
                                 >{{ t.title }}</Link
@@ -576,6 +582,7 @@ const daysLeft = (end: string) =>
                     >
                         <div class="min-w-0 space-y-0.5">
                             <Link
+                                prefetch
                                 :href="show({ workspace: ws, task: t.id })"
                                 class="font-medium hover:underline"
                                 >{{ t.title }}</Link

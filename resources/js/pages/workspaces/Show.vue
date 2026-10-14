@@ -236,6 +236,7 @@ const openCount = () =>
                             class="py-2"
                         >
                             <Link
+                                prefetch
                                 :href="
                                     taskShow({
                                         workspace: workspace.slug,
@@ -275,6 +276,7 @@ const openCount = () =>
                             class="flex items-center justify-between gap-2 py-2"
                         >
                             <Link
+                                prefetch
                                 :href="
                                     taskShow({
                                         workspace: workspace.slug,
@@ -320,6 +322,7 @@ const openCount = () =>
                                 }}</span>
                                 {{ actionLabel(a.action) }}
                                 <Link
+                                    prefetch
                                     v-if="
                                         a.subject_type === 'task' &&
                                         a.subject_id

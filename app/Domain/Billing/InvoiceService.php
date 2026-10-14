@@ -3,6 +3,7 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Jobs\StoreInvoicePdf;
 use App\Models\BillingPeriod;
 use App\Models\BillingProfile;
 use App\Models\ClientCredit;
@@ -375,10 +376,10 @@ class InvoiceService
             return $invoice;
         });
 
-        // Keep the PDF exactly as finalized. If rendering fails the invoice stays final;
-        // the first download renders and stores it instead.
+        // Keep the PDF exactly as finalized, rendered in the background (E-128). If that fails
+        // the invoice stays final; the first download renders and stores it instead.
         try {
-            app(InvoicePdf::class)->store($invoice);
+            StoreInvoicePdf::dispatch($invoice->id);
         } catch (\Throwable $e) {
             report($e);
         }

@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "build": "vp build",
+        "build:check": "vp build && node scripts/check-bundle-size.mjs",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
         "check": "vp check",

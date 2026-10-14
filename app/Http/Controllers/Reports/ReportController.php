@@ -22,6 +22,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ReportController extends Controller
 {
+    /** E-122: most rows a report shows on screen (config reports.screen_rows). */
+    public const SCREEN_ROWS = 500;
+
     public function __construct(private readonly ReportService $reports) {}
 
     public function index(Request $request): Response
@@ -32,12 +35,17 @@ class ReportController extends Controller
         [$report, $group] = $this->choice($request);
 
         $allowed = $filters->allowedWorkspaceIds;
+        // E-122: the screen shows the first rows; downloads (CSV / Excel / PDF) have them all.
+        $result = $this->reports->run($report, $filters, $group);
+        $rowsTotal = count($result['rows']);
+        $result['rows'] = array_slice($result['rows'], 0, max(1, (int) config('reports.screen_rows', self::SCREEN_ROWS)));
 
         return Inertia::render('reports/Index', [
             'report' => $report,
             'group' => $group,
             'filters' => $filters->toArray(),
-            'result' => $this->reports->run($report, $filters, $group),
+            'result' => $result,
+            'rowsTotal' => $rowsTotal,
             'reports' => ReportService::REPORTS,
             'groups' => ReportService::TIME_GROUPS,
             'workspaces' => DB::table('workspaces')

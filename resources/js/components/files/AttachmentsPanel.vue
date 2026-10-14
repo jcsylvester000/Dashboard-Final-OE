@@ -8,8 +8,14 @@ import {
     Paperclip,
     Trash2,
 } from '@lucide/vue';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import MediaViewer from '@/components/files/MediaViewer.vue';
+import {
+    computed,
+    defineAsyncComponent,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +30,11 @@ import { timeAgo } from '@/lib/format';
 import { approve, destroy, fromDrive, store } from '@/routes/attachments';
 import { picker } from '@/routes/drive';
 import type { AttachmentRow, FileLimits } from '@/types/files';
+
+// E-123: the viewer (zoom, compare, annotation) loads on first open, not with the page.
+const MediaViewer = defineAsyncComponent(
+    () => import('@/components/files/MediaViewer.vue'),
+);
 
 /**
  * Files on a task / project. Links are signed and expire after a few minutes;

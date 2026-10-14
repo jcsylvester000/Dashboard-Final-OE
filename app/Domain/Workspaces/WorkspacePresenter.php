@@ -4,7 +4,7 @@ namespace App\Domain\Workspaces;
 
 use App\Domain\Billing\WorkSummaryAccess;
 use App\Domain\Identity\Permissions;
-use App\Models\Department;
+use App\Domain\Support\ReferenceData;
 use App\Models\User;
 use App\Models\Workspace;
 
@@ -64,9 +64,6 @@ class WorkspacePresenter
      */
     public function departmentOptions(): array
     {
-        return Department::query()->active()->orderBy('position')->get(['id', 'name', 'color'])
-            ->map(fn (Department $d) => ['id' => $d->id, 'name' => $d->name, 'color' => $d->color])
-            ->values()
-            ->all();
+        return ReferenceData::departments(); // E-119: cached, cleared when a department changes
     }
 }

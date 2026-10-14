@@ -2,6 +2,7 @@
 
 namespace App\Domain\People;
 
+use App\Domain\Support\ReferenceData;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use Carbon\CarbonImmutable;
@@ -34,8 +35,13 @@ class Capacity
         $this->from = $from;
         $this->to = $to;
         $this->daysOff = [];
-        foreach (Holiday::query()->whereIn('kind', Holiday::DAYS_OFF)->whereDate('date', '>=', $from)->whereDate('date', '<=', $to)->get(['date']) as $h) {
-            $this->daysOff[$h->date->toDateString()] = true;
+        // E-119: days off come from the per-year cache (cleared when a holiday changes).
+        for ($year = (int) substr($from, 0, 4); $year <= (int) substr($to, 0, 4); $year++) {
+            foreach (ReferenceData::daysOff($year) as $day => $_) {
+                if ($day >= $from && $day <= $to) {
+                    $this->daysOff[$day] = true;
+                }
+            }
         }
 
         $this->leave = [];

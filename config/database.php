@@ -19,6 +19,9 @@ return [
 
     'default' => env('DB_CONNECTION', 'sqlite'),
 
+    // E-117: queries slower than this (ms) are logged as warnings; 0 = off. Bindings are not logged.
+    'slow_query_ms' => (int) env('DB_SLOW_QUERY_MS', 100),
+
     /*
     |--------------------------------------------------------------------------
     | Database Connections

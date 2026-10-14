@@ -20,6 +20,7 @@ import type {
 } from '@/types/reports';
 
 const props = defineProps<{
+    rowsTotal: number;
     report: string;
     group: string;
     filters: ReportFilters;
@@ -245,6 +246,13 @@ function barWidth(row: Record<string, string | number | null>): string {
             </Card>
         </div>
 
+        <p
+            v-if="rowsTotal > result.rows.length"
+            class="text-sm text-muted-foreground"
+        >
+            Showing the first {{ result.rows.length }} of {{ rowsTotal }} rows.
+            Download the report for all of them.
+        </p>
         <p
             v-if="result.rows.length === 0"
             class="py-10 text-center text-sm text-muted-foreground"

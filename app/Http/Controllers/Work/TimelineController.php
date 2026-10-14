@@ -57,6 +57,7 @@ class TimelineController extends Controller
                 'tasks as tasks_done' => fn (Builder $t) => $t->whereNull('parent_id')->whereNotNull('completed_at'),
             ])
             ->orderByRaw('start_on is null, start_on')
+            ->limit(200) // E-122
             ->get();
 
         $taskQuery = $workspace->tasks()->getQuery()

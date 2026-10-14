@@ -82,6 +82,7 @@ const groups = computed(() => {
                 >
                     <div class="min-w-0 space-y-1">
                         <Link
+                            prefetch
                             :href="
                                 show({
                                     workspace: t.workspace.slug,

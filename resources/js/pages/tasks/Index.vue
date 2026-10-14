@@ -403,6 +403,7 @@ async function send(action: 'update' | 'delete'): Promise<void> {
                         />
                         <div class="min-w-0 flex-1 space-y-1">
                             <Link
+                                prefetch
                                 :href="
                                     show({
                                         workspace: workspace.slug,

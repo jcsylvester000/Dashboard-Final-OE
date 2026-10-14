@@ -363,6 +363,7 @@ const barClass = (t: TaskRow) =>
                                     "
                                 />
                                 <Link
+                                    prefetch
                                     :href="
                                         show({
                                             workspace: workspace.slug,
@@ -466,6 +467,7 @@ const barClass = (t: TaskRow) =>
                                     :aria-label="`Milestone ${r.task.title} on ${formatDate(r.task.due_on)}`"
                                 />
                                 <Link
+                                    prefetch
                                     v-else
                                     :href="
                                         show({

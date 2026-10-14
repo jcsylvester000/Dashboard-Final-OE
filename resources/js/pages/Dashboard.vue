@@ -248,6 +248,7 @@ defineOptions({
                     >
                         <span class="min-w-0 truncate">
                             <Link
+                                prefetch
                                 :href="
                                     taskShow({
                                         workspace: t.workspaceSlug,

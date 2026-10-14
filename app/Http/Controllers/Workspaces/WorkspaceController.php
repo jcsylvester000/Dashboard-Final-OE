@@ -48,6 +48,7 @@ class WorkspaceController extends Controller
                 'projects as open_projects_count' => fn (Builder $q) => $q->whereNotIn('status', ['completed', 'archived']),
             ])
             ->orderBy('name')
+            ->limit(500) // E-122
             ->get()
             ->map(fn (Workspace $w): array => [
                 'id' => $w->id,

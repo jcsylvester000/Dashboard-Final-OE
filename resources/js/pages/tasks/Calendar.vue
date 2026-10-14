@@ -317,6 +317,7 @@ const label = (c: Cell) =>
                     </div>
                     <template v-for="c in byDay[d] ?? []" :key="c.task.id">
                         <Link
+                            prefetch
                             v-if="
                                 !c.isStart &&
                                 !c.isDue &&
@@ -334,6 +335,7 @@ const label = (c: Cell) =>
                             :aria-label="label(c)"
                         />
                         <Link
+                            prefetch
                             v-else
                             :href="
                                 show({
