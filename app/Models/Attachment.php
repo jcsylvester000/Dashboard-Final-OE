@@ -32,6 +32,11 @@ use Illuminate\Support\Carbon;
  * @property bool $is_latest
  * @property string|null $review_status approved | changes (E-06)
  * @property string|null $review_note
+ * @property string|null $review_token E-08: client review link (no login)
+ * @property Carbon|null $review_token_expires_at
+ * @property int $review_views
+ * @property int|null $review_link_by staff member who shared the link
+ * @property string|null $client_decision_by E-08: client's name on their approve / request changes
  * @property Carbon|null $created_at
  */
 #[Fillable(['workspace_id', 'attachable_type', 'attachable_id', 'uploaded_by', 'disk', 'key', 'original_name', 'mime', 'size', 'thumbnail_key', 'drive_file_id', 'version_root_id', 'version', 'is_latest'])]
@@ -51,7 +56,8 @@ class Attachment extends Model
      */
     protected function casts(): array
     {
-        return ['size' => 'integer', 'approved_at' => 'datetime', 'version' => 'integer', 'is_latest' => 'boolean', 'version_root_id' => 'integer'];
+        return ['size' => 'integer', 'approved_at' => 'datetime', 'version' => 'integer', 'is_latest' => 'boolean', 'version_root_id' => 'integer',
+            'review_token_expires_at' => 'datetime', 'review_views' => 'integer'];
     }
 
     /** @return MorphTo<Model, $this> */

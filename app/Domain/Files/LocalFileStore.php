@@ -46,6 +46,11 @@ class LocalFileStore implements FileStore
         ], $disposition);
     }
 
+    public function contents(string $key): ?string
+    {
+        return $this->disk()->exists($key) ? $this->disk()->get($key) : null;
+    }
+
     public function delete(string $key): void
     {
         $this->disk()->delete($key);

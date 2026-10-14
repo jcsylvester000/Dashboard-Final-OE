@@ -27,7 +27,14 @@ import {
 } from '@/components/ui/card';
 import { confirmDialog } from '@/composables/useConfirm';
 import { timeAgo } from '@/lib/format';
-import { approve, destroy, fromDrive, store } from '@/routes/attachments';
+import {
+    approve,
+    clientLink,
+    clientUnlink,
+    destroy,
+    fromDrive,
+    store,
+} from '@/routes/attachments';
 import { picker } from '@/routes/drive';
 import type { AttachmentRow, FileLimits } from '@/types/files';
 
@@ -234,6 +241,33 @@ function uploadVersion(e: Event): void {
             },
         },
     );
+}
+
+// E-08: client review links (14 days by default).
+const copiedId = ref<number | null>(null);
+function shareClientLink(a: AttachmentRow): void {
+    router.post(
+        clientLink.url(a.id),
+        { expires_days: 14 },
+        { preserveScroll: true },
+    );
+}
+async function revokeClientLink(a: AttachmentRow): Promise<void> {
+    if (
+        await confirmDialog(
+            `Turn off the client link for ${a.name}? The client will see "not found".`,
+        )
+    ) {
+        router.delete(clientUnlink.url(a.id), { preserveScroll: true });
+    }
+}
+async function copyClientLink(a: AttachmentRow): Promise<void> {
+    if (!a.client_link) {
+        return;
+    }
+    await navigator.clipboard.writeText(a.client_link.url);
+    copiedId.value = a.id;
+    setTimeout(() => (copiedId.value = null), 2000);
 }
 
 function toggleApproval(a: AttachmentRow): void {
@@ -465,7 +499,11 @@ function size(bytes: number): string {
                             class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"
                         >
                             <BadgeCheck class="size-3.5" /> Approved{{
-                                a.approved_by ? ` by ${a.approved_by}` : ''
+                                a.approved_by
+                                    ? ` by ${a.approved_by}`
+                                    : a.client_decision_by
+                                      ? ` by ${a.client_decision_by} (client)`
+                                      : ''
                             }}{{
                                 a.approved_at
                                     ? ` · ${timeAgo(a.approved_at)}`
@@ -481,6 +519,52 @@ function size(bytes: number): string {
                     >
                         {{ a.approved ? 'Unapprove' : 'Approve' }}
                     </Button>
+                    <!-- E-08: client review link for this version -->
+                    <template v-if="a.can_approve && !a.task">
+                        <Button
+                            v-if="a.client_link"
+                            variant="ghost"
+                            size="sm"
+                            class="h-8 px-2 text-xs"
+                            :title="`Client link · ${a.client_link.views} view(s)${a.client_link.expires_at ? ` · ends ${timeAgo(a.client_link.expires_at)}` : ''}`"
+                            @click="copyClientLink(a)"
+                            >{{
+                                copiedId === a.id
+                                    ? 'Copied'
+                                    : 'Copy client link'
+                            }}</Button
+                        >
+                        <Button
+                            v-if="a.client_link"
+                            variant="ghost"
+                            size="sm"
+                            class="h-8 px-2 text-xs"
+                            @click="revokeClientLink(a)"
+                            >Turn off</Button
+                        >
+                        <Button
+                            v-else
+                            variant="ghost"
+                            size="sm"
+                            class="h-8 px-2 text-xs"
+                            :title="`Let the client comment on and approve ${a.name} without logging in`"
+                            @click="shareClientLink(a)"
+                            >Client review link</Button
+                        >
+                    </template>
+                    <!-- E-09: feedback sheet -->
+                    <Button
+                        v-if="a.feedback_pdf_url"
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 px-2 text-xs"
+                        as-child
+                        ><a
+                            :href="a.feedback_pdf_url"
+                            :aria-label="`Feedback sheet PDF for ${a.name}`"
+                            >Feedback PDF</a
+                        ></Button
+                    >
                     <Button
                         v-if="canUpload && !a.task"
                         variant="ghost"

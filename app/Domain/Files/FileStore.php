@@ -23,6 +23,9 @@ interface FileStore
     /** Send the file to the browser. */
     public function response(string $key, string $filename, string $mime, bool $inline): StreamedResponse;
 
+    /** The stored bytes, or null when missing (E-09 feedback sheet). */
+    public function contents(string $key): ?string;
+
     public function delete(string $key): void;
 
     public function exists(string $key): bool;

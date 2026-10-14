@@ -19,6 +19,15 @@ export type AttachmentRow = {
     from_drive?: boolean;
     /** E-04: open (unresolved) pins on the latest version. */
     open_pins?: number;
+    /** E-08: client review link (approvers only) and the client's name on their decision */
+    client_link?: {
+        url: string;
+        expires_at: string | null;
+        views: number;
+    } | null;
+    client_decision_by?: string | null;
+    /** E-09 */
+    feedback_pdf_url?: string | null;
     /** E-02 / E-06 */
     version?: number;
     review_status?: 'approved' | 'changes' | null;
@@ -60,6 +69,8 @@ export type AnnotationPin = {
     body: string;
     author: string;
     author_id: number | null;
+    /** E-08: written by the client on the review link */
+    is_client?: boolean;
     at: string | null;
     resolved: boolean;
     replies: {
@@ -67,6 +78,7 @@ export type AnnotationPin = {
         body: string;
         author: string;
         author_id: number | null;
+        is_client?: boolean;
         at: string | null;
     }[];
 };

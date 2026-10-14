@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ClientDocumentController;
+use App\Http\Controllers\ClientReviewController;
 use App\Http\Controllers\DriveController;
 use App\Http\Controllers\ProjectStatusController;
 use App\Http\Controllers\ShareController;
@@ -33,4 +34,10 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('i/{token}/pdf', [ClientDocumentController::class, 'invoicePdf'])->name('invoice-link.pdf');
     Route::get('st/{token}', [ClientDocumentController::class, 'statement'])->name('statement-link.show');
     Route::get('st/{token}/pdf', [ClientDocumentController::class, 'statementPdf'])->name('statement-link.pdf');
+    // E-08: client review of one file version.
+    Route::get('r/{token}', [ClientReviewController::class, 'show'])->name('client-review.show');
+    Route::get('r/{token}/file', [ClientReviewController::class, 'file'])->name('client-review.file');
+    Route::post('r/{token}/name', [ClientReviewController::class, 'setName'])->name('client-review.name');
+    Route::post('r/{token}/comments', [ClientReviewController::class, 'comment'])->middleware('throttle:20,1')->name('client-review.comment');
+    Route::post('r/{token}/decision', [ClientReviewController::class, 'decide'])->middleware('throttle:10,1')->name('client-review.decide');
 });

@@ -181,15 +181,18 @@ class AnnotationController extends Controller
                 'color' => $a->color ?? Annotation::COLORS[0],
                 'shapes' => $a->shapes ?? [],
                 'body' => $a->body,
-                'author' => $a->author->name ?? 'Former member',
+                // E-08: client pins say so (the client's own name, marked Client).
+                'author' => $a->client_name ?? ($a->author->name ?? 'Former member'),
                 'author_id' => $a->user_id,
+                'is_client' => $a->client_name !== null,
                 'at' => $a->created_at?->toIso8601String(),
                 'resolved' => $a->resolved_at !== null,
                 'replies' => $a->replies->map(fn (Annotation $r): array => [
                     'id' => $r->id,
                     'body' => $r->body,
-                    'author' => $r->author->name ?? 'Former member',
+                    'author' => $r->client_name ?? ($r->author->name ?? 'Former member'),
                     'author_id' => $r->user_id,
+                    'is_client' => $r->client_name !== null,
                     'at' => $r->created_at?->toIso8601String(),
                 ])->values()->all(),
             ])

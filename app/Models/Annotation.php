@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property int $attachment_id
  * @property int|null $parent_id
  * @property int|null $user_id
+ * @property string|null $client_name E-08: written by the client on the review link (user_id null)
  * @property int|null $number
  * @property string|null $x
  * @property string|null $y
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['attachment_id', 'parent_id', 'user_id', 'number', 'x', 'y', 'shapes', 'color', 'body'])]
+#[Fillable(['attachment_id', 'parent_id', 'user_id', 'client_name', 'number', 'x', 'y', 'shapes', 'color', 'body'])]
 class Annotation extends Model
 {
     /** Colour-blind-safe palette (Okabe-Ito), also used for pins. */
@@ -58,6 +59,12 @@ class Annotation extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function resolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 
     /** @return HasMany<Annotation, $this> */

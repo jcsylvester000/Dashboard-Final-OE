@@ -72,6 +72,14 @@ class AttachmentPresenter
                 'approved_by' => $a->approver?->name,
                 'approved_at' => $a->approved_at?->toIso8601String(),
                 'can_approve' => $canApprove,
+                // E-08: client review link (only shown to people who can approve).
+                'client_link' => $canApprove && $a->review_token !== null && ($a->review_token_expires_at === null || $a->review_token_expires_at->isFuture()) ? [
+                    'url' => route('client-review.show', $a->review_token),
+                    'expires_at' => $a->review_token_expires_at?->toIso8601String(),
+                    'views' => $a->review_views,
+                ] : null,
+                'client_decision_by' => $a->client_decision_by,
+                'feedback_pdf_url' => $a->isImage() ? route('attachments.feedback-sheet', $a, false) : null,
                 'from_drive' => $a->drive_file_id !== null,
                 'open_pins' => (int) $a->getAttribute('open_pins'),
             ])

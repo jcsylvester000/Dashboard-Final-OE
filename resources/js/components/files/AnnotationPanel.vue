@@ -284,7 +284,13 @@ defineExpose({ showResolved });
                             >{{ p.body }}</span
                         >
                         <span class="text-[11px] text-white/50"
-                            >{{ p.author }} · {{ timeAgo(p.at)
+                            >{{ p.author
+                            }}<span
+                                v-if="p.is_client"
+                                class="ml-1 rounded border border-sky-300 px-1 text-[10px] text-sky-200 uppercase"
+                                >Client</span
+                            >
+                            · {{ timeAgo(p.at)
                             }}<template v-if="p.x === null">
                                 · whole file</template
                             ><template v-if="p.replies.length">
@@ -301,7 +307,13 @@ defineExpose({ showResolved });
                             {{ r.body }}
                         </p>
                         <p class="text-white/50">
-                            {{ r.author }} · {{ timeAgo(r.at) }}
+                            {{ r.author
+                            }}<span
+                                v-if="r.is_client"
+                                class="ml-1 rounded border border-sky-300 px-1 text-[10px] text-sky-200 uppercase"
+                                >Client</span
+                            >
+                            · {{ timeAgo(r.at) }}
                         </p>
                     </div>
                     <template v-if="canWrite">

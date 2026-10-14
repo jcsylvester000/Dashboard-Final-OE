@@ -30,7 +30,7 @@ class SecurityHeaders
         // same-origin: other sites never see our URLs, but our own pages send a Referer so
         // back() returns to the right page after Inertia (XHR) navigation. Access-link pages
         // and public share links carry a token in the URL, so they send no Referer at all.
-        $headers->set('Referrer-Policy', $request->is('access/*', 's/*', 'p/*', 'i/*', 'st/*') ? 'no-referrer' : 'same-origin');
+        $headers->set('Referrer-Policy', $request->is('access/*', 's/*', 'p/*', 'i/*', 'st/*', 'r/*') ? 'no-referrer' : 'same-origin');
         $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=()');
         $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
         $headers->set('X-Robots-Tag', 'noindex, nofollow');

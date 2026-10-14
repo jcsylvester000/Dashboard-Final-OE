@@ -4,6 +4,7 @@ use App\Http\Controllers\AnnotationController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
+use App\Http\Controllers\ClientReviewLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GettingStartedController;
 use App\Http\Controllers\InboxController;
@@ -45,6 +46,10 @@ Route::middleware('auth')->group(function () {
     Route::post('attachments/{attachment}/annotations', [AnnotationController::class, 'store'])->middleware('throttle:120,1')->name('attachments.annotations.store');
     Route::patch('annotations/{annotation}', [AnnotationController::class, 'update'])->name('annotations.update');
     Route::delete('annotations/{annotation}', [AnnotationController::class, 'destroy'])->name('annotations.destroy');
+    // E-08 / E-09: client review link per version, feedback sheet PDF.
+    Route::post('attachments/{attachment}/client-link', [ClientReviewLinkController::class, 'store'])->name('attachments.client-link');
+    Route::delete('attachments/{attachment}/client-link', [ClientReviewLinkController::class, 'destroy'])->name('attachments.client-unlink');
+    Route::get('attachments/{attachment}/feedback-sheet', [ClientReviewLinkController::class, 'feedbackSheet'])->name('attachments.feedback-sheet');
     Route::post('attachments/from-drive', [AttachmentController::class, 'fromDrive'])->middleware('throttle:60,1')->name('attachments.from-drive');
     Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
 
