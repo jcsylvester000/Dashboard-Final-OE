@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::get('workload', WorkloadController::class)->name('workload');
     Route::get('reports/people', [PeopleReportController::class, 'index'])->name('reports.people');
     Route::get('reports/people/csv', [PeopleReportController::class, 'csv'])->name('reports.people.csv');
+    Route::get('reports/people/download/{format}', [PeopleReportController::class, 'export'])->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('reports.people.download'); // E-49
     Route::get('directory', DirectoryController::class)->name('directory');
 
     // Global search + short task links (Build 8b)

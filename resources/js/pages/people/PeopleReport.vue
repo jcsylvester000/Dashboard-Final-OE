@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Download } from '@lucide/vue';
 import { computed, reactive, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
-import { Button } from '@/components/ui/button';
+import ExportMenu from '@/components/reports/ExportMenu.vue';
 import { Input } from '@/components/ui/input';
 import { formatMinutes } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
 import { people as peopleReport } from '@/routes/reports';
-import { csv } from '@/routes/reports/people';
+import { download } from '@/routes/reports/people';
 
 /**
  * People report (B-16): per person per month - capacity, logged, billable %, utilisation,
@@ -113,14 +112,11 @@ const utilTone = (p: number) =>
                     {{ d.name }}
                 </option>
             </NativeSelect>
-            <Button
-                as="a"
-                :href="csv.url({ query })"
-                variant="outline"
-                size="sm"
-                class="ml-auto"
-                ><Download /> CSV</Button
-            >
+            <div class="ml-auto">
+                <ExportMenu
+                    :url="(format) => download.url({ format }, { query })"
+                />
+            </div>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-4">

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Download } from '@lucide/vue';
 import { computed, reactive } from 'vue';
 import Heading from '@/components/Heading.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
+import ExportMenu from '@/components/reports/ExportMenu.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -12,7 +12,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { csv, index } from '@/routes/reports';
+import { download, index } from '@/routes/reports';
 import type {
     ReportColumn,
     ReportFilters,
@@ -78,7 +78,9 @@ function apply(overrides: Record<string, string> = {}): void {
     );
 }
 
-const csvUrl = computed(() => csv.url({ query: query() }));
+// E-49: Excel, PDF or CSV of the report on screen, same filters.
+const exportUrl = (format: string): string =>
+    download.url({ format }, { query: query() });
 // Projects of the chosen client (or all), so the filters can't contradict each other.
 const projectOptions = computed(() =>
     props.projects.filter(
@@ -135,11 +137,9 @@ function barWidth(row: Record<string, string | number | null>): string {
         <div class="flex flex-wrap items-start justify-between gap-3">
             <Heading
                 title="Reports"
-                description="Filter by client, department and dates. Export any report to CSV (opens in Excel)."
+                description="Filter by client, department and dates. Download any report as Excel, PDF or CSV."
             />
-            <Button variant="outline" size="sm" as-child>
-                <a :href="csvUrl"><Download class="size-4" /> Export CSV</a>
-            </Button>
+            <ExportMenu :url="exportUrl" />
         </div>
 
         <nav class="flex flex-wrap gap-1 border-b text-sm" aria-label="Reports">

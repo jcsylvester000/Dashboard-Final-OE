@@ -39,6 +39,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $fixed_fee_billed_at
  * @property int $review_sla_days working days a review may take before reminders (E-33)
  * @property string $status_detail simple | detailed (client status page, R-22)
+ * @property int|null $budget_minutes hours budget in minutes (E-76)
+ * @property int|null $budget_minor amount budget, minor units of budget_currency (E-76, E-110)
+ * @property string|null $budget_currency the client's billing currency when the budget was set
+ * @property int $budget_hours_alerted_pct highest burn alert sent for hours (0, 75, 90, 100)
+ * @property int $budget_amount_alerted_pct highest burn alert sent for the amount
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -78,6 +83,10 @@ class Project extends Model implements Mentionable
             'fixed_fee_billed_at' => 'datetime',
             'review_required' => 'boolean',
             'status_token_expires_at' => 'datetime',
+            'budget_minutes' => 'integer',
+            'budget_minor' => 'integer',
+            'budget_hours_alerted_pct' => 'integer',
+            'budget_amount_alerted_pct' => 'integer',
         ];
     }
 

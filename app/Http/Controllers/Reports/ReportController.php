@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Reports;
 
+use App\Domain\Exports\ExportTable;
+use App\Domain\Exports\ReportExporter;
 use App\Domain\Reports\ReportFilters;
 use App\Domain\Reports\ReportService;
 use App\Http\Controllers\Controller;
@@ -11,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as BaseResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -87,6 +90,44 @@ class ReportController extends Controller
             }
             fclose($out);
         }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * E-49: the same report as CSV, Excel or a branded PDF (filters listed, chart of the first number).
+     */
+    public function export(Request $request, string $format, ReportExporter $exporter): BaseResponse
+    {
+        abort_unless(in_array($format, ReportExporter::FORMATS, true), 404);
+        /** @var User $user */
+        $user = $request->user();
+        $filters = ReportFilters::fromRequest($request, $user);
+        [$report, $group] = $this->choice($request);
+        $result = $this->reports->run($report, $filters, $group);
+
+        $labels = ['Period' => $filters->from->toDateString().' to '.$filters->to->toDateString()];
+        if ($filters->workspaceId !== null) {
+            $labels['Client'] = (string) DB::table('workspaces')->where('id', $filters->workspaceId)->value('name');
+        }
+        if ($filters->departmentId !== null) {
+            $labels['Department'] = (string) DB::table('departments')->where('id', $filters->departmentId)->value('name');
+        }
+        if ($filters->projectId !== null) {
+            $labels['Project'] = (string) DB::table('projects')->where('id', $filters->projectId)->value('name');
+        }
+        if ($report === 'time') {
+            $labels['Grouped by'] = ReportService::TIME_GROUPS[$group];
+        }
+
+        $columns = $result['columns'];
+        $chart = collect($columns)->first(fn ($c) => in_array($c['type'], ['number', 'hours', 'days'], true));
+
+        return $exporter->respond(new ExportTable(
+            ReportService::REPORTS[$report],
+            $labels,
+            $columns,
+            $result['rows'],
+            $chart['key'] ?? null,
+        ), $format);
     }
 
     /**

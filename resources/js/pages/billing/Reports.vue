@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive } from 'vue';
 import BillingNav from '@/components/billing/BillingNav.vue';
 import Heading from '@/components/Heading.vue';
+import ExportMenu from '@/components/reports/ExportMenu.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -16,7 +17,7 @@ import { formatDate, formatMinutes } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
 import { show as invoiceShow } from '@/routes/billing/invoices';
 import { index as invoicesIndex } from '@/routes/billing/invoices';
-import { index } from '@/routes/billing/reports';
+import { download, index } from '@/routes/billing/reports';
 
 const props = defineProps<{
     filters: { from: string; to: string; month: string };
@@ -76,7 +77,33 @@ const props = defineProps<{
         missing_rates: string[];
     };
     base: string;
+    budgets: {
+        client: string;
+        project: string;
+        currency: string;
+        budget_hours: number | null;
+        used_hours: number;
+        hours_pct: number | null;
+        budget_minor: number | null;
+        used_minor: number;
+        amount_pct: number | null;
+    }[];
+    exports: Record<string, string>;
 }>();
+
+// E-49 / E-81: every report downloads as Excel, PDF or CSV with the applied filters.
+function exportUrl(report: string): (format: string) => string {
+    return (format) =>
+        download.url({ report, format }, { query: { ...props.filters } });
+}
+
+function burnClass(pct: number | null): string {
+    if ((pct ?? 0) >= 90) {
+        return 'font-medium text-rose-600';
+    }
+
+    return (pct ?? 0) >= 75 ? 'text-amber-600' : '';
+}
 
 // E-107: one PHP total across currencies, at the invoices' locked rates.
 const revenuePhp = computed(() =>
@@ -139,6 +166,16 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
             /></label>
             <Button size="sm" type="submit">Apply</Button>
         </form>
+
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="text-xs text-muted-foreground">Download:</span>
+            <ExportMenu
+                v-for="(title, key) in exports"
+                :key="key"
+                :url="exportUrl(String(key))"
+                :label="title"
+            />
+        </div>
 
         <Card>
             <CardHeader>
@@ -530,6 +567,84 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                                               o.unrealised_php_minor,
                                               base,
                                           )
+                                        : '—'
+                                }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Budget vs actual</CardTitle>
+                <CardDescription
+                    >Open projects with a budget. Hours are all time logged; the
+                    amount is billable time at the client's rates plus billable
+                    expenses, in the client's currency. Amber from 75%, red from
+                    90%.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="overflow-x-auto">
+                <p
+                    v-if="budgets.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No project has a budget yet. Set one on the project page.
+                </p>
+                <table v-else class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-muted-foreground">
+                            <th class="py-1.5 font-medium">Client</th>
+                            <th class="py-1.5 font-medium">Project</th>
+                            <th class="py-1.5 text-right font-medium">Hours</th>
+                            <th class="py-1.5 text-right font-medium">Used</th>
+                            <th class="py-1.5 text-right font-medium">
+                                Amount
+                            </th>
+                            <th class="py-1.5 text-right font-medium">Used</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="b in budgets"
+                            :key="`${b.client}-${b.project}`"
+                            class="border-t"
+                        >
+                            <td class="py-1.5">{{ b.client }}</td>
+                            <td class="py-1.5">{{ b.project }}</td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                <template v-if="b.budget_hours !== null"
+                                    >{{ b.used_hours }} /
+                                    {{ b.budget_hours }} h</template
+                                ><template v-else>—</template>
+                            </td>
+                            <td
+                                class="py-1.5 text-right tabular-nums"
+                                :class="burnClass(b.hours_pct)"
+                            >
+                                {{
+                                    b.hours_pct !== null
+                                        ? `${b.hours_pct}%`
+                                        : '—'
+                                }}
+                            </td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                <template v-if="b.budget_minor !== null"
+                                    >{{ formatMoney(b.used_minor, b.currency) }}
+                                    /
+                                    {{
+                                        formatMoney(b.budget_minor, b.currency)
+                                    }}</template
+                                ><template v-else>—</template>
+                            </td>
+                            <td
+                                class="py-1.5 text-right tabular-nums"
+                                :class="burnClass(b.amount_pct)"
+                            >
+                                {{
+                                    b.amount_pct !== null
+                                        ? `${b.amount_pct}%`
                                         : '—'
                                 }}
                             </td>

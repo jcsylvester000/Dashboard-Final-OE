@@ -2,10 +2,12 @@
 
 namespace App\Domain\Billing;
 
+use App\Domain\Budgets\BudgetService;
 use App\Models\BillingProfile;
 use App\Models\Invoice;
 use App\Models\InvoiceItemSource;
 use App\Models\Payment;
+use App\Models\Project;
 use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -291,5 +293,65 @@ class BillingReports
             });
 
         return $out;
+    }
+
+    /**
+     * E-49 / E-81: open invoices one per row, with days overdue, bucket and PHP equivalent.
+     *
+     * @return list<array{client: string, number: string, currency: string, issue_date: string|null, due_date: string|null, days_overdue: int, bucket: string, balance_minor: int, balance_php_minor: int|null}>
+     */
+    public function agingRows(): array
+    {
+        $labels = ['current' => 'Current', '1_30' => '1-30 days', '31_60' => '31-60 days', '61_90' => '61-90 days', '90_plus' => '90+ days'];
+        $today = now()->toImmutable()->startOfDay();
+        $rows = [];
+        Invoice::query()->with('workspace:id,name')->where('kind', 'invoice')
+            ->whereIn('status', [Invoice::FINALIZED, Invoice::PARTIALLY_PAID])->whereHas('workspace')
+            ->orderBy('due_date')->get()
+            ->each(function (Invoice $i) use (&$rows, $today, $labels) {
+                $balance = $i->balanceMinor();
+                if ($balance <= 0) {
+                    return;
+                }
+                $days = $i->due_date !== null ? (int) $i->due_date->startOfDay()->diffInDays($today, false) : 0;
+                $bucket = match (true) {
+                    $days <= 0 => 'current',
+                    $days <= 30 => '1_30',
+                    $days <= 60 => '31_60',
+                    $days <= 90 => '61_90',
+                    default => '90_plus',
+                };
+                $rows[] = ['client' => $i->workspace->name ?? 'Deleted client', 'number' => $i->displayNumber(), 'currency' => $i->currency,
+                    'issue_date' => $i->issue_date?->toDateString(), 'due_date' => $i->due_date?->toDateString(),
+                    'days_overdue' => max(0, $days), 'bucket' => $labels[$bucket], 'balance_minor' => $balance,
+                    'balance_php_minor' => FxRates::toPhp($balance, $i->php_rate !== null ? (string) $i->php_rate : ($i->currency === FxRates::BASE ? '1' : null))];
+            });
+
+        return $rows;
+    }
+
+    /**
+     * E-76: budget vs actual for every open project with a budget (amounts in the budget's currency).
+     *
+     * @return list<array{client: string, project: string, currency: string, budget_hours: float|null, used_hours: float, hours_pct: int|null, budget_minor: int|null, used_minor: int, amount_pct: int|null}>
+     */
+    public function budgets(): array
+    {
+        $budgets = app(BudgetService::class);
+        $rows = [];
+        Project::query()->with('workspace:id,name')
+            ->where(fn ($q) => $q->whereNotNull('budget_minutes')->orWhereNotNull('budget_minor'))
+            ->where('status', '!=', 'archived')->whereHas('workspace')
+            ->orderBy('name')->get()
+            ->each(function (Project $p) use (&$rows, $budgets) {
+                $b = $budgets->burn($p);
+                $rows[] = ['client' => $p->workspace->name, 'project' => $p->name, 'currency' => $b['currency'],
+                    'budget_hours' => $b['minutes_budget'] !== null ? round($b['minutes_budget'] / 60, 2) : null,
+                    'used_hours' => round($b['minutes_used'] / 60, 2), 'hours_pct' => $b['hours_pct'],
+                    'budget_minor' => $b['amount_budget'], 'used_minor' => $b['amount_used'], 'amount_pct' => $b['amount_pct']];
+            });
+        usort($rows, fn (array $a, array $b) => max($b['hours_pct'] ?? 0, $b['amount_pct'] ?? 0) <=> max($a['hours_pct'] ?? 0, $a['amount_pct'] ?? 0));
+
+        return $rows;
     }
 }

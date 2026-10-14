@@ -39,6 +39,7 @@ Schedule::command('users:expire-access')->dailyAt('06:10')->timezone('Asia/Manil
 Schedule::command('holidays:remind')->monthlyOn(1, '09:00')->timezone('Asia/Manila');
 Schedule::command('health:check')->everyFiveMinutes()->withoutOverlapping();
 Schedule::call(fn () => Cache::put('health:scheduler-heartbeat', now()->toIso8601String(), now()->addDay()))->everyMinute()->name('health-heartbeat');
+Schedule::command('budgets:check')->hourlyAt(20)->withoutOverlapping(); // E-76
 Schedule::command('billing:periods')->dailyAt('06:00')->timezone('Asia/Manila')->withoutOverlapping();
 
 // E-33: overdue reviews (reminder, then escalation); E-39: timesheet nudges (Manila time).

@@ -31,6 +31,8 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
     Route::get('clients/{workspace:slug}/statement', [StatementController::class, 'pdf'])->name('clients.statement');
     Route::get('expenses/{expense}/receipt', [ExpenseController::class, 'receipt'])->name('expenses.receipt');
     Route::get('reports', BillingReportController::class)->name('reports.index');
+    Route::get('reports/download/{report}/{format}', [BillingReportController::class, 'export'])
+        ->whereIn('report', array_keys(BillingReportController::EXPORTS))->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('reports.download'); // E-81
     Route::get('rates', [RateCardController::class, 'index'])->name('rates.index');
     Route::get('rates/history', [RateCardController::class, 'history'])->name('rates.history');
     Route::get('rate-templates/{rateTemplate}', [RateTemplateController::class, 'edit'])->name('rate-templates.edit');

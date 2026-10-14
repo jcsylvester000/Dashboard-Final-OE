@@ -52,6 +52,8 @@ export type ProjectRow = {
     members: number;
     tasks_total: number;
     tasks_done: number;
+    /** E-76: hours budget used, % (leads and Finance; null when no budget). */
+    budget_hours_pct?: number | null;
     labels: LabelOption[];
     start_on: string | null;
     due_on: string | null;
@@ -98,4 +100,18 @@ export type LinkRow = ReferenceItem & {
     direction: 'outgoing' | 'incoming';
     relation?: string;
     relation_label?: string;
+};
+
+/** E-76 / E-110: project budget as this person may see it (amounts only for Finance). */
+export type ProjectBudget = {
+    can_edit_hours: boolean;
+    can_edit_amount: boolean;
+    minutes_budget: number | null;
+    minutes_used: number;
+    hours_pct: number | null;
+    currency?: string;
+    amount_budget?: number | null;
+    amount_used?: number;
+    amount_pct?: number | null;
+    unpriced_minutes?: number;
 };

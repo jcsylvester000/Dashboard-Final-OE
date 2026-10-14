@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import { formatMinutes } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
-import { csv, index, pdf } from '@/routes/workspaces/work-summary';
+import { csv, index, pdf, xlsx } from '@/routes/workspaces/work-summary';
 import type { WorkspaceHeader as Header } from '@/types/workspace';
 
 type Person = { name: string; minutes: number };
@@ -115,6 +115,11 @@ function apply(): void {
             </label>
             <Button size="sm" type="submit">Apply</Button>
             <span class="ml-auto flex gap-2">
+                <Button size="sm" variant="outline" as-child>
+                    <a :href="xlsx.url(workspace.slug, { query })"
+                        ><Download class="size-4" /> Excel</a
+                    >
+                </Button>
                 <Button size="sm" variant="outline" as-child>
                     <a :href="csv.url(workspace.slug, { query })"
                         ><Download class="size-4" /> CSV</a

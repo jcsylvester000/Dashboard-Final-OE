@@ -7,6 +7,7 @@ import LabelBadge from '@/components/LabelBadge.vue';
 import MentionText from '@/components/MentionText.vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import AttachmentsPanel from '@/components/files/AttachmentsPanel.vue';
+import ProjectBudgetCard from '@/components/projects/ProjectBudgetCard.vue';
 import ReferencePanel from '@/components/ReferencePanel.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +44,7 @@ import type {
     LabelOption,
     LinkRow,
     MemberOption,
+    ProjectBudget,
     ProjectDetail,
     WorkspaceHeader as Header,
 } from '@/types/workspace';
@@ -52,6 +54,7 @@ const props = defineProps<{
     workspace: Header;
     project: ProjectDetail;
     links: LinkRow[];
+    budget: ProjectBudget | null;
     types: Record<string, string>;
     statuses: Record<string, string>;
     labels: LabelOption[];
@@ -446,6 +449,14 @@ async function destroy(): Promise<void> {
                 </CardContent>
             </Card>
         </div>
+
+        <!-- E-76: budget and burn (leads and Finance only) -->
+        <ProjectBudgetCard
+            v-if="!editing && budget"
+            :budget="budget"
+            :workspace-slug="workspace.slug"
+            :project-id="project.id"
+        />
 
         <!-- Progress + tasks -->
         <Card v-if="!editing">

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Workspaces;
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\WorkReport;
 use App\Domain\Billing\WorkSummaryAccess;
+use App\Domain\Exports\ExportTable;
+use App\Domain\Exports\ReportExporter;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Reports\ReportController;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as BaseResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -66,6 +69,38 @@ class WorkSummaryController extends Controller
             }
             fclose($out);
         }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * E-49: the work summary as an Excel sheet (one row per task and person, hours totalled).
+     */
+    public function xlsx(Request $request, Workspace $workspace, ReportExporter $exporter): BaseResponse
+    {
+        [$from, $to, $dept] = $this->filters($request, $workspace);
+        $summary = $this->report->forPeriod($workspace->id, $from, $to, $dept);
+        $rows = [];
+        foreach ($summary['tasks'] as $task) {
+            $d = (array) $task['work_details'];
+            foreach ($task['people'] as $person) {
+                $rows[] = [
+                    'task' => $task['title'], 'department' => $task['department'], 'status' => $task['status'] ?? '', 'person' => $person['name'],
+                    'hours' => round($person['minutes'] / 60, 2), 'campaign' => $d['campaign'] ?? '', 'channel' => $d['channel'] ?? '',
+                    'deliverable' => $d['deliverable_type'] ?? '', 'url' => $d['target_url'] ?? '', 'keyword' => $d['keyword'] ?? '', 'seo' => $d['work_type'] ?? '',
+                ];
+            }
+        }
+        $filters = ['Client' => $workspace->name, 'Period' => $from->toDateString().' to '.$to->toDateString()];
+        if ($dept !== null) {
+            $filters['Department'] = (string) DB::table('departments')->where('slug', $dept)->value('name');
+        }
+        $text = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'text'];
+
+        return $exporter->respond(new ExportTable('Work summary', $filters, [
+            $text('task', 'Task'), $text('department', 'Department'), $text('status', 'Status'), $text('person', 'Person'),
+            ['key' => 'hours', 'label' => 'Hours', 'type' => 'hours'],
+            $text('campaign', 'Campaign'), $text('channel', 'Channel'), $text('deliverable', 'Deliverable'),
+            $text('url', 'Target URL'), $text('keyword', 'Keyword'), $text('seo', 'SEO work type'),
+        ], $rows), 'xlsx');
     }
 
     public function pdf(Request $request, Workspace $workspace, InvoicePdf $pdf): HttpResponse

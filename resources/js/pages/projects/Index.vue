@@ -262,6 +262,19 @@ watch(form, apply);
                             <span v-else class="text-xs text-muted-foreground"
                                 >No tasks yet</span
                             >
+                            <span
+                                v-if="p.budget_hours_pct != null"
+                                class="mt-1 block text-xs tabular-nums"
+                                :class="
+                                    p.budget_hours_pct >= 90
+                                        ? 'font-medium text-rose-600'
+                                        : p.budget_hours_pct >= 75
+                                          ? 'text-amber-600'
+                                          : 'text-muted-foreground'
+                                "
+                                :title="`${p.budget_hours_pct}% of the hours budget used`"
+                                >Budget {{ p.budget_hours_pct }}% used</span
+                            >
                         </td>
                         <td class="px-4 py-2">
                             {{ p.lead ?? '—' }}

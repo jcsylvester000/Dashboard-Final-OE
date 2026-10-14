@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Workspaces;
 
+use App\Domain\Budgets\BudgetService;
 use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Identity\Permissions;
 use App\Domain\Work\TaskPresenter;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\MentionService;
+use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Workspaces\SaveProjectRequest;
@@ -67,7 +70,11 @@ class ProjectController extends Controller
             ->orderByRaw('due_on is null, due_on asc')
             ->orderBy('name')
             ->paginate(25)
-            ->withQueryString()
+            ->withQueryString();
+        // E-76: hours burn for leads and Finance (one grouped query for the page).
+        $seeBudget = $user->can(Permissions::BILLING_VIEW) || app(WorkspaceAccess::class)->canLead($user, $workspace);
+        $used = $seeBudget ? app(BudgetService::class)->minutesFor($projects->getCollection()->pluck('id')->map(fn ($id) => (int) $id)->values()->all()) : [];
+        $projects = $projects
             ->through(fn (Project $p): array => [
                 'id' => $p->id,
                 'name' => $p->name,
@@ -80,6 +87,7 @@ class ProjectController extends Controller
                 'labels' => $p->labels->map(fn (Label $l) => ['id' => $l->id, 'name' => $l->name, 'color' => $l->color])->values(),
                 'start_on' => $p->start_on?->toDateString(),
                 'due_on' => $p->due_on?->toDateString(),
+                'budget_hours_pct' => $seeBudget ? BudgetService::pct($used[$p->id] ?? 0, $p->budget_minutes) : null,
             ]);
 
         return Inertia::render('projects/Index', [
@@ -160,6 +168,8 @@ class ProjectController extends Controller
                 'created_at' => $project->created_at?->toIso8601String(),
                 'updated_at' => $project->updated_at?->toIso8601String(),
             ],
+            // E-76: budget and burn (leads: hours; Finance: hours and amount; members: nothing).
+            'budget' => app(BudgetService::class)->present($project, $user, $workspace),
             'links' => $links->linksFor($project, $user),
             'types' => Project::TYPES,
             'statuses' => Project::STATUSES,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Workspaces\LabelController;
+use App\Http\Controllers\Workspaces\ProjectBudgetController;
 use App\Http\Controllers\Workspaces\ProjectController;
 use App\Http\Controllers\Workspaces\RecordLinkController;
 use App\Http\Controllers\Workspaces\TaskFieldsController;
@@ -44,6 +45,7 @@ Route::middleware('auth')->group(function () {
             Route::post('projects/{project}/status-link', [ProjectController::class, 'statusLink'])->name('projects.status-link');
             Route::put('projects/{project}/status-detail', [ProjectController::class, 'statusDetail'])->name('projects.status-detail');
             Route::delete('projects/{project}/status-link', [ProjectController::class, 'disableStatusLink'])->name('projects.status-link.destroy');
+            Route::put('projects/{project}/budget', [ProjectBudgetController::class, 'update'])->name('projects.budget'); // E-76
         });
     });
 

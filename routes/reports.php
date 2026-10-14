@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->group(function () {
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('reports/csv', [ReportController::class, 'csv'])->name('reports.csv');
+    Route::get('reports/download/{format}', [ReportController::class, 'export'])->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('reports.download'); // E-49
 
     Route::get('reports/agency', AgencyController::class)
         ->middleware('can:'.Permissions::REPORTS_VIEW_ALL)
@@ -24,5 +25,6 @@ Route::middleware('auth')->group(function () {
     // Work Summary (P6-15): who worked on what, by task; CSV / PDF export.
     Route::get('w/{workspace:slug}/work-summary', [WorkSummaryController::class, 'index'])->name('workspaces.work-summary.index');
     Route::get('w/{workspace:slug}/work-summary/csv', [WorkSummaryController::class, 'csv'])->name('workspaces.work-summary.csv');
+    Route::get('w/{workspace:slug}/work-summary/xlsx', [WorkSummaryController::class, 'xlsx'])->name('workspaces.work-summary.xlsx'); // E-49
     Route::get('w/{workspace:slug}/work-summary/pdf', [WorkSummaryController::class, 'pdf'])->name('workspaces.work-summary.pdf');
 });
