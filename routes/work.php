@@ -9,8 +9,10 @@ use App\Http\Controllers\People\WorkloadController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Work\CalendarController;
 use App\Http\Controllers\Work\ChecklistController;
+use App\Http\Controllers\Work\CitationController;
 use App\Http\Controllers\Work\CommentController;
 use App\Http\Controllers\Work\QueueController;
+use App\Http\Controllers\Work\ReleaseNotesController;
 use App\Http\Controllers\Work\ReviewQueueController;
 use App\Http\Controllers\Work\SavedViewController;
 use App\Http\Controllers\Work\SprintController;
@@ -82,6 +84,13 @@ Route::middleware('auth')->group(function () {
             Route::post('sprints/{sprint}/start', [SprintController::class, 'start'])->name('sprints.start');
             Route::post('sprints/{sprint}/close', [SprintController::class, 'close'])->name('sprints.close');
             Route::delete('sprints/{sprint}', [SprintController::class, 'destroy'])->name('sprints.destroy');
+            // E-27: release notes.
+            Route::get('sprints/{sprint}/release-notes', [ReleaseNotesController::class, 'show'])->name('sprints.release-notes');
+            Route::put('sprints/{sprint}/release-notes', [ReleaseNotesController::class, 'update'])->name('sprints.release-notes.update');
+            Route::post('sprints/{sprint}/release-notes/redraft', [ReleaseNotesController::class, 'redraft'])->name('sprints.release-notes.redraft');
+            Route::get('sprints/{sprint}/release-notes/pdf', [ReleaseNotesController::class, 'pdf'])->name('sprints.release-notes.pdf');
+            Route::post('sprints/{sprint}/release-notes/share', [ReleaseNotesController::class, 'share'])->name('sprints.release-notes.share');
+            Route::delete('sprints/{sprint}/release-notes/share', [ReleaseNotesController::class, 'unshare'])->name('sprints.release-notes.unshare');
             Route::get('tasks/{task}', [TaskController::class, 'show'])->name('tasks.show');
             Route::put('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
             Route::patch('tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
@@ -98,6 +107,8 @@ Route::middleware('auth')->group(function () {
             Route::post('tasks/{task}/dependencies', [TaskFlowController::class, 'addDependency'])->name('tasks.dependencies.store');
             Route::post('tasks/{task}/comments', [CommentController::class, 'store'])->name('tasks.comments.store');
             Route::post('tasks/{task}/mute', [TaskMuteController::class, 'store'])->name('tasks.mute'); // E-58
+            Route::post('tasks/{task}/citations', [CitationController::class, 'store'])->middleware('throttle:30,1')->name('tasks.citations.store'); // E-29
+            Route::delete('tasks/{task}/citations/{citation}', [CitationController::class, 'destroy'])->name('tasks.citations.destroy');
             Route::delete('tasks/{task}/mute', [TaskMuteController::class, 'destroy'])->name('tasks.unmute');
             Route::put('comments/{comment}', [CommentController::class, 'update'])->name('comments.update');
             Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');

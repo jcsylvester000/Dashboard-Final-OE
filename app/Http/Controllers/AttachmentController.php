@@ -23,8 +23,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -35,6 +37,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class AttachmentController extends Controller
 {
+    /** E-23: the viewer reads at most this many bytes of a text file. */
+    public const TEXT_LIMIT = 2 * 1024 * 1024;
+
     public const TYPES = ['task' => Task::class, 'project' => Project::class, 'comment' => Comment::class, 'workspace' => Workspace::class];
 
     public function __construct(private readonly AttachmentService $files) {}
@@ -85,12 +90,17 @@ class AttachmentController extends Controller
     /**
      * GET /files/{attachment}?download=1&thumb=1 - signed URL + signed-in member who can open the workspace.
      */
-    public function show(Request $request, Attachment $attachment, WorkspaceAccess $access, FileStore $store, UploadThingClient $uploadThing): StreamedResponse|RedirectResponse
+    public function show(Request $request, Attachment $attachment, WorkspaceAccess $access, FileStore $store, UploadThingClient $uploadThing): StreamedResponse|RedirectResponse|Response
     {
         /** @var User $user */
         $user = $request->user();
         $workspace = Workspace::query()->find($attachment->workspace_id);
         abort_unless($workspace !== null && $access->canView($user, $workspace), 403);
+
+        // E-23: text files as same-origin plain text for the log viewer (first 2 MB).
+        if ($request->boolean('text') && $attachment->isText()) {
+            return $this->text($attachment, $store, $uploadThing);
+        }
 
         // Thumbnails always live on the local disk, whatever stored the original.
         if ($request->boolean('thumb') && $attachment->thumbnail_key !== null) {
@@ -114,6 +124,37 @@ class AttachmentController extends Controller
             $attachment->mime,
             ! $request->boolean('download') && $attachment->previewable(),
         );
+    }
+
+    private function text(Attachment $attachment, FileStore $store, UploadThingClient $uploadThing): Response
+    {
+        $limit = self::TEXT_LIMIT;
+        if ($attachment->disk === 'uploadthing') {
+            try {
+                $body = Http::connectTimeout(5)->timeout(15)
+                    ->withHeaders(['Range' => 'bytes=0-'.($limit - 1)])
+                    ->get($uploadThing->fileUrl($attachment->key, 60))
+                    ->throw()->body();
+            } catch (\Throwable) {
+                abort(502, __('Could not read the file from storage.'));
+            }
+        } else {
+            $body = $store->contents($attachment->key);
+            if ($body === null) {
+                abort(404);
+            }
+        }
+        $truncated = strlen($body) > $limit || $attachment->size > $limit;
+        $body = substr($body, 0, $limit);
+        // Never let a partial multibyte character break the page.
+        $body = mb_scrub($body, 'UTF-8');
+
+        return response($body, 200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, max-age=300',
+            'X-Truncated' => $truncated ? '1' : '0',
+        ]);
     }
 
     public function destroy(Request $request, Attachment $attachment): RedirectResponse

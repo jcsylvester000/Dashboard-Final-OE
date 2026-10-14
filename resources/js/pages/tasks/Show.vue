@@ -36,6 +36,7 @@ import { Label } from '@/components/ui/label';
 import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import BugReportCard from '@/components/work/BugReportCard.vue';
 import ChecklistCard from '@/components/work/ChecklistCard.vue';
+import CitationsCard from '@/components/work/CitationsCard.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
 import ReviewersCard from '@/components/work/ReviewersCard.vue';
@@ -845,6 +846,13 @@ function describe(entry: TimelineEntry): string {
                     :workspace-slug="ws"
                     :task-id="task.id"
                     :items="task.checklist_items ?? []"
+                    :can-edit="can"
+                />
+
+                <CitationsCard
+                    :workspace-slug="ws"
+                    :task-id="task.id"
+                    :citations="task.citations ?? []"
                     :can-edit="can"
                 />
 

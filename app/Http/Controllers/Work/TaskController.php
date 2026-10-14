@@ -23,6 +23,7 @@ use App\Models\RecordLink;
 use App\Models\SavedView;
 use App\Models\Task;
 use App\Models\TaskChecklistItem;
+use App\Models\TaskCitation;
 use App\Models\TaskReviewer;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -287,6 +288,11 @@ class TaskController extends Controller
                 'watching' => $task->watchers->contains('id', $user->id),
                 // E-58: alerts about this task snoozed by me until (ISO), if any.
                 'muted_until' => app(QuietHours::class)->mutedUntil($user, $task->id)?->toIso8601String(),
+                // E-29: sources.
+                'citations' => $task->citations()->get()->map(fn (TaskCitation $c): array => [
+                    'id' => $c->id, 'url' => $c->url, 'title' => $c->title, 'site' => $c->site,
+                    'accessed_at' => $c->accessed_at->toIso8601String(), 'archive_url' => $c->archiveUrl(),
+                ])->values(),
                 'comments' => $task->comments->map(fn (Comment $c) => [
                     'id' => $c->id,
                     'body' => $c->body,

@@ -62,6 +62,8 @@ class SprintService
                 'closed_at' => now(),
                 'completed_points' => $completed,
                 'carried_over' => $carried,
+                // E-27: a first draft of the release notes, from what got done.
+                'release_notes' => $sprint->release_notes ?? $this->draftReleaseNotes($sprint),
             ])->save();
 
             $this->activity->log('sprint.closed', $sprint, [
@@ -72,6 +74,43 @@ class SprintService
 
             return $sprint;
         });
+    }
+
+    /**
+     * E-27: release notes from the sprint's Done tasks, grouped (new, fixed, other), as Markdown
+     * the lead can edit before sharing.
+     */
+    public function draftReleaseNotes(Sprint $sprint): string
+    {
+        $tasks = $sprint->tasks()->getQuery()->with('workspace:id,key')->whereNotNull('completed_at')->whereNull('parent_id')
+            ->orderBy('completed_at')->get();
+        $groups = ['New and improved' => [], 'Fixed' => [], 'Other work' => []];
+        foreach ($tasks as $task) {
+            $group = match ($task->type) {
+                'bug' => 'Fixed',
+                'story', 'task' => 'New and improved',
+                default => 'Other work',
+            };
+            $groups[$group][] = '- '.$task->title.' ('.$task->keyLabel().')';
+        }
+
+        $lines = ['# '.$sprint->name.' release notes', ''];
+        if ($sprint->goal !== null && $sprint->goal !== '') {
+            $lines[] = 'Goal: '.$sprint->goal;
+            $lines[] = '';
+        }
+        foreach ($groups as $title => $items) {
+            if ($items !== []) {
+                $lines[] = '## '.$title;
+                array_push($lines, ...$items);
+                $lines[] = '';
+            }
+        }
+        if ($tasks->isEmpty()) {
+            $lines[] = 'No tasks were finished in this sprint.';
+        }
+
+        return rtrim(implode("\n", $lines))."\n";
     }
 
     /**

@@ -5,6 +5,7 @@ use App\Http\Controllers\ClientReviewController;
 use App\Http\Controllers\DriveController;
 use App\Http\Controllers\ProjectStatusController;
 use App\Http\Controllers\ShareController;
+use App\Http\Controllers\Work\ReleaseNotesController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,6 +37,8 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('st/{token}/pdf', [ClientDocumentController::class, 'statementPdf'])->name('statement-link.pdf');
     // E-08: client review of one file version.
     Route::get('r/{token}', [ClientReviewController::class, 'show'])->name('client-review.show');
+    // E-27: shared sprint release notes.
+    Route::get('rn/{token}', [ReleaseNotesController::class, 'shared'])->name('release-notes.shared');
     Route::get('r/{token}/file', [ClientReviewController::class, 'file'])->name('client-review.file');
     Route::post('r/{token}/name', [ClientReviewController::class, 'setName'])->name('client-review.name');
     Route::post('r/{token}/comments', [ClientReviewController::class, 'comment'])->middleware('throttle:20,1')->name('client-review.comment');

@@ -95,6 +95,14 @@ class Attachment extends Model
         return $this->isImage() || $this->mime === 'application/pdf' || str_starts_with($this->mime, 'video/');
     }
 
+    /** E-23: plain-text files (logs, JSON, CSV, Markdown) open in the text viewer. */
+    public function isText(): bool
+    {
+        $ext = strtolower(pathinfo($this->original_name, PATHINFO_EXTENSION));
+
+        return in_array($ext, ['txt', 'log', 'json', 'csv', 'md'], true);
+    }
+
     /** The id shared by every version of this file. */
     public function stackId(): int
     {

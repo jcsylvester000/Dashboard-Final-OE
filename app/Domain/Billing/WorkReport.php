@@ -5,6 +5,7 @@ namespace App\Domain\Billing;
 use App\Models\Invoice;
 use App\Models\InvoiceItemSource;
 use App\Models\Task;
+use App\Models\TaskCitation;
 use App\Models\TaskStatus;
 use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
@@ -18,7 +19,7 @@ use Carbon\CarbonImmutable;
 class WorkReport
 {
     /**
-     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>}
+     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>, sources: list<array{task: string, url: string, title: string|null, site: string|null, accessed_on: string}>}
      */
     public function build(Invoice $invoice): array
     {
@@ -39,7 +40,7 @@ class WorkReport
      * Work Summary for any date range (P6-15/16): every finished time entry in the range,
      * billable or not, organised the same way as the invoice work report.
      *
-     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>}
+     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>, sources: list<array{task: string, url: string, title: string|null, site: string|null, accessed_on: string}>}
      */
     public function forPeriod(int $workspaceId, CarbonImmutable $from, CarbonImmutable $to, ?string $departmentSlug = null): array
     {
@@ -58,7 +59,7 @@ class WorkReport
 
     /**
      * @param  array<int, int>  $minutesByEntry  time entry id => minutes to count
-     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>}
+     * @return array{total_minutes: int, tasks: list<array<string, mixed>>, departments: list<array<string, mixed>>, marketing: list<array<string, mixed>>, seo: list<array<string, mixed>>, completed_without_time: list<array<string, mixed>>, sources: list<array{task: string, url: string, title: string|null, site: string|null, accessed_on: string}>}
      */
     private function fromEntries(array $minutesByEntry, int $workspaceId, ?CarbonImmutable $from, ?CarbonImmutable $to): array
     {
@@ -133,6 +134,11 @@ class WorkReport
             'marketing' => $section('marketing', array_keys(Task::WORK_DETAIL_FIELDS['marketing'])),
             'seo' => $section('seo', array_keys(Task::WORK_DETAIL_FIELDS['seo'])),
             'completed_without_time' => $this->completedWithoutTime($workspaceId, $from, $to, array_filter(array_column($taskRows, 'id'))),
+            // E-29: sources captured on these tasks.
+            'sources' => TaskCitation::query()->with('task:id,title')
+                ->whereIn('task_id', array_values(array_filter(array_column($taskRows, 'id'))))->orderBy('task_id')->orderBy('id')->get()
+                ->map(fn (TaskCitation $c): array => ['task' => $c->task->title ?? '', 'url' => $c->url, 'title' => $c->title, 'site' => $c->site, 'accessed_on' => $c->accessed_at->toDateString()])
+                ->values()->all(),
         ];
     }
 

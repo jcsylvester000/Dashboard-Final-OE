@@ -30,6 +30,23 @@
     </tr>
 </table>
 
+@if (count($report['departments']) > 1)
+    {{-- E-50: hours by department as a bar chart (same numbers as the table below). --}}
+    @php($maxDept = max(1, ...array_map(fn ($d) => $d['minutes'], $report['departments'])))
+    <table class="keep" style="margin-bottom: 6px">
+        <thead><tr><th colspan="3" class="section">Hours by department</th></tr></thead>
+        <tbody>
+            @foreach ($report['departments'] as $dept)
+                <tr>
+                    <td style="width: 26%; border: none">{{ $dept['name'] }}</td>
+                    <td style="border: none"><div style="height: 10px; width: {{ max(0.5, round($dept['minutes'] / $maxDept * 100, 1)) }}%; background: {{ $company['brand_color'] ?? '#2563eb' }}"></div></td>
+                    <td class="right" style="width: 12%; border: none">{{ $hours($dept['minutes']) }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
 @if (count($report['departments']))
     <table>
         <thead><tr><th colspan="3" class="section">Hours by department and person</th></tr><tr><th>Department</th><th>Who</th><th class="right" style="width: 15%">Hours</th></tr></thead>
@@ -112,5 +129,21 @@
 @if ($report['total_minutes'] === 0 && ! count($report['completed_without_time']))
     <p class="muted" style="margin-top: 20px">No billed time or completed tasks in this period.</p>
 @endif
+@if (count($report['sources'] ?? []))
+    {{-- E-29: sources captured on the tasks in this report. --}}
+    <table>
+        <thead><tr><th colspan="3" class="section">Sources</th></tr><tr><th style="width: 28%">Task</th><th>Source</th><th style="width: 14%">Read on</th></tr></thead>
+        <tbody>
+            @foreach ($report['sources'] as $source)
+                <tr>
+                    <td>{{ $source['task'] }}</td>
+                    <td>{{ $source['title'] ?? $source['url'] }}@if ($source['site'])<span class="muted"> · {{ $source['site'] }}</span>@endif<div class="muted small">{{ $source['url'] }}</div></td>
+                    <td>{{ \Carbon\CarbonImmutable::parse($source['accessed_on'])->format('M j, Y') }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
 </body>
 </html>

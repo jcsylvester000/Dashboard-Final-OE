@@ -19,7 +19,13 @@ import TaskMeta from '@/components/work/TaskMeta.vue';
 import { confirmDialog } from '@/composables/useConfirm';
 import { addDays, formatDate, localToday } from '@/lib/format';
 import { index as workspacesIndex } from '@/routes/workspaces';
-import { close, destroy, start, store } from '@/routes/workspaces/sprints';
+import {
+    close,
+    destroy,
+    releaseNotes,
+    start,
+    store,
+} from '@/routes/workspaces/sprints';
 import { show, update as updateTask } from '@/routes/workspaces/tasks';
 import type { TaskRow } from '@/types/work';
 import type { WorkspaceHeader as Header } from '@/types/workspace';
@@ -660,7 +666,20 @@ const daysLeft = (end: string) =>
                     </thead>
                     <tbody>
                         <tr v-for="s in closed" :key="s.id" class="border-t">
-                            <td class="py-1.5">{{ s.name }}</td>
+                            <td class="py-1.5">
+                                {{ s.name }}
+                                <!-- E-27 -->
+                                <Link
+                                    :href="
+                                        releaseNotes.url({
+                                            workspace: ws,
+                                            sprint: s.id,
+                                        })
+                                    "
+                                    class="ml-2 text-xs underline"
+                                    >Release notes</Link
+                                >
+                            </td>
                             <td class="py-1.5 text-muted-foreground">
                                 {{ formatDate(s.starts_on) }} –
                                 {{ formatDate(s.ends_on) }}

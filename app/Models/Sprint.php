@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $completed_points
  * @property int|null $carried_over
  * @property int|null $created_by
+ * @property string|null $release_notes E-27: Markdown, drafted at close
+ * @property string|null $release_notes_token E-27: share link
  * @property CarbonInterface|null $created_at
  * @property CarbonInterface|null $updated_at
  */

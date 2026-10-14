@@ -23,7 +23,7 @@ return [
         'images' => ['label' => 'Images (JPG, PNG, WebP, GIF, AVIF)', 'ext' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']],
         'pdf' => ['label' => 'PDF', 'ext' => ['pdf']],
         'office' => ['label' => 'Office (Word, Excel, PowerPoint)', 'ext' => ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']],
-        'text' => ['label' => 'Text and CSV', 'ext' => ['txt', 'csv', 'md']],
+        'text' => ['label' => 'Text, logs, JSON and CSV', 'ext' => ['txt', 'csv', 'md', 'log', 'json']], // E-23: log and JSON viewer
         'archives' => ['label' => 'ZIP archives', 'ext' => ['zip']],
         'video' => ['label' => 'Video (MP4, WebM)', 'ext' => ['mp4', 'webm']],
     ],

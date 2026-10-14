@@ -67,6 +67,7 @@ class AttachmentPresenter
                 'download_url' => $this->files->url($a, download: true),
                 'thumb_url' => $a->thumbnail_key !== null ? $this->files->url($a, thumbnail: true) : null,
                 'previewable' => $a->previewable(),
+                'text_url' => $a->isText() ? $this->files->url($a, text: true) : null,
                 'can_delete' => ! $readOnly && ($a->uploaded_by === $user->id || $canLead),
                 'approved' => $a->approved_at !== null,
                 'approved_by' => $a->approver?->name,

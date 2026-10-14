@@ -164,11 +164,14 @@ class AttachmentService
     /**
      * Signed link that stops working after config('files.link_minutes').
      */
-    public function url(Attachment $attachment, bool $download = false, bool $thumbnail = false): string
+    public function url(Attachment $attachment, bool $download = false, bool $thumbnail = false, bool $text = false): string
     {
         $params = ['attachment' => $attachment->id];
         if ($download) {
             $params['download'] = 1;
+        }
+        if ($text) {
+            $params['text'] = 1; // E-23: same-origin plain text for the log viewer
         }
         $expires = now()->addMinutes((int) config('files.link_minutes', 10));
         if ($thumbnail) {

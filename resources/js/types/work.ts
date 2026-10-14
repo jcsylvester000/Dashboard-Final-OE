@@ -96,6 +96,8 @@ export type TaskDetail = TaskRow & {
         done: boolean;
         done_by: string | null;
     }[];
+    /** E-29: sources pasted on the task (shown in the work report). */
+    citations?: TaskCitation[];
     work_details: Record<string, string | null>;
     custom_values?: Record<string, string | number | boolean | null>;
     estimate_minutes: number | null;
@@ -174,4 +176,14 @@ export type SavedViewRow = {
     shared: boolean;
     owner: string;
     can_delete: boolean;
+};
+
+/** E-29: a link captured as a source, with the date it was read. */
+export type TaskCitation = {
+    id: number;
+    url: string;
+    title: string | null;
+    site: string | null;
+    accessed_at: string;
+    archive_url: string;
 };

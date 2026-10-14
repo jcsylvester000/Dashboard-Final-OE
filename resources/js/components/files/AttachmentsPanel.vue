@@ -42,6 +42,11 @@ import type { AttachmentRow, FileLimits } from '@/types/files';
 const MediaViewer = defineAsyncComponent(
     () => import('@/components/files/MediaViewer.vue'),
 );
+// E-23: logs / JSON / CSV open in the text viewer (also loaded on first open).
+const TextViewer = defineAsyncComponent(
+    () => import('@/components/files/TextViewer.vue'),
+);
+const reading = ref<AttachmentRow | null>(null);
 
 /**
  * Files on a task / project. Links are signed and expire after a few minutes;
@@ -171,6 +176,12 @@ const viewing = ref<number | null>(null);
 const viewerMode = ref<'view' | 'annotate'>('view');
 const viewable = computed(() => props.attachments.filter((a) => a.previewable));
 function open(a: AttachmentRow, e: MouseEvent): void {
+    if (a.text_url && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
+        e.preventDefault();
+        reading.value = a;
+
+        return;
+    }
     if (!a.previewable || e.ctrlKey || e.metaKey || e.shiftKey) {
         return; // let the link open normally
     }
@@ -609,6 +620,13 @@ function size(bytes: number): string {
             :start="viewing"
             :initial-mode="viewerMode"
             @close="viewing = null"
+        />
+        <TextViewer
+            v-if="reading && reading.text_url"
+            :name="reading.name"
+            :url="reading.text_url"
+            :download-url="reading.download_url"
+            @close="reading = null"
         />
     </Teleport>
 </template>

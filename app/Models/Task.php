@@ -262,6 +262,12 @@ class Task extends Model implements Mentionable
         return $this->belongsToMany(User::class, 'task_watchers');
     }
 
+    /** E-29: sources captured on the task. @return HasMany<TaskCitation, $this> */
+    public function citations(): HasMany
+    {
+        return $this->hasMany(TaskCitation::class)->orderBy('id');
+    }
+
     /** @return HasMany<TimeEntry, $this> */
     public function timeEntries(): HasMany
     {

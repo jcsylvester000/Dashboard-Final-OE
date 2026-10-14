@@ -9,6 +9,8 @@ export type AttachmentRow = {
     download_url: string;
     thumb_url: string | null;
     previewable: boolean;
+    /** E-23: same-origin plain-text link for logs, JSON, CSV, Markdown. */
+    text_url?: string | null;
     can_delete: boolean;
     approved: boolean;
     approved_by: string | null;
