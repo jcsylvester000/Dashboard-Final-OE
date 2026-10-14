@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $received_on
  * @property string|null $note
  * @property int|null $recorded_by
+ * @property string|null $recorded_by_name E-86: name as written (survives anonymisation)
  * @property int $fee_minor bank/gateway charges, invoice currency (E-105)
  * @property int $withholding_minor tax withheld by the client
  * @property int|null $received_minor what reached the bank, in received_currency
@@ -29,7 +30,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $reversal_reason
  * @property string|null $php_rate PHP per 1 unit on the payment date (E-104)
  */
-#[Fillable(['invoice_id', 'amount_minor', 'method', 'reference', 'received_on', 'note', 'recorded_by', 'fee_minor', 'withholding_minor', 'received_minor', 'received_currency', 'fx_rate', 'credit_minor', 'php_rate'])]
+#[Fillable(['invoice_id', 'amount_minor', 'method', 'reference', 'received_on', 'note', 'recorded_by', 'fee_minor', 'withholding_minor', 'received_minor', 'received_currency', 'fx_rate', 'credit_minor', 'php_rate', 'recorded_by_name'])]
 class Payment extends Model
 {
     public const METHODS = [
@@ -60,6 +61,18 @@ class Payment extends Model
      * @var array<string, mixed>
      */
     protected $attributes = ['fee_minor' => 0, 'withholding_minor' => 0, 'credit_minor' => 0];
+
+    protected static function booted(): void
+    {
+        // E-86: who recorded it stays on the record as written.
+        static::creating(function (Payment $p) {
+            if ($p->recorded_by !== null && $p->recorded_by_name === null) {
+                $p->recorded_by_name = User::query()->whereKey($p->recorded_by)->value('name');
+            }
+        });
+        // E-86: payments are billing records; a mistake is reversed, never deleted.
+        static::deleting(fn () => throw new \LogicException('Payments are kept. Reverse the payment instead.'));
+    }
 
     /**
      * @return array<string, string>

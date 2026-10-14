@@ -28,4 +28,11 @@ return [
 
     // Private disk for stored invoice PDFs (never public).
     'disk' => env('BILLING_PDF_DISK', 'local'),
+
+    /*
+    | E-86: how long billing records (invoices, payments, credit notes, stored PDFs and their
+    | history) are kept. Nothing in the app deletes them; erasing a person's data leaves
+    | them intact. Confirm the period your books must be kept with your accountant.
+    */
+    'retention_years' => (int) env('BILLING_RETENTION_YEARS', 10),
 ];

@@ -3,6 +3,7 @@
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Billing\BillingReportController;
 use App\Http\Controllers\Billing\ClientBillingController;
+use App\Http\Controllers\Billing\CostRateController;
 use App\Http\Controllers\Billing\ExchangeRateController;
 use App\Http\Controllers\Billing\ExpenseController;
 use App\Http\Controllers\Billing\InvoiceController;
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
     Route::get('rates/history', [RateCardController::class, 'history'])->name('rates.history');
     Route::get('rate-templates/{rateTemplate}', [RateTemplateController::class, 'edit'])->name('rate-templates.edit');
     Route::get('fx', [ExchangeRateController::class, 'index'])->name('fx.index'); // E-103
+    Route::get('cost-rates', [CostRateController::class, 'index'])->name('cost-rates.index'); // E-77
 
     // Preparing invoices: periods, drafts and their lines, expenses, fixed fees.
     Route::middleware('can:'.Permissions::BILLING_DRAFT)->group(function () {
@@ -93,5 +95,6 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
         Route::delete('rate-templates/{rateTemplate}', [RateTemplateController::class, 'destroy'])->name('rate-templates.destroy');
         Route::post('clients/{workspace:slug}/rate-template', [RateTemplateController::class, 'apply'])->name('clients.rate-template');
         Route::post('fx', [ExchangeRateController::class, 'store'])->name('fx.store'); // E-103
+        Route::post('cost-rates', [CostRateController::class, 'store'])->name('cost-rates.store'); // E-77
     });
 });

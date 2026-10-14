@@ -3,10 +3,13 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Budgets\BudgetService;
+use App\Domain\People\Capacity;
 use App\Models\BillingProfile;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\InvoiceItemSource;
 use App\Models\Payment;
+use App\Models\PrepaidHours;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
@@ -146,73 +149,175 @@ class BillingReports
         return $out;
     }
 
+    /** profitability grouping => label (E-77) */
+    public const MARGIN_GROUPS = ['project' => 'Project', 'client' => 'Client', 'department' => 'Department', 'person' => 'Person'];
+
     /**
-     * Billed hours per project (invoices issued in the range) against internal cost (rate card cost per hour).
-     * Hours covered by a retainer carry no line amount, so retainer clients show revenue on the retainer line instead.
+     * Margin on billed hours (invoices issued in the range), by project, client, department or person.
      *
-     * E-108: revenue and cost are also given in PHP at the invoice's locked rate (costs on
-     * PHP rate cards are already PHP), so margins compare like with like.
+     * E-77: revenue is what the hours earned. Hours billed at rates carry their line amount;
+     * hours covered by a retainer share the retainer amount in proportion to their minutes (a
+     * retainer with no hours shows as "Retainer – no hours used", so totals tie to the invoices);
+     * hours from a prepaid block carry the block's price per hour; rolled-over hours were earned
+     * by the earlier retainer. Cost is the person's internal cost rate (Finance-only cost table,
+     * PHP), falling back to the cost on the rate card.
+     * E-108: revenue and cost also in PHP at the invoice's locked rate.
      *
-     * @return list<array{client: string, project: string, currency: string, minutes: int, revenue_minor: int, cost_minor: int, margin_minor: int, uncosted_minutes: int, revenue_php_minor: int, cost_php_minor: int, margin_php_minor: int, php_missing: bool}>
+     * @return list<array{name: string, client: string, project: string, currency: string, minutes: int, revenue_minor: int, cost_minor: int, margin_minor: int, uncosted_minutes: int, revenue_php_minor: int, cost_php_minor: int, margin_php_minor: int, php_missing: bool, retainer_minor: int, capacity_minutes: int|null, billable_minutes: int|null, utilisation_pct: int|null}>
      */
-    public function profitability(CarbonImmutable $from, CarbonImmutable $to): array
+    public function profitability(CarbonImmutable $from, CarbonImmutable $to, string $by = 'project'): array
     {
+        $by = array_key_exists($by, self::MARGIN_GROUPS) ? $by : 'project';
+        $costs = app(CostRates::class);
+        $live = fn ($q) => $q->whereNotIn('v.status', [Invoice::DRAFT, Invoice::VOID])->where('v.kind', 'invoice')
+            ->whereDate('v.issue_date', '>=', $from->toDateString())->whereDate('v.issue_date', '<=', $to->toDateString());
+
         $sources = InvoiceItemSource::query()
             ->join('invoice_items as i', 'i.id', '=', 'invoice_item_sources.invoice_item_id')
             ->join('invoices as v', 'v.id', '=', 'i.invoice_id')
             ->where('invoice_item_sources.source_type', (new TimeEntry)->getMorphClass())
-            ->whereNotIn('v.status', [Invoice::DRAFT, Invoice::VOID])
-            ->where('v.kind', 'invoice')
-            ->whereDate('v.issue_date', '>=', $from->toDateString())
-            ->whereDate('v.issue_date', '<=', $to->toDateString())
-            ->get(['invoice_item_sources.source_id', 'invoice_item_sources.minutes', 'invoice_item_sources.amount_minor', 'v.currency', 'v.php_rate']);
+            ->where($live)
+            ->orderBy('invoice_item_sources.id')
+            ->get(['invoice_item_sources.source_id', 'invoice_item_sources.minutes', 'invoice_item_sources.amount_minor', 'v.currency', 'v.php_rate',
+                'i.id as item_id', 'i.type as item_type', 'i.amount_minor as item_amount', 'i.prepaid_hours_id']);
+
+        // Revenue per source: retainer amounts shared by minutes; prepaid blocks at their price per hour.
+        $earned = [];
+        foreach ($sources->where('item_type', 'retainer')->groupBy('item_id') as $group) {
+            $shares = Money::allocate((int) $group->first()?->getAttribute('item_amount'), $group->map(fn ($s) => (int) $s->minutes)->values()->all());
+            foreach ($group->values() as $n => $s) {
+                $earned[spl_object_id($s)] = $shares[$n] ?? 0;
+            }
+        }
+        $blocks = PrepaidHours::query()->whereIn('id', $sources->pluck('prepaid_hours_id')->filter()->unique()->all())->get()->keyBy('id');
+        foreach ($sources->where('item_type', 'prepaid') as $s) {
+            $block = $blocks->get((int) $s->getAttribute('prepaid_hours_id'));
+            $earned[spl_object_id($s)] = $block !== null && $block->kind === 'block' && $block->minutes > 0
+                ? Money::mulDiv((int) $s->minutes, $block->amount_minor, $block->minutes) : 0;
+        }
 
         $entries = TimeEntry::query()->withTrashed()
-            ->with(['workspace:id,name', 'project:id,name'])
+            ->with(['workspace:id,name', 'project:id,name', 'department:id,name', 'user:id,name'])
             ->whereIn('id', $sources->pluck('source_id')->unique()->all())
             ->get()
             ->keyBy('id');
 
         $rows = [];
+        $blank = fn (string $name, string $client, string $project, string $currency) => ['name' => $name, 'client' => $client, 'project' => $project, 'currency' => $currency,
+            'minutes' => 0, 'revenue_minor' => 0, 'cost_minor' => 0, 'margin_minor' => 0, 'uncosted_minutes' => 0,
+            'revenue_php_minor' => 0, 'cost_php_minor' => 0, 'margin_php_minor' => 0, 'php_missing' => false, 'retainer_minor' => 0,
+            'capacity_minutes' => null, 'billable_minutes' => null, 'utilisation_pct' => null, 'user_id' => null];
+
         foreach ($sources as $s) {
             $e = $entries->get($s->source_id);
             if ($e === null) {
                 continue;
             }
-            $minutes = (int) $s->minutes;
-            $key = $e->workspace_id.'|'.($e->project_id ?? 0);
-            $rows[$key] ??= ['client' => $e->workspace->name ?? 'Deleted client', 'project' => $e->project->name ?? 'No project',
-                'currency' => (string) $s->getAttribute('currency'), 'minutes' => 0, 'revenue_minor' => 0, 'cost_minor' => 0, 'margin_minor' => 0, 'uncosted_minutes' => 0,
-                'revenue_php_minor' => 0, 'cost_php_minor' => 0, 'margin_php_minor' => 0, 'php_missing' => false];
             $currency = (string) $s->getAttribute('currency');
+            $client = $e->workspace->name ?? 'Deleted client';
+            $project = $e->project->name ?? 'No project';
+            [$key, $name] = match ($by) {
+                'client' => [(string) $e->workspace_id, $client],
+                'department' => ['d'.($e->department_id ?? 0), $e->department->name ?? 'No department'],
+                'person' => ['u'.($e->user_id ?? 0), $e->user->name ?? 'Former member'],
+                default => [$e->workspace_id.'|'.($e->project_id ?? 0), $project],
+            };
+            $key .= '|'.$currency;
+            $rows[$key] ??= [...$blank($name, $by === 'project' || $by === 'client' ? $client : '', $by === 'project' ? $project : '', $currency), 'user_id' => $by === 'person' ? $e->user_id : null];
+
+            $minutes = (int) $s->minutes;
+            $revenue = $earned[spl_object_id($s)] ?? (int) $s->amount_minor;
             $invRate = $s->getAttribute('php_rate') !== null ? (string) $s->getAttribute('php_rate') : ($currency === FxRates::BASE ? '1' : null);
             $rows[$key]['minutes'] += $minutes;
-            $rows[$key]['revenue_minor'] += (int) $s->amount_minor;
-            $revPhp = FxRates::toPhp((int) $s->amount_minor, $invRate);
+            $rows[$key]['revenue_minor'] += $revenue;
+            if ($s->getAttribute('item_type') === 'retainer') {
+                $rows[$key]['retainer_minor'] += $revenue;
+            }
+            $revPhp = FxRates::toPhp($revenue, $invRate);
             $rows[$key]['revenue_php_minor'] += $revPhp ?? 0;
             $rows[$key]['php_missing'] = $rows[$key]['php_missing'] || $revPhp === null;
 
-            $card = $this->rates->resolve($e->workspace_id, $e->department_id, $e->user_id, $e->entry_date->toDateString());
-            if ($card === null || $card->cost_minor === null) {
-                $rows[$key]['uncosted_minutes'] += $minutes;
+            $date = $e->entry_date->toDateString();
+            $personal = $costs->perHour($e->user_id, $date);
+            if ($personal !== null) {
+                // Cost table rates are PHP; shown in the invoice currency at the invoice's rate.
+                $costPhp = Money::mulDiv($minutes, $personal, 60);
+                $rows[$key]['cost_php_minor'] += $costPhp;
+                $rows[$key]['cost_minor'] += $currency === FxRates::BASE ? $costPhp : (self::fromPhp($costPhp, $invRate) ?? 0);
             } else {
-                $cost = Money::mulDiv($minutes, $card->cost_minor, 60);
-                $rows[$key]['cost_minor'] += $cost;
-                // Costs on a PHP card are PHP already; a client-currency card converts at the invoice rate.
-                $rows[$key]['cost_php_minor'] += ($card->currency === FxRates::BASE ? $cost : FxRates::toPhp($cost, $invRate)) ?? 0;
+                $card = $this->rates->resolve($e->workspace_id, $e->department_id, $e->user_id, $date);
+                if ($card === null || $card->cost_minor === null) {
+                    $rows[$key]['uncosted_minutes'] += $minutes;
+                } else {
+                    $cost = Money::mulDiv($minutes, $card->cost_minor, 60);
+                    $rows[$key]['cost_minor'] += $cost;
+                    // Costs on a PHP card are PHP already; a client-currency card converts at the invoice rate.
+                    $rows[$key]['cost_php_minor'] += ($card->currency === FxRates::BASE ? $cost : FxRates::toPhp($cost, $invRate)) ?? 0;
+                }
             }
         }
 
-        foreach ($rows as &$r) {
+        // Retainers with no hours behind them still count, so the totals tie to the invoices.
+        $idle = InvoiceItem::query()->from('invoice_items as i')->join('invoices as v', 'v.id', '=', 'i.invoice_id')
+            ->leftJoin('workspaces as w', 'w.id', '=', 'v.workspace_id')
+            ->where('i.type', 'retainer')->where($live)
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('invoice_item_sources as s')->whereColumn('s.invoice_item_id', 'i.id'))
+            ->get(['i.amount_minor', 'v.currency', 'v.php_rate', 'v.workspace_id', 'w.name as client_name']);
+        foreach ($idle as $r) {
+            $currency = (string) $r->getAttribute('currency');
+            $client = (string) ($r->getAttribute('client_name') ?? 'Deleted client');
+            $label = 'Retainer – no hours used';
+            $key = ($by === 'project' || $by === 'client' ? 'idle'.$r->getAttribute('workspace_id') : 'idle').'|'.$currency;
+            $rows[$key] ??= $blank($by === 'client' ? $client : $label, $by === 'project' || $by === 'client' ? $client : '', $by === 'project' ? $label : '', $currency);
+            $amount = (int) $r->amount_minor;
+            $rate = $r->getAttribute('php_rate') !== null ? (string) $r->getAttribute('php_rate') : ($currency === FxRates::BASE ? '1' : null);
+            $rows[$key]['revenue_minor'] += $amount;
+            $rows[$key]['retainer_minor'] += $amount;
+            $php = FxRates::toPhp($amount, $rate);
+            $rows[$key]['revenue_php_minor'] += $php ?? 0;
+            $rows[$key]['php_missing'] = $rows[$key]['php_missing'] || $php === null;
+        }
+
+        // By person: utilisation = billable hours logged in the range / capacity (8 h working days less leave).
+        if ($by === 'person') {
+            $ids = array_values(array_filter(array_map(fn (array $r) => $r['user_id'], $rows)));
+            $capacity = app(Capacity::class)->load($from->toDateString(), $to->toDateString(), $ids);
+            $billable = TimeEntry::query()->whereIn('user_id', $ids)->where('is_billable', true)
+                ->whereDate('entry_date', '>=', $from->toDateString())->whereDate('entry_date', '<=', $to->toDateString())
+                ->where(fn ($q) => $q->whereNull('started_at')->orWhereNotNull('ended_at'))
+                ->groupBy('user_id')->selectRaw('user_id, sum(minutes) as m')->pluck('m', 'user_id');
+            foreach ($rows as &$r) {
+                if ($r['user_id'] !== null) {
+                    $cap = $capacity->minutes((int) $r['user_id']);
+                    $r['capacity_minutes'] = $cap;
+                    $r['billable_minutes'] = (int) ($billable[$r['user_id']] ?? 0);
+                    $r['utilisation_pct'] = $cap > 0 ? intdiv($r['billable_minutes'] * 100 + intdiv($cap, 2), $cap) : null;
+                }
+            }
+            unset($r);
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            unset($r['user_id']);
             $r['margin_minor'] = $r['revenue_minor'] - $r['cost_minor'];
             $r['margin_php_minor'] = $r['revenue_php_minor'] - $r['cost_php_minor'];
+            $out[] = $r;
         }
-        unset($r);
-
-        $out = array_values($rows);
-        usort($out, fn (array $a, array $b) => $b['revenue_minor'] <=> $a['revenue_minor']);
+        usort($out, fn (array $a, array $b) => $b['revenue_php_minor'] <=> $a['revenue_php_minor'] ?: $b['revenue_minor'] <=> $a['revenue_minor']);
 
         return $out;
+    }
+
+    /** PHP minor units -> a currency's minor units at a rate (PHP per unit). */
+    private static function fromPhp(int $php, ?string $rate): ?int
+    {
+        if ($rate === null) {
+            return null;
+        }
+        $micros = FxRates::micros($rate);
+
+        return $micros > 0 ? Money::mulDiv($php, 1_000_000, $micros) : null;
     }
 
     /**

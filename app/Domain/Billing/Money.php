@@ -26,6 +26,50 @@ final class Money
     }
 
     /**
+     * Split an amount by weights so the parts always add up to the amount exactly
+     * (largest remainder; ties go to the earlier part). No weights or all zero: the first part takes it all.
+     *
+     * @param  array<int, int>  $weights
+     * @return list<int>
+     */
+    public static function allocate(int $amount, array $weights): array
+    {
+        if ($weights === []) {
+            return [];
+        }
+        $total = array_sum(array_map(fn (int $w) => max(0, $w), $weights));
+        if ($total <= 0) {
+            return array_map(fn (int $i) => $i === 0 ? $amount : 0, array_keys($weights));
+        }
+        $sign = $amount < 0 ? -1 : 1;
+        $abs = abs($amount);
+        $parts = [];
+        $remainders = [];
+        foreach ($weights as $i => $w) {
+            $exact = intdiv($abs * max(0, $w), $total);
+            $parts[$i] = $exact;
+            $remainders[$i] = ($abs * max(0, $w)) % $total;
+        }
+        $left = $abs - array_sum($parts);
+        arsort($remainders, SORT_NUMERIC);
+        // arsort keeps equal remainders in index order (stable sort since PHP 8).
+        $bonus = [];
+        foreach (array_keys($remainders) as $i) {
+            if ($left <= 0) {
+                break;
+            }
+            $bonus[$i] = 1;
+            $left--;
+        }
+        $out = [];
+        foreach (array_keys($weights) as $i) {
+            $out[] = $sign * ($parts[$i] + ($bonus[$i] ?? 0));
+        }
+
+        return $out;
+    }
+
+    /**
      * Tax on an amount: rate in basis points (1200 = 12%).
      */
     public static function tax(int $amountMinor, int $rateBp): int

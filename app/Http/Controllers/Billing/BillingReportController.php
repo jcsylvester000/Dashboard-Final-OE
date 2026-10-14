@@ -25,7 +25,7 @@ class BillingReportController extends Controller
         'revenue' => 'Revenue by client',
         'utilisation' => 'Retainer utilisation',
         'unbilled' => 'Unbilled approved time',
-        'profitability' => 'Profitability by project',
+        'profitability' => 'Profitability',
         'aging' => 'Receivables aging',
         'budgets' => 'Budget vs actual',
     ];
@@ -33,13 +33,15 @@ class BillingReportController extends Controller
     public function __invoke(Request $request, BillingReports $reports): Response
     {
         [$from, $to, $month] = $this->period($request);
+        $by = $this->marginGroup($request);
 
         return Inertia::render('billing/Reports', [
-            'filters' => ['from' => $from->format('Y-m'), 'to' => $to->format('Y-m'), 'month' => $month->format('Y-m')],
+            'filters' => ['from' => $from->format('Y-m'), 'to' => $to->format('Y-m'), 'month' => $month->format('Y-m'), 'by' => $by],
+            'marginGroups' => BillingReports::MARGIN_GROUPS,
             'revenue' => $reports->revenue($from, $to),
             'utilisation' => $reports->retainerUtilisation($month),
             'unbilled' => $reports->unbilled(),
-            'profitability' => $reports->profitability($from, $to),
+            'profitability' => $reports->profitability($from, $to, $by), // E-77
             // E-107: exchange gains/losses and the base currency.
             'fx' => $reports->foreignExchange($from->startOfMonth(), $to),
             'base' => FxRates::BASE,
@@ -75,11 +77,13 @@ class BillingReportController extends Controller
                 $text('client', 'Client'), $text('currency', 'Currency'), $hours('hours', 'Hours'), $hours('unpriced', 'Without a rate (h)'),
                 $money('value_minor', 'Value'), $money('value_php_minor', 'Value (today\'s rate)', $base), $text('oldest', 'Oldest entry'),
             ], array_map(fn ($r) => [...$r, 'hours' => $h($r['minutes']), 'unpriced' => $h($r['unpriced_minutes'])], $reports->unbilled()), 'hours'),
-            'profitability' => new ExportTable(self::EXPORTS[$report], $range, [
-                $text('client', 'Client'), $text('project', 'Project'), $text('currency', 'Currency'), $hours('hours', 'Hours'),
-                $money('revenue_minor', 'Revenue'), $money('cost_minor', 'Cost'), $money('margin_minor', 'Margin'),
+            'profitability' => new ExportTable(self::EXPORTS[$report].' by '.strtolower(BillingReports::MARGIN_GROUPS[$this->marginGroup($request)]), $range, [
+                ...($this->marginGroup($request) === 'project' ? [$text('client', 'Client')] : []),
+                $text('name', BillingReports::MARGIN_GROUPS[$this->marginGroup($request)]), $text('currency', 'Currency'), $hours('hours', 'Hours'),
+                $money('revenue_minor', 'Revenue'), $money('retainer_minor', 'of which retainer'), $money('cost_minor', 'Cost'), $money('margin_minor', 'Margin'),
                 $money('revenue_php_minor', 'Revenue', $base), $money('cost_php_minor', 'Cost', $base), $money('margin_php_minor', 'Margin', $base),
-            ], array_map(fn ($r) => [...$r, 'hours' => $h($r['minutes'])], $reports->profitability($from, $to)), 'margin_php_minor', 'project'),
+                $pct('utilisation_pct', 'Utilisation'),
+            ], array_map(fn ($r) => [...$r, 'hours' => $h($r['minutes'])], $reports->profitability($from, $to, $this->marginGroup($request))), 'margin_php_minor', 'name'),
             'aging' => new ExportTable(self::EXPORTS[$report], ['As of' => now()->format('M j, Y')], [
                 $text('client', 'Client'), $text('number', 'Invoice'), $text('currency', 'Currency'), $text('issue_date', 'Issued'), $text('due_date', 'Due'),
                 ['key' => 'days_overdue', 'label' => 'Days overdue', 'type' => 'number', 'sum' => false], $text('bucket', 'Bucket'),
@@ -93,6 +97,14 @@ class BillingReportController extends Controller
         };
 
         return $exporter->respond($table, $format);
+    }
+
+    /** E-77: margin by project (default), client, department or person. */
+    private function marginGroup(Request $request): string
+    {
+        $by = $request->query('by');
+
+        return is_string($by) && array_key_exists($by, BillingReports::MARGIN_GROUPS) ? $by : 'project';
     }
 
     /**

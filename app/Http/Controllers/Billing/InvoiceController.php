@@ -159,7 +159,7 @@ class InvoiceController extends Controller
                     'from' => $h->from_status,
                     'to' => $h->to_status,
                     'note' => $h->note,
-                    'by' => $h->user?->name,
+                    'by' => $h->user_name ?? $h->user?->name, // E-86: name as written
                     'at' => $h->created_at->toIso8601String(),
                 ])->values(),
                 'payments' => $invoice->payments->map(fn (Payment $p): array => [
@@ -168,7 +168,7 @@ class InvoiceController extends Controller
                     'method' => Payment::METHODS[$p->method] ?? $p->method,
                     'reference' => $p->reference,
                     'received_on' => $p->received_on->toDateString(),
-                    'by' => $p->recorder?->name,
+                    'by' => $p->recorded_by_name ?? $p->recorder?->name,
                     'note' => $p->note,
                     'is_credit' => $p->method === 'credit',
                     'fee_minor' => $p->fee_minor,

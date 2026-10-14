@@ -17,9 +17,10 @@ use LogicException;
  * @property string $to_status
  * @property string|null $note
  * @property int|null $user_id
+ * @property string|null $user_name E-86: the person's name as it was (survives anonymisation)
  * @property Carbon $created_at
  */
-#[Fillable(['invoice_id', 'from_status', 'to_status', 'note', 'user_id'])]
+#[Fillable(['invoice_id', 'from_status', 'to_status', 'note', 'user_id', 'user_name'])]
 class InvoiceHistory extends Model
 {
     protected $table = 'invoice_history';
@@ -28,6 +29,12 @@ class InvoiceHistory extends Model
 
     protected static function booted(): void
     {
+        // E-86: billing records keep the name as written, whatever happens to the account later.
+        static::creating(function (InvoiceHistory $h) {
+            if ($h->user_id !== null && $h->user_name === null) {
+                $h->user_name = User::query()->whereKey($h->user_id)->value('name');
+            }
+        });
         static::updating(fn () => throw new LogicException('Invoice history is append-only.'));
         static::deleting(fn () => throw new LogicException('Invoice history is append-only.'));
     }

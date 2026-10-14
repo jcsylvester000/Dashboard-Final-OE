@@ -93,6 +93,9 @@ class PersonalData
                 // IP address and browser are personal data; the actions themselves stay for the audit trail.
                 'activity_rows_scrubbed' => DB::table('activity_log')->where('actor_id', $user->id)->update(['ip_address' => null, 'user_agent' => null]),
             ];
+            // E-86: billing records are kept as written (legal retention); their name snapshots stay.
+            $removed['billing_records_kept'] = DB::table('invoice_history')->where('user_id', $user->id)->count()
+                + DB::table('payments')->where('recorded_by', $user->id)->count();
 
             $user->forceFill([
                 'name' => 'Former member #'.$user->id,

@@ -2,6 +2,7 @@
 
 namespace App\Domain\People;
 
+use App\Domain\Billing\CostRates;
 use App\Domain\Billing\Money;
 use App\Domain\Billing\RateResolver;
 use App\Models\TimeEntry;
@@ -12,12 +13,14 @@ use Carbon\CarbonImmutable;
  * People report (B-16): per person per month - capacity, hours logged, billable %,
  * utilisation (billable hours / capacity), internal cost and value at client rates, margin.
  * Value is what the time is worth at today's rate cards, not what was invoiced.
+ * E-77: cost comes from the Finance cost table when the person has a rate there.
  */
 class PeopleReport
 {
     public function __construct(
         private readonly Capacity $capacity,
         private readonly RateResolver $rates,
+        private readonly CostRates $costs,
     ) {}
 
     /**
@@ -50,7 +53,10 @@ class PeopleReport
             foreach ($entries->get($u->id, collect()) as $e) {
                 $card = $this->rates->resolve((int) $e->workspace_id, $e->department_id, $u->id, $e->entry_date->toDateString());
                 $logged += $e->minutes;
-                if ($card === null || $card->cost_minor === null) {
+                $personal = $this->costs->perHour($u->id, $e->entry_date->toDateString());
+                if ($personal !== null) {
+                    $cost += Money::mulDiv($e->minutes, $personal, 60);
+                } elseif ($card === null || $card->cost_minor === null) {
                     $missingRate = true;
                 } else {
                     $cost += Money::mulDiv($e->minutes, $card->cost_minor, 60);

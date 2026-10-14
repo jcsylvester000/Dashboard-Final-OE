@@ -39,6 +39,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $pdf_path
  * @property Carbon|null $finalized_at
  * @property int|null $finalized_by
+ * @property string|null $finalized_by_name E-86: name as written (survives anonymisation)
  * @property Carbon|null $overdue_alerted_at
  * @property int|null $created_by
  * @property list<array{user_id: int|null, name: string, department_id: int|null, minutes: int, first: string, last: string}>|null $missing_rates work the draft could not price (E-64)
@@ -94,6 +95,13 @@ class Invoice extends Model
             $changed = array_diff(array_keys($invoice->getDirty()), self::MUTABLE_AFTER_FINALIZE);
             if ($changed !== []) {
                 throw new BillingException('A finalized invoice cannot be changed. Issue a credit note instead.');
+            }
+        });
+
+        // E-86: the finalizer's name is kept on the invoice as written.
+        static::saving(function (Invoice $invoice) {
+            if ($invoice->isDirty('finalized_by') && $invoice->finalized_by !== null && $invoice->finalized_by_name === null) {
+                $invoice->finalized_by_name = User::query()->whereKey($invoice->finalized_by)->value('name');
             }
         });
 

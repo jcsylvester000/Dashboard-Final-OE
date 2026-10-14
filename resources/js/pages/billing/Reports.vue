@@ -20,7 +20,8 @@ import { index as invoicesIndex } from '@/routes/billing/invoices';
 import { download, index } from '@/routes/billing/reports';
 
 const props = defineProps<{
-    filters: { from: string; to: string; month: string };
+    filters: { from: string; to: string; month: string; by: string };
+    marginGroups: Record<string, string>;
     revenue: {
         client: string;
         currency: string;
@@ -48,8 +49,13 @@ const props = defineProps<{
         value_php_minor: number | null;
     }[];
     profitability: {
+        name: string;
         client: string;
         project: string;
+        retainer_minor: number;
+        capacity_minutes: number | null;
+        billable_minutes: number | null;
+        utilisation_pct: number | null;
         currency: string;
         minutes: number;
         revenue_minor: number;
@@ -125,6 +131,15 @@ const form = reactive({ ...props.filters });
 function apply(): void {
     router.get(
         index.url({ query: { ...form } }),
+        {},
+        { preserveState: true, preserveScroll: true },
+    );
+}
+
+function groupBy(by: string): void {
+    form.by = by;
+    router.get(
+        index.url({ query: { ...form, by } }),
         {},
         { preserveState: true, preserveScroll: true },
     );
@@ -374,13 +389,28 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
 
         <Card>
             <CardHeader>
-                <CardTitle class="text-base"
-                    >Profitability by project</CardTitle
-                >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle class="text-base">Profitability</CardTitle>
+                    <!-- E-77: margin by project, client, department or person -->
+                    <div class="flex gap-1" role="group" aria-label="Group by">
+                        <Button
+                            v-for="(label, key) in marginGroups"
+                            :key="key"
+                            size="sm"
+                            :variant="
+                                filters.by === key ? 'default' : 'outline'
+                            "
+                            :aria-pressed="filters.by === key"
+                            @click="groupBy(String(key))"
+                            >{{ label }}</Button
+                        >
+                    </div>
+                </div>
                 <CardDescription>
                     Billed hours (invoices issued in the range) against internal
-                    cost from the rate cards. Retainer-covered hours carry no
-                    line amount; their revenue is on the retainer line.
+                    cost (Billing &gt; Cost rates, else the rate card). Hours
+                    covered by a retainer share the retainer amount by minutes;
+                    hours from a prepaid block carry its price per hour.
                 </CardDescription>
             </CardHeader>
             <CardContent class="overflow-x-auto">
@@ -393,9 +423,22 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                 <table v-else class="w-full text-sm">
                     <thead class="text-left text-xs text-muted-foreground">
                         <tr>
-                            <th class="py-1.5 font-medium">Client</th>
-                            <th class="py-1.5 font-medium">Project</th>
+                            <th
+                                v-if="filters.by === 'project'"
+                                class="py-1.5 font-medium"
+                            >
+                                Client
+                            </th>
+                            <th class="py-1.5 font-medium">
+                                {{ marginGroups[filters.by] ?? 'Project' }}
+                            </th>
                             <th class="py-1.5 text-right font-medium">Hours</th>
+                            <th
+                                v-if="filters.by === 'person'"
+                                class="py-1.5 text-right font-medium"
+                            >
+                                Utilisation
+                            </th>
                             <th class="py-1.5 text-right font-medium">
                                 Billed
                             </th>
@@ -411,11 +454,13 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                     <tbody class="divide-y">
                         <tr
                             v-for="r in profitability"
-                            :key="`${r.client}${r.project}`"
+                            :key="`${r.client}${r.name}${r.currency}`"
                         >
-                            <td class="py-1.5">{{ r.client }}</td>
+                            <td v-if="filters.by === 'project'" class="py-1.5">
+                                {{ r.client }}
+                            </td>
                             <td class="py-1.5">
-                                {{ r.project }}
+                                {{ r.name }}
                                 <span
                                     v-if="r.uncosted_minutes"
                                     class="text-xs text-amber-700"
@@ -428,8 +473,34 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                             <td class="py-1.5 text-right tabular-nums">
                                 {{ formatMinutes(r.minutes) }}
                             </td>
+                            <td
+                                v-if="filters.by === 'person'"
+                                class="py-1.5 text-right tabular-nums"
+                                :title="
+                                    r.capacity_minutes !== null
+                                        ? `${formatMinutes(r.billable_minutes)} billable of ${formatMinutes(r.capacity_minutes)} available`
+                                        : ''
+                                "
+                            >
+                                {{
+                                    r.utilisation_pct !== null
+                                        ? `${r.utilisation_pct}%`
+                                        : '—'
+                                }}
+                            </td>
                             <td class="py-1.5 text-right tabular-nums">
                                 {{ formatMoney(r.revenue_minor, r.currency) }}
+                                <span
+                                    v-if="r.retainer_minor"
+                                    class="block text-xs text-muted-foreground"
+                                    >{{
+                                        formatMoney(
+                                            r.retainer_minor,
+                                            r.currency,
+                                        )
+                                    }}
+                                    retainer</span
+                                >
                             </td>
                             <td class="py-1.5 text-right tabular-nums">
                                 {{ formatMoney(r.cost_minor, r.currency) }}
@@ -460,7 +531,14 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                     </tbody>
                     <tfoot class="border-t font-semibold">
                         <tr>
-                            <td colspan="6" class="py-1.5 text-right">
+                            <td
+                                :colspan="
+                                    5 +
+                                    (filters.by === 'project' ? 1 : 0) +
+                                    (filters.by === 'person' ? 1 : 0)
+                                "
+                                class="py-1.5 text-right"
+                            >
                                 Total margin in {{ base }}
                             </td>
                             <td class="py-1.5 text-right tabular-nums">
