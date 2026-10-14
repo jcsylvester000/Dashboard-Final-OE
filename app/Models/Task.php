@@ -82,6 +82,14 @@ class Task extends Model implements Mentionable
             'keyword' => ['Primary keyword', 'text'],
             'work_type' => ['Work type', 'select', ['On-page', 'Technical', 'Content', 'Links', 'Local', 'Reporting']],
         ],
+        // E-28: research tasks.
+        'research' => [
+            'question' => ['Research question', 'text'],
+            'method' => ['Method', 'select', ['Interviews', 'Survey', 'Desk research', 'Analytics', 'Usability test', 'Other']],
+            'sources' => ['Sources', 'text'],
+            'confidence' => ['Confidence', 'select', ['Low', 'Medium', 'High']],
+            'decision' => ['Decision it informs', 'text'],
+        ],
     ];
 
     /** E-21: bug severity => label */

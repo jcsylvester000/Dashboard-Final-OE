@@ -80,37 +80,9 @@ class TaskFlowController extends Controller
 
     private function decide(Task $task, User $user, string $decision, string $note, TaskService $tasks, CommentService $comments): RedirectResponse
     {
-        $data = ['decision' => $decision];
-        $reviews = app(ReviewService::class);
-        $named = $reviews->isReviewer($task, $user);
-        if ($named) {
-            $reviews->record($task, $user, $data['decision'] === 'approve' ? 'approved' : 'changes', $note !== '' ? $note : null);
-        }
-
-        // E-07: with rule "all", one approval out of several keeps the task In Review.
-        if ($data['decision'] === 'approve' && $named && ! $reviews->satisfied($task)) {
-            $progress = $reviews->progress($task);
-            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null, 'partial' => true], $user);
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Approved (:a of :t). Waiting for :names.', ['a' => $progress['approved'], 't' => $progress['total'], 'names' => implode(', ', $progress['waiting'])])]);
-
-            return back();
-        }
-
-        if ($data['decision'] === 'approve') {
-            $tasks->update($task, ['status_id' => TaskStatus::idFor('done')], $user);
-            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null], $user);
-            if ($note !== '') {
-                $comments->create($task, __('Approved: :note', ['note' => $note]), $user);
-            }
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Approved and marked Done.')]);
-        } else {
-            $tasks->update($task, ['status_id' => TaskStatus::idFor('in-progress')], $user);
-            $this->activity->log('task.changes-requested', $task, [], $user);
-            $assignee = $task->assignee;
-            $tag = $assignee !== null && $assignee->id !== $user->id ? '@['.$assignee->name.'](user:'.$assignee->id.') ' : '';
-            $comments->create($task, $tag.__('Changes requested: :note', ['note' => $note]), $user);
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Sent back with your notes.')]);
-        }
+        // E-38: the decision logic lives in ReviewService so the inbox can approve too.
+        $message = app(ReviewService::class)->decide($task, $user, $decision, $note);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return back();
     }

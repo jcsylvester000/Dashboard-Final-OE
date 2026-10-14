@@ -151,6 +151,9 @@ export type TaskFilters = {
     /** sprint id, 'active' or 'backlog' */
     sprint?: string;
     group?: TaskGroup;
+    /** E-28: research work details */
+    method?: string;
+    confidence?: string;
 };
 
 export type TaskGroup =

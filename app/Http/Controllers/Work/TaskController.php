@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Work;
 use App\Domain\Files\AttachmentPresenter;
 use App\Domain\Files\AttachmentService;
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Identity\ViewAs;
 use App\Domain\Text\RichText;
+use App\Domain\Work\ReviewService;
 use App\Domain\Work\TaskPresenter;
 use App\Domain\Work\TaskService;
 use App\Domain\Workspaces\LinkService;
@@ -195,6 +197,10 @@ class TaskController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        // E-38: a named reviewer opening the task counts as having seen the work (not while viewing as them).
+        if (! ViewAs::active()) {
+            app(ReviewService::class)->markSeen($task, $user);
+        }
 
         $task->load([
             ...TaskPresenter::WITH,
@@ -530,6 +536,8 @@ class TaskController extends Controller
             'include_done' => ['nullable', 'boolean'],
             'type' => ['nullable', Rule::in(array_keys(Task::TYPES))],
             'sprint' => ['nullable', 'string', 'max:20'],
+            'method' => ['nullable', Rule::in(Task::WORK_DETAIL_FIELDS['research']['method'][2])],
+            'confidence' => ['nullable', Rule::in(Task::WORK_DETAIL_FIELDS['research']['confidence'][2])],
             'group' => ['nullable', Rule::in(array_keys(self::GROUPS))],
         ]);
     }

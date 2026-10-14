@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $decision approved | changes
  * @property string|null $note
  * @property Carbon|null $decided_at
+ * @property Carbon|null $seen_at E-38: when this reviewer last opened the task
  */
 #[Fillable(['task_id', 'user_id', 'decision', 'note', 'decided_at'])]
 class TaskReviewer extends Model
@@ -25,7 +26,7 @@ class TaskReviewer extends Model
      */
     protected function casts(): array
     {
-        return ['decided_at' => 'datetime'];
+        return ['decided_at' => 'datetime', 'seen_at' => 'datetime'];
     }
 
     /** @return BelongsTo<User, $this> */

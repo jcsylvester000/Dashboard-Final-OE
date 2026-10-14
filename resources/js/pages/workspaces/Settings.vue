@@ -20,6 +20,10 @@ import WorkspaceHeader from '@/components/WorkspaceHeader.vue';
 import { confirmDialog } from '@/composables/useConfirm';
 import { index as workspacesIndex } from '@/routes/workspaces';
 import { update as checklistsUpdate } from '@/routes/workspaces/checklists';
+import {
+    destroy as destroyRule,
+    store as storeRule,
+} from '@/routes/workspaces/review-rules';
 import { update as statusLabelsUpdate } from '@/routes/workspaces/status-labels';
 import { update as taskFieldsUpdate } from '@/routes/workspaces/task-fields';
 import type { CustomField } from '@/types/work';
@@ -46,7 +50,72 @@ const props = defineProps<{
     taskStatuses?: { id: number; name: string; label: string }[];
     checklistTemplates?: Record<string, string>;
     taskTypes?: Record<string, string>;
+    // E-25 / E-34
+    checklistDefaults?: Record<string, string>;
+    reviewRules?: {
+        id: number;
+        project: string | null;
+        deliverable_type: string | null;
+        task_type: string | null;
+        mode: string;
+        reviewers: string[];
+    }[];
+    reviewModes?: Record<string, string>;
+    deliverableTypes?: string[];
+    projectOptions?: { id: number; name: string }[];
+    memberOptions?: { id: number; name: string; title: string | null }[];
 }>();
+
+// E-34: default reviewers when work goes to review with nobody named.
+const ruleForm = useForm<{
+    project_id: string;
+    deliverable_type: string;
+    task_type: string;
+    user_ids: number[];
+    mode: string;
+}>({
+    project_id: '',
+    deliverable_type: '',
+    task_type: '',
+    user_ids: [],
+    mode: 'all',
+});
+
+function toggleReviewer(id: number): void {
+    ruleForm.user_ids = ruleForm.user_ids.includes(id)
+        ? ruleForm.user_ids.filter((u) => u !== id)
+        : [...ruleForm.user_ids, id];
+}
+
+function addRule(): void {
+    ruleForm
+        .transform((d) => ({
+            ...d,
+            project_id: d.project_id === '' ? null : Number(d.project_id),
+            deliverable_type: d.deliverable_type || null,
+            task_type: d.task_type || null,
+        }))
+        .post(storeRule.url(props.workspace.slug), {
+            preserveScroll: true,
+            onSuccess: () => ruleForm.reset(),
+        });
+}
+
+async function removeRule(id: number): Promise<void> {
+    if (
+        await confirmDialog(
+            'Remove this review rule? Tasks already in review keep their reviewers.',
+        )
+    ) {
+        router.delete(
+            destroyRule.url({
+                workspace: props.workspace.slug,
+                reviewRule: id,
+            }),
+            { preserveScroll: true },
+        );
+    }
+}
 
 // B-07: custom task fields (options typed one per line for "Pick one").
 type FieldRow = {
@@ -489,11 +558,9 @@ async function removeLabel(label: {
                             rows="4"
                             class="rounded-md border bg-transparent px-2 py-1 text-sm"
                             :placeholder="
-                                type === 'story'
-                                    ? 'Tests added\nDocs updated\nAccessibility checked'
-                                    : type === 'bug'
-                                      ? 'Reproduced\nFix verified on staging'
-                                      : ''
+                                checklistDefaults?.[type]
+                                    ? `Empty = agency default:\n${checklistDefaults[type]}`
+                                    : ''
                             "
                         />
                     </label>
@@ -503,6 +570,148 @@ async function removeLabel(label: {
                             size="sm"
                             :disabled="checklistForm.processing"
                             >Save checklists</Button
+                        >
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+
+        <!-- E-34: review rules -->
+        <Card v-if="workspace.can.lead && reviewRules">
+            <CardHeader>
+                <CardTitle class="text-base">Review rules</CardTitle>
+                <CardDescription
+                    >Who reviews by default when work goes to In Review with
+                    nobody named. The most specific rule wins (project, then
+                    deliverable, then task type). The person submitting can
+                    still change the reviewers. Changes apply to the next
+                    submissions.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="space-y-4 text-sm">
+                <p
+                    v-if="reviewRules.length === 0"
+                    class="text-muted-foreground"
+                >
+                    No rules yet.
+                </p>
+                <ul v-else class="divide-y rounded-md border">
+                    <li
+                        v-for="r in reviewRules"
+                        :key="r.id"
+                        class="flex items-start justify-between gap-2 p-2"
+                    >
+                        <span>
+                            <strong>{{
+                                [
+                                    r.project,
+                                    r.deliverable_type,
+                                    r.task_type
+                                        ? (taskTypes?.[r.task_type] ??
+                                          r.task_type)
+                                        : null,
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'All work'
+                            }}</strong>
+                            → {{ r.reviewers.join(', ') }}
+                            <span class="text-xs text-muted-foreground"
+                                >({{ reviewModes?.[r.mode] ?? r.mode }})</span
+                            >
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            :aria-label="`Remove rule ${r.id}`"
+                            @click="removeRule(r.id)"
+                            ><Trash2 class="size-4"
+                        /></Button>
+                    </li>
+                </ul>
+                <form
+                    class="grid gap-2 rounded-md border p-3 sm:grid-cols-4"
+                    @submit.prevent="addRule"
+                >
+                    <NativeSelect
+                        v-model="ruleForm.project_id"
+                        aria-label="Project"
+                    >
+                        <option value="">Any project</option>
+                        <option
+                            v-for="p in projectOptions"
+                            :key="p.id"
+                            :value="String(p.id)"
+                        >
+                            {{ p.name }}
+                        </option>
+                    </NativeSelect>
+                    <NativeSelect
+                        v-model="ruleForm.deliverable_type"
+                        aria-label="Deliverable"
+                    >
+                        <option value="">Any deliverable</option>
+                        <option
+                            v-for="d in deliverableTypes"
+                            :key="d"
+                            :value="d"
+                        >
+                            {{ d }}
+                        </option>
+                    </NativeSelect>
+                    <NativeSelect
+                        v-model="ruleForm.task_type"
+                        aria-label="Task type"
+                    >
+                        <option value="">Any task type</option>
+                        <option
+                            v-for="(label, type) in taskTypes"
+                            :key="type"
+                            :value="type"
+                        >
+                            {{ label }}
+                        </option>
+                    </NativeSelect>
+                    <NativeSelect
+                        v-model="ruleForm.mode"
+                        aria-label="How they review"
+                    >
+                        <option
+                            v-for="(label, key) in reviewModes"
+                            :key="key"
+                            :value="key"
+                        >
+                            {{ label }}
+                        </option>
+                    </NativeSelect>
+                    <fieldset class="sm:col-span-4">
+                        <legend class="mb-1 text-xs text-muted-foreground">
+                            Reviewers
+                        </legend>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1">
+                            <label
+                                v-for="m in memberOptions"
+                                :key="m.id"
+                                class="flex items-center gap-1.5"
+                            >
+                                <input
+                                    type="checkbox"
+                                    :checked="ruleForm.user_ids.includes(m.id)"
+                                    @change="toggleReviewer(m.id)"
+                                />
+                                {{ m.name }}
+                            </label>
+                        </div>
+                        <InputError :message="ruleForm.errors.user_ids" />
+                    </fieldset>
+                    <div class="sm:col-span-4">
+                        <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="
+                                ruleForm.processing ||
+                                ruleForm.user_ids.length === 0
+                            "
+                            >Add rule</Button
                         >
                     </div>
                 </form>

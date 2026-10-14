@@ -50,6 +50,7 @@ Route::middleware('auth')->group(function () {
     Route::get('inbox/{notification}/open', [InboxController::class, 'open'])->whereUuid('notification')->name('inbox.open');
     Route::post('inbox/{notification}/snooze', [InboxController::class, 'snooze'])->whereUuid('notification')->name('inbox.snooze');
     Route::post('inbox/{notification}/restore', [InboxController::class, 'restore'])->whereUuid('notification')->name('inbox.restore');
+    Route::post('inbox/{notification}/approve', [InboxController::class, 'approve'])->whereUuid('notification')->name('inbox.approve'); // E-38
 });
 
 require __DIR__.'/workspaces.php';

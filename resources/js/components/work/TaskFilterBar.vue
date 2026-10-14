@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { reactive, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import NativeSelect from '@/components/NativeSelect.vue';
 import { Input } from '@/components/ui/input';
 import type { DepartmentOption } from '@/types/admin';
@@ -37,6 +37,30 @@ const form = reactive({
     type: props.filters.type ?? '',
     sprint: props.filters.sprint ? String(props.filters.sprint) : '',
     group: props.filters.group ?? '',
+    method: props.filters.method ?? '',
+    confidence: props.filters.confidence ?? '',
+});
+
+// E-28: research filters (same options as Task::WORK_DETAIL_FIELDS['research']).
+const researchMethods = [
+    'Interviews',
+    'Survey',
+    'Desk research',
+    'Analytics',
+    'Usability test',
+    'Other',
+];
+const confidenceLevels = ['Low', 'Medium', 'High'];
+const showResearch = computed(() => {
+    const research = props.departments.find(
+        (d) => d.name.toLowerCase() === 'research',
+    );
+
+    return (
+        (research !== undefined && form.department === String(research.id)) ||
+        form.method !== '' ||
+        form.confidence !== ''
+    );
 });
 
 const apply = useDebounceFn(() => {
@@ -135,6 +159,28 @@ watch(form, apply);
             <option value="backlog">Backlog (no sprint)</option>
             <option v-for="s in sprints" :key="s.id" :value="String(s.id)">
                 {{ s.name }}
+            </option>
+        </NativeSelect>
+        <NativeSelect
+            v-if="showResearch"
+            v-model="form.method"
+            class="w-40"
+            aria-label="Research method"
+        >
+            <option value="">Any method</option>
+            <option v-for="m in researchMethods" :key="m" :value="m">
+                {{ m }}
+            </option>
+        </NativeSelect>
+        <NativeSelect
+            v-if="showResearch"
+            v-model="form.confidence"
+            class="w-36"
+            aria-label="Confidence"
+        >
+            <option value="">Any confidence</option>
+            <option v-for="c in confidenceLevels" :key="c" :value="c">
+                {{ c }}
             </option>
         </NativeSelect>
         <NativeSelect

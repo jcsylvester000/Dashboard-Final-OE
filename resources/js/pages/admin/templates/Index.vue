@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from '@lucide/vue';
 import { reactive, ref } from 'vue';
 import WorkflowTemplateController from '@/actions/App/Http/Controllers/Admin/WorkflowTemplateController';
@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { confirmDialog } from '@/composables/useConfirm';
 import { departmentDot } from '@/lib/format';
+import { update as saveChecklistDefaults } from '@/routes/admin/checklist-defaults';
 import { index } from '@/routes/admin/templates';
 import type { DepartmentOption } from '@/types/admin';
 
@@ -38,7 +39,15 @@ type Template = {
 const props = defineProps<{
     templates: Template[];
     departments: DepartmentOption[];
+    // E-25
+    checklistDefaults: Record<string, string>;
+    taskTypes: Record<string, string>;
 }>();
+
+// E-25: agency definition of done per task type.
+const dodForm = useForm<{ templates: Record<string, string> }>({
+    templates: { ...props.checklistDefaults },
+});
 
 defineOptions({
     layout: {
@@ -343,6 +352,52 @@ function deptColor(id: number | null): string {
                         </span>
                     </li>
                 </ol>
+            </CardContent>
+        </Card>
+
+        <!-- E-25: agency definition of done -->
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Definition of done</CardTitle>
+                <CardDescription
+                    >Checklist added to every new task of that type, one line
+                    per item, when its client has no checklist of its own. Each
+                    line must be ticked before Done. Changes apply to new tasks
+                    only.</CardDescription
+                >
+            </CardHeader>
+            <CardContent>
+                <form
+                    class="grid gap-3 text-sm sm:grid-cols-2"
+                    @submit.prevent="
+                        dodForm.put(saveChecklistDefaults.url(), {
+                            preserveScroll: true,
+                        })
+                    "
+                >
+                    <label
+                        v-for="(label, type) in taskTypes"
+                        :key="type"
+                        class="grid gap-1"
+                    >
+                        <span class="text-xs text-muted-foreground">{{
+                            label
+                        }}</span>
+                        <textarea
+                            v-model="dodForm.templates[type]"
+                            rows="5"
+                            class="rounded-md border bg-transparent px-2 py-1 text-sm"
+                        />
+                    </label>
+                    <div class="sm:col-span-2">
+                        <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="dodForm.processing"
+                            >Save definition of done</Button
+                        >
+                    </div>
+                </form>
             </CardContent>
         </Card>
     </div>

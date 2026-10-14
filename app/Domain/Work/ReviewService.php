@@ -4,10 +4,13 @@ namespace App\Domain\Work;
 
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Workspaces\WorkspaceAccess;
+use App\Models\Attachment;
 use App\Models\Task;
 use App\Models\TaskReviewer;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Workspace;
+use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -47,6 +50,75 @@ class ReviewService
         }
         $task->forceFill(['review_rule' => $rule === 'any' ? 'any' : 'all'])->save();
         $this->activity->log('task.reviewers-set', $task, ['user_ids' => $ids, 'rule' => $task->review_rule], $actor);
+    }
+
+    /**
+     * Approve or send back a task that is In Review (E-07). With rule "all", one approval
+     * out of several keeps it In Review. $via = "inbox" for approvals made from the alert (E-38).
+     *
+     * @return string the message for the person deciding
+     */
+    public function decide(Task $task, User $user, string $decision, string $note, string $via = 'task'): string
+    {
+        $tasks = app(TaskService::class);
+        $comments = app(CommentService::class);
+        $named = $this->isReviewer($task, $user);
+        if ($named) {
+            $this->record($task, $user, $decision === 'approve' ? 'approved' : 'changes', $note !== '' ? $note : null);
+        }
+        $where = $via === 'inbox' ? ['via' => 'inbox'] : [];
+
+        if ($decision === 'approve' && $named && ! $this->satisfied($task)) {
+            $progress = $this->progress($task);
+            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null, 'partial' => true, ...$where], $user);
+
+            return __('Approved (:a of :t). Waiting for :names.', ['a' => $progress['approved'], 't' => $progress['total'], 'names' => implode(', ', $progress['waiting'])]);
+        }
+
+        if ($decision === 'approve') {
+            $tasks->update($task, ['status_id' => TaskStatus::idFor('done')], $user);
+            $this->activity->log('task.approved', $task, ['note' => $note !== '' ? $note : null, ...$where], $user);
+            if ($note !== '') {
+                $comments->create($task, __('Approved: :note', ['note' => $note]), $user);
+            } elseif ($via === 'inbox') {
+                $comments->create($task, __('Approved (from the inbox).'), $user);
+            }
+
+            return __('Approved and marked Done.');
+        }
+
+        $tasks->update($task, ['status_id' => TaskStatus::idFor('in-progress')], $user);
+        $this->activity->log('task.changes-requested', $task, $where, $user);
+        $assignee = $task->assignee;
+        $tag = $assignee !== null && $assignee->id !== $user->id ? '@['.$assignee->name.'](user:'.$assignee->id.') ' : '';
+        $comments->create($task, $tag.__('Changes requested: :note', ['note' => $note]), $user);
+
+        return __('Sent back with your notes.');
+    }
+
+    /**
+     * E-38: a named reviewer may approve straight from the alert when the task is still In
+     * Review, they haven't decided yet, and they opened it in the last 24 hours after its
+     * newest file version (so nobody approves work they haven't seen).
+     */
+    public function canQuickApprove(Task $task, User $user): bool
+    {
+        if ($task->status_id !== TaskStatus::idFor('in-review')) {
+            return false;
+        }
+        $row = $task->reviewers()->where('user_id', $user->id)->first();
+        if ($row === null || $row->decision === 'approved' || $row->seen_at === null || $row->seen_at->lt(now()->subDay())) {
+            return false;
+        }
+        $newestFile = Attachment::query()->where('attachable_type', $task->getMorphClass())->where('attachable_id', $task->id)->max('created_at');
+
+        return $newestFile === null || $row->seen_at->gte(CarbonImmutable::parse((string) $newestFile));
+    }
+
+    /** E-38: remember when a named reviewer last opened the task. */
+    public function markSeen(Task $task, User $user): void
+    {
+        $task->reviewers()->where('user_id', $user->id)->update(['seen_at' => now()]);
     }
 
     public function isReviewer(Task $task, User $user): bool

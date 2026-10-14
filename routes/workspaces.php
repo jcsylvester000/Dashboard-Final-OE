@@ -4,6 +4,7 @@ use App\Http\Controllers\Workspaces\LabelController;
 use App\Http\Controllers\Workspaces\ProjectBudgetController;
 use App\Http\Controllers\Workspaces\ProjectController;
 use App\Http\Controllers\Workspaces\RecordLinkController;
+use App\Http\Controllers\Workspaces\ReviewRuleController;
 use App\Http\Controllers\Workspaces\TaskFieldsController;
 use App\Http\Controllers\Workspaces\WorkspaceController;
 use App\Http\Controllers\Workspaces\WorkspaceMemberController;
@@ -23,6 +24,9 @@ Route::middleware('auth')->group(function () {
         Route::put('settings/task-fields', [TaskFieldsController::class, 'fields'])->name('task-fields.update');
         Route::put('settings/status-labels', [TaskFieldsController::class, 'statusLabels'])->name('status-labels.update');
         Route::put('settings/checklists', [TaskFieldsController::class, 'checklists'])->name('checklists.update');
+        // E-34: default reviewers (leads).
+        Route::post('settings/review-rules', [ReviewRuleController::class, 'store'])->name('review-rules.store');
+        Route::delete('settings/review-rules/{reviewRule}', [ReviewRuleController::class, 'destroy'])->name('review-rules.destroy');
         Route::get('settings', [WorkspaceController::class, 'edit'])->name('edit');
         Route::put('/', [WorkspaceController::class, 'update'])->name('update');
 

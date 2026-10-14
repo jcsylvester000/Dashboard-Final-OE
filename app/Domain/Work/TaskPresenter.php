@@ -154,6 +154,9 @@ class TaskPresenter
             ->when(($filters['assignee'] ?? null) === 'none', fn (Builder $q) => $q->whereNull('assignee_id'))
             ->when(is_numeric($filters['assignee'] ?? null), fn (Builder $q) => $q->where('assignee_id', (int) $filters['assignee']))
             ->when($filters['type'] ?? null, fn (Builder $q, $t) => $q->where('type', (string) $t))
+            // E-28: research method / confidence.
+            ->when($filters['method'] ?? null, fn (Builder $q, $m) => $q->where('work_details->method', (string) $m))
+            ->when($filters['confidence'] ?? null, fn (Builder $q, $c) => $q->where('work_details->confidence', (string) $c))
             ->when(($filters['sprint'] ?? null) === 'backlog', fn (Builder $q) => $q->whereNull('sprint_id'))
             ->when(($filters['sprint'] ?? null) === 'active', fn (Builder $q) => $q->whereHas('sprint', fn (Builder $s) => $s->where('status', 'active')))
             ->when(is_numeric($filters['sprint'] ?? null), fn (Builder $q) => $q->where('sprint_id', (int) $filters['sprint']))

@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Identity\ActivityLogger;
+use App\Domain\Work\ChecklistDefaults;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Task;
+use App\Models\User;
 use App\Models\WorkflowTemplate;
 use App\Models\WorkflowTemplateStep;
 use Illuminate\Http\RedirectResponse;
@@ -40,7 +43,34 @@ class WorkflowTemplateController extends Controller
                     ])->values(),
                 ]),
             'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name', 'color']),
+            // E-25: agency definition of done per task type.
+            'checklistDefaults' => collect(Task::TYPES)->mapWithKeys(fn ($label, $type) => [$type => implode("\n", app(ChecklistDefaults::class)->for($type))]),
+            'taskTypes' => Task::TYPES,
         ]);
+    }
+
+    /**
+     * E-25: save the agency definition of done (one line per item; empty = none for that type).
+     */
+    public function checklistDefaults(Request $request, ChecklistDefaults $defaults): RedirectResponse
+    {
+        $data = $request->validate(['templates' => ['present', 'array'], 'templates.*' => ['nullable', 'string', 'max:3000']]);
+        $templates = [];
+        foreach ((array) $data['templates'] as $type => $text) {
+            if (! array_key_exists((string) $type, Task::TYPES)) {
+                continue;
+            }
+            $lines = array_values(array_filter(array_map(fn ($l) => mb_substr(trim($l), 0, 200), preg_split('/\R/', (string) $text) ?: []), fn ($l) => $l !== ''));
+            if ($lines !== []) {
+                $templates[(string) $type] = array_slice($lines, 0, 30);
+            }
+        }
+        /** @var User $by */
+        $by = $request->user();
+        $defaults->save($templates, $by);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Definition of done saved. New tasks get it unless their client has its own.')]);
+
+        return back();
     }
 
     public function store(Request $request): RedirectResponse

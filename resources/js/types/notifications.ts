@@ -26,6 +26,8 @@ export type InboxItem = {
     done?: boolean;
     snoozed_until?: string | null;
     created_at: string;
+    /** E-38: review alert the person may approve from the inbox */
+    can_approve?: boolean;
 };
 
 /** Payload pushed over Reverb (WorkNotification::toBroadcast). */

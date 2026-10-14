@@ -3,12 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Notifications\NotificationKind;
+use App\Domain\Work\ReviewService;
 use App\Models\InboxNotification;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,10 +37,13 @@ class InboxController extends Controller
             ->paginate(30)
             ->withQueryString();
 
+        // E-38: review alerts the person may approve right here.
+        $quick = $this->quickApprovable($user, $page->getCollection()->all());
+
         return Inertia::render('inbox/Index', [
             'tab' => $tab,
             'counts' => collect(self::TABS)->mapWithKeys(fn (string $t) => [$t => $this->tab($this->mine($user), $t)->count()]),
-            'items' => $page->through(fn (InboxNotification $n): array => $this->present($n)),
+            'items' => $page->through(fn (InboxNotification $n): array => [...$this->present($n), 'can_approve' => isset($quick[$n->id])]),
             'kinds' => collect(NotificationKind::cases())->mapWithKeys(fn (NotificationKind $k) => [$k->value => $k->label()]),
         ]);
     }
@@ -58,6 +66,53 @@ class InboxController extends Controller
             && ! str_contains($url, '\\') && preg_match('/[\x00-\x1F\x7F]/', $url) !== 1
             ? redirect($url)
             : to_route('inbox.index');
+    }
+
+    /**
+     * E-38: approve the task straight from its review alert. Only when the reviewer opened the
+     * task in the last 24 hours after its newest file; "Request changes" always opens the task.
+     */
+    public function approve(Request $request, string $notification, ReviewService $reviews): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $item = $this->find($request, $notification);
+        $task = $item->kind === NotificationKind::Review->value && isset($item->data['task_id'])
+            ? Task::query()->with('workspace')->find((int) $item->data['task_id']) : null;
+        abort_if($task === null, 404);
+        Gate::forUser($user)->authorize('review', $task);
+        if (! $reviews->canQuickApprove($task, $user)) {
+            throw ValidationException::withMessages(['approve' => __('Open the task and look at the latest version first, then approve.')]);
+        }
+
+        $message = DB::transaction(fn () => $reviews->decide($task, $user, 'approve', '', 'inbox'));
+        $item->forceFill(['read_at' => $item->read_at ?? now(), 'done_at' => now()])->save();
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
+
+        return back();
+    }
+
+    /**
+     * Ids of the given alerts whose task this person can approve from the inbox.
+     *
+     * @param  array<int, InboxNotification>  $items
+     * @return array<string, true>
+     */
+    private function quickApprovable(User $user, array $items): array
+    {
+        $reviews = app(ReviewService::class);
+        $out = [];
+        foreach ($items as $n) {
+            if ($n->kind !== NotificationKind::Review->value || $n->done_at !== null || ! isset($n->data['task_id'])) {
+                continue;
+            }
+            $task = Task::query()->with('workspace')->find((int) $n->data['task_id']);
+            if ($task !== null && Gate::forUser($user)->allows('review', $task) && $reviews->canQuickApprove($task, $user)) {
+                $out[$n->id] = true;
+            }
+        }
+
+        return $out;
     }
 
     public function read(Request $request): RedirectResponse

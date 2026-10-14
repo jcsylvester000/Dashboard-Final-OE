@@ -12,7 +12,15 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { formatDateTime, timeAgo } from '@/lib/format';
-import { done, index, open, read, restore, snooze } from '@/routes/inbox';
+import {
+    approve,
+    done,
+    index,
+    open,
+    read,
+    restore,
+    snooze,
+} from '@/routes/inbox';
 import { edit as notificationSettings } from '@/routes/notifications';
 import type { Paginated } from '@/types/admin';
 import type { InboxItem, NotificationKind } from '@/types/notifications';
@@ -67,6 +75,10 @@ function markDone(ids: string[]): void {
 
 function snoozeItem(id: string, until: '1h' | 'tomorrow' | 'next_week'): void {
     router.post(snooze.url(id), { until }, opts);
+}
+
+function approveItem(id: string): void {
+    router.post(approve.url(id), {}, opts);
 }
 
 function restoreItem(id: string): void {
@@ -189,6 +201,13 @@ function doneAllShown(): void {
                         </Button>
                     </template>
                     <template v-else>
+                        <!-- E-38: approve without opening (only after a recent look at the latest version) -->
+                        <Button
+                            v-if="item.can_approve"
+                            size="sm"
+                            @click="approveItem(item.id)"
+                            >Approve</Button
+                        >
                         <Button
                             v-if="!item.read"
                             variant="ghost"

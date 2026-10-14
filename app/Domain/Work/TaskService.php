@@ -61,8 +61,8 @@ class TaskService
             $this->stampCompletion($task);
             $task->save();
 
-            // E-36: the client's checklist template for this task type.
-            foreach ($workspace->checklist_templates[$task->type] ?? [] as $i => $line) {
+            // E-36 / E-25: the client's checklist for this task type, else the agency default.
+            foreach ($workspace->checklist_templates[$task->type] ?? app(ChecklistDefaults::class)->for($task->type) as $i => $line) {
                 if (trim($line) !== '') {
                     $task->checklistItems()->create(['label' => mb_substr(trim($line), 0, 200), 'position' => $i]);
                 }
@@ -121,6 +121,10 @@ class TaskService
             $task->save();
             if ($newRound) {
                 app(ReviewService::class)->resetRound($task);
+                // E-34: nobody named yet -> fill reviewers from the client's review rules.
+                if (! $task->reviewers()->exists()) {
+                    app(ReviewRules::class)->apply($task, $actor);
+                }
             }
 
             if (array_key_exists('label_ids', $data)) {

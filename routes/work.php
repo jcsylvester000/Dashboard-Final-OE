@@ -111,5 +111,6 @@ Route::middleware('auth')->group(function () {
         Route::post('templates', [WorkflowTemplateController::class, 'store'])->name('templates.store');
         Route::put('templates/{template}', [WorkflowTemplateController::class, 'update'])->name('templates.update');
         Route::delete('templates/{template}', [WorkflowTemplateController::class, 'destroy'])->name('templates.destroy');
+        Route::put('checklist-defaults', [WorkflowTemplateController::class, 'checklistDefaults'])->name('checklist-defaults.update'); // E-25
     });
 });

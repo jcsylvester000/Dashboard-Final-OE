@@ -7,11 +7,13 @@ use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
 use App\Domain\Identity\ViewAs;
 use App\Domain\Reports\WorkspaceOverview;
+use App\Domain\Work\ChecklistDefaults;
 use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Models\ReviewRule;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
@@ -167,6 +169,18 @@ class WorkspaceController extends Controller
             'fieldTypes' => Workspace::CUSTOM_FIELD_TYPES,
             'maxFields' => Workspace::MAX_CUSTOM_FIELDS,
             'checklistTemplates' => collect(Task::TYPES)->mapWithKeys(fn ($label, $type) => [$type => implode("\n", $workspace->checklist_templates[$type] ?? [])]),
+            // E-25: the agency default a type falls back to when this client has none.
+            'checklistDefaults' => collect(app(ChecklistDefaults::class)->all())->map(fn (array $lines) => implode("\n", $lines)),
+            // E-34: review rules.
+            'reviewRules' => ReviewRule::query()->with('project:id,name')->where('workspace_id', $workspace->id)->orderBy('id')->get()
+                ->map(fn (ReviewRule $r): array => [
+                    'id' => $r->id, 'project' => $r->project?->name, 'deliverable_type' => $r->deliverable_type, 'task_type' => $r->task_type,
+                    'mode' => $r->mode, 'reviewers' => User::query()->whereIn('id', $r->user_ids)->orderBy('name')->pluck('name')->values(),
+                ])->values(),
+            'reviewModes' => ReviewRule::MODES,
+            'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2] ?? [],
+            'projectOptions' => $workspace->projects()->where('status', '!=', 'archived')->orderBy('name')->get(['id', 'name']),
+            'memberOptions' => $this->presenter->memberOptions($workspace),
             'taskTypes' => Task::TYPES,
             'taskStatuses' => TaskStatus::ordered()->map(fn (TaskStatus $s) => [
                 'id' => $s->id, 'name' => $s->name, 'label' => $workspace->status_labels[$s->id] ?? '',

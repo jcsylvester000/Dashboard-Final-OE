@@ -55,7 +55,7 @@ class WorkSummaryController extends Controller
                 return;
             }
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['Task', 'Department', 'Status', 'Person', 'Hours', 'Campaign', 'Channel', 'Deliverable', 'Target URL', 'Keyword', 'SEO work type'], escape: '');
+            fputcsv($out, ['Task', 'Department', 'Status', 'Person', 'Hours', 'Campaign', 'Channel', 'Deliverable', 'Target URL', 'Keyword', 'SEO work type', 'Research question', 'Method', 'Sources', 'Confidence', 'Decision it informs'], escape: '');
             foreach ($summary['tasks'] as $task) {
                 $d = (array) $task['work_details'];
                 foreach ($task['people'] as $person) {
@@ -64,6 +64,7 @@ class WorkSummaryController extends Controller
                         sprintf('%d.%02d', intdiv($person['minutes'], 60), intdiv(($person['minutes'] % 60) * 100 + 30, 60)),
                         $d['campaign'] ?? '', $d['channel'] ?? '', $d['deliverable_type'] ?? '',
                         $d['target_url'] ?? '', $d['keyword'] ?? '', $d['work_type'] ?? '',
+                        $d['question'] ?? '', $d['method'] ?? '', $d['sources'] ?? '', $d['confidence'] ?? '', $d['decision'] ?? '',
                     ]), escape: '');
                 }
             }
@@ -86,6 +87,7 @@ class WorkSummaryController extends Controller
                     'task' => $task['title'], 'department' => $task['department'], 'status' => $task['status'] ?? '', 'person' => $person['name'],
                     'hours' => round($person['minutes'] / 60, 2), 'campaign' => $d['campaign'] ?? '', 'channel' => $d['channel'] ?? '',
                     'deliverable' => $d['deliverable_type'] ?? '', 'url' => $d['target_url'] ?? '', 'keyword' => $d['keyword'] ?? '', 'seo' => $d['work_type'] ?? '',
+                    'question' => $d['question'] ?? '', 'method' => $d['method'] ?? '', 'sources' => $d['sources'] ?? '', 'confidence' => $d['confidence'] ?? '', 'decision' => $d['decision'] ?? '',
                 ];
             }
         }
@@ -100,6 +102,7 @@ class WorkSummaryController extends Controller
             ['key' => 'hours', 'label' => 'Hours', 'type' => 'hours'],
             $text('campaign', 'Campaign'), $text('channel', 'Channel'), $text('deliverable', 'Deliverable'),
             $text('url', 'Target URL'), $text('keyword', 'Keyword'), $text('seo', 'SEO work type'),
+            $text('question', 'Research question'), $text('method', 'Method'), $text('sources', 'Sources'), $text('confidence', 'Confidence'), $text('decision', 'Decision it informs'),
         ], $rows), 'xlsx');
     }
 
