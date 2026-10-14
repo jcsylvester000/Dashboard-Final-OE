@@ -63,7 +63,20 @@ class AnnotationController extends Controller
             // E-15 / E-16: on a video, the frame (or range) the comment is about.
             'time_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
             'end_ms' => ['nullable', 'integer', 'gt:time_ms', 'max:86400000'],
+            // E-30: a text highlight on a PDF page.
+            'page' => ['nullable', 'integer', 'between:1,5000'],
+            'quote' => ['nullable', 'string', 'max:2000', 'required_with:rects'],
+            'rects' => ['nullable', 'array', 'min:1', 'max:60', 'required_with:quote'],
+            'rects.*' => ['array', 'size:4'],
+            'rects.*.*' => ['numeric', 'between:0,1'],
         ]);
+        $isPdf = $attachment->mime === 'application/pdf';
+        if ((isset($data['page']) || isset($data['rects'])) && ! $isPdf) {
+            throw ValidationException::withMessages(['page' => __('Highlights go on PDFs.')]);
+        }
+        if (isset($data['rects']) && ! isset($data['page'])) {
+            throw ValidationException::withMessages(['page' => __('A highlight needs its page.')]);
+        }
         $video = $attachment->isVideoAsset() || str_starts_with($attachment->mime, 'video/');
         if (isset($data['time_ms']) && ! $video) {
             throw ValidationException::withMessages(['time_ms' => __('Timecodes go on videos.')]);
@@ -74,7 +87,7 @@ class AnnotationController extends Controller
         /** @var User $user */
         $user = $request->user();
         $isReply = isset($data['parent_id']);
-        if ($isReply && (isset($data['x']) || isset($data['shapes']) || isset($data['time_ms']))) {
+        if ($isReply && (isset($data['x']) || isset($data['shapes']) || isset($data['time_ms']) || isset($data['page']))) {
             throw ValidationException::withMessages(['parent_id' => __('Replies go on an existing pin.')]);
         }
 
@@ -90,6 +103,9 @@ class AnnotationController extends Controller
                 'y' => isset($data['y']) ? round((float) $data['y'], 5) : null,
                 'time_ms' => isset($data['time_ms']) ? (int) $data['time_ms'] : null,
                 'end_ms' => isset($data['end_ms']) ? (int) $data['end_ms'] : null,
+                'page' => isset($data['page']) ? (int) $data['page'] : null,
+                'quote' => isset($data['quote']) ? trim((string) $data['quote']) : null,
+                'rects' => isset($data['rects']) ? array_map(fn ($r) => array_map(fn ($n) => round((float) $n, 4), (array) $r), array_values((array) $data['rects'])) : null,
                 'shapes' => isset($data['shapes']) ? $this->cleanShapes($data['shapes']) : null,
                 'color' => $data['color'] ?? null,
                 'body' => trim((string) $data['body']),
@@ -195,6 +211,9 @@ class AnnotationController extends Controller
                 'time_ms' => $a->time_ms,
                 'end_ms' => $a->end_ms,
                 'carried_from_version' => $a->carried_from_version, // E-17
+                'page' => $a->page, // E-30
+                'quote' => $a->quote,
+                'rects' => $a->rects ?? [],
                 'body' => $a->body,
                 // E-08: client pins say so (the client's own name, marked Client).
                 'author' => $a->client_name ?? ($a->author->name ?? 'Former member'),

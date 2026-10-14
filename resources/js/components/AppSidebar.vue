@@ -28,6 +28,7 @@ import {
     History,
     LayoutDashboard,
     LayoutGrid,
+    Lightbulb,
     ListTodo,
     ShieldCheck,
     Users,
@@ -58,6 +59,7 @@ import { index as apiTokensAdmin } from '@/routes/admin/api-tokens';
 import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { edit as companySettings } from '@/routes/admin/company';
 import { index as reviewsIndex } from '@/routes/reviews';
+import { index as findingsIndex } from '@/routes/findings';
 import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as driveIndex } from '@/routes/drive';
@@ -111,6 +113,11 @@ const mainNavItems: NavItem[] = [
         title: 'Reviews',
         href: reviewsIndex(),
         icon: BadgeCheck,
+    },
+    {
+        title: 'Findings',
+        href: findingsIndex(),
+        icon: Lightbulb,
     },
     {
         title: 'My files',

@@ -39,6 +39,7 @@ import TaskDeliverySpecController from '@/actions/App/Http/Controllers/Work/Task
 import ChecklistCard from '@/components/work/ChecklistCard.vue';
 import CitationsCard from '@/components/work/CitationsCard.vue';
 import CodeCard from '@/components/work/CodeCard.vue';
+import SaveFindingButton from '@/components/work/SaveFindingButton.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
 import ReviewersCard from '@/components/work/ReviewersCard.vue';
@@ -908,6 +909,12 @@ function describe(entry: TimelineEntry): string {
                                     }}<span v-if="c.edited_at"> · edited</span>
                                 </span>
                                 <span class="flex gap-1">
+                                    <SaveFindingButton
+                                        v-if="can"
+                                        source-type="comment"
+                                        :source-id="c.id"
+                                        :default-title="c.body"
+                                    />
                                     <button
                                         v-if="c.can_edit"
                                         type="button"

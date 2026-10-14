@@ -58,6 +58,10 @@ const VideoReviewPlayer = defineAsyncComponent(
 const VideoCompare = defineAsyncComponent(
     () => import('@/components/files/VideoCompare.vue'),
 );
+// E-30: PDF.js viewer with text highlights (falls back to the browser viewer).
+const PdfViewer = defineAsyncComponent(
+    () => import('@/components/files/PdfViewer.vue'),
+);
 
 /**
  * E-01: review files without leaving the task. Images zoom and pan, PDFs use the
@@ -229,9 +233,48 @@ const draftPin = ref<{ x: number; y: number } | null>(null);
 const draftShapes = ref<AnnotationShape[]>([]);
 const undone = ref<AnnotationShape[]>([]);
 const busy = ref(false);
+// E-30: a text highlight waiting for its comment.
+const draftHighlight = ref<{
+    page: number;
+    quote: string;
+    rects: number[][];
+} | null>(null);
+const pdfFailed = ref(false);
+const pdfViewer = ref<{ scrollTo: (page: number) => void } | null>(null);
 const drafting = computed(
-    () => draftPin.value !== null || draftShapes.value.length > 0,
+    () =>
+        draftPin.value !== null ||
+        draftShapes.value.length > 0 ||
+        draftHighlight.value !== null,
 );
+const pdfHighlights = computed(() =>
+    pins.value
+        .filter((p) => p.page && p.rects?.length)
+        .map((p) => ({
+            id: p.id,
+            number: p.number,
+            page: p.page as number,
+            rects: p.rects ?? [],
+            color: p.color,
+            resolved: p.resolved,
+        })),
+);
+function onPdfSelect(sel: {
+    page: number;
+    quote: string;
+    rects: number[][];
+}): void {
+    if (!canWrite.value) {
+        return;
+    }
+    draftHighlight.value = sel;
+    mode.value = 'annotate';
+    selectedId.value = null;
+}
+function openHighlight(id: number): void {
+    mode.value = 'annotate';
+    select(id);
+}
 const showPins = computed(() =>
     pins.value.filter((p) => !p.resolved || p.id === selectedId.value),
 );
@@ -325,13 +368,22 @@ async function loadPins(): Promise<void> {
     pins.value = [];
     selectedId.value = null;
     cancelDraft();
-    if (kind.value === 'image' || kind.value === 'video') {
+    if (
+        kind.value === 'image' ||
+        kind.value === 'video' ||
+        kind.value === 'pdf'
+    ) {
         await call(annotationsIndex.url(shown.value.id), 'GET');
     }
 }
 watch(() => shown.value.id, loadPins, { immediate: true });
+watch(
+    () => shown.value.id,
+    () => (pdfFailed.value = false),
+);
 
 function cancelDraft(): void {
+    draftHighlight.value = null;
     draftPin.value = null;
     draftShapes.value = [];
     undone.value = [];
@@ -379,6 +431,10 @@ async function savePin(body: string): Promise<void> {
         y: draftPin.value?.y ?? null,
         color: color.value,
         shapes: draftShapes.value.length ? draftShapes.value : null,
+        // E-30: highlighted text on a PDF page.
+        page: draftHighlight.value?.page ?? null,
+        quote: draftHighlight.value?.quote ?? null,
+        rects: draftHighlight.value?.rects ?? null,
         // E-15: the frame (or in-out range) on a video.
         time_ms:
             kind.value === 'video'
@@ -425,6 +481,9 @@ async function remove(id: number): Promise<void> {
 function select(id: number | null): void {
     selectedId.value = id;
     const p = pins.value.find((x) => x.id === id);
+    if (kind.value === 'pdf' && p?.page) {
+        pdfViewer.value?.scrollTo(p.page);
+    }
     if (
         kind.value === 'video' &&
         p &&
@@ -698,6 +757,18 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                     "
                 />
             </div>
+            <PdfViewer
+                v-else-if="kind === 'pdf' && !pdfFailed"
+                ref="pdfViewer"
+                :key="shown.url"
+                :url="shown.url"
+                :highlights="pdfHighlights"
+                :selected-id="selectedId"
+                :draft="draftHighlight"
+                @select="onPdfSelect"
+                @open="openHighlight"
+                @failed="pdfFailed = true"
+            />
             <iframe
                 v-else-if="kind === 'pdf'"
                 :src="shown.url"
@@ -827,7 +898,11 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             </div>
 
             <div
-                v-if="kind === 'image' || kind === 'video'"
+                v-if="
+                    kind === 'image' ||
+                    kind === 'video' ||
+                    (kind === 'pdf' && !pdfFailed)
+                "
                 class="grid grid-cols-3 gap-1"
                 role="tablist"
                 aria-label="Viewer mode"
@@ -865,7 +940,13 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                     "
                 >
                     <MessageSquarePlus class="size-3.5" />
-                    {{ kind === 'video' ? 'Comments' : 'Pins' }}
+                    {{
+                        kind === 'video'
+                            ? 'Comments'
+                            : kind === 'pdf'
+                              ? 'Highlights'
+                              : 'Pins'
+                    }}
                     <span
                         v-if="pins.filter((p) => !p.resolved).length"
                         class="rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-black"
@@ -960,8 +1041,11 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             <AnnotationPanel
                 v-if="
                     mode === 'annotate' &&
-                    (kind === 'image' || kind === 'video')
+                    (kind === 'image' ||
+                        kind === 'video' ||
+                        (kind === 'pdf' && !pdfFailed))
                 "
+                :text-only="kind === 'pdf'"
                 :fps="kind === 'video' ? fps : null"
                 :draft-label="draftLabel"
                 v-model:tool="tool"
@@ -985,9 +1069,12 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
                 @place-center="placeCenter"
                 @nudge="nudge"
             />
-            <p v-else-if="kind === 'pdf'" class="text-xs text-white/50">
-                Pins and drawing work on images. PDFs open in the browser's
-                viewer.
+            <p
+                v-else-if="kind === 'pdf' && pdfFailed"
+                class="text-xs text-white/50"
+            >
+                This PDF opened in the browser's viewer, so highlights are not
+                available for it.
             </p>
 
             <!-- E-18: delivery spec check (before anyone reviews). -->

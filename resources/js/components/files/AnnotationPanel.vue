@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import type { Tool } from '@/components/files/AnnotationCanvas.vue';
 import { timeAgo } from '@/lib/format';
 import { timecode } from '@/lib/timecode';
+import SaveFindingButton from '@/components/work/SaveFindingButton.vue';
 import type { AnnotationPin } from '@/types/files';
 import { ANNOTATION_COLORS } from '@/types/files';
 
@@ -38,6 +39,8 @@ const props = defineProps<{
     fps?: number | null;
     /** E-15: "at 00:00:35:12" for the comment being written */
     draftLabel?: string;
+    /** E-30: PDFs: highlight text only (no pin or drawing tools). */
+    textOnly?: boolean;
 }>();
 const emit = defineEmits<{
     'update:tool': [tool: Tool];
@@ -117,7 +120,11 @@ defineExpose({ showResolved });
 <template>
     <div class="space-y-3">
         <div v-if="canWrite" class="space-y-2">
+            <p v-if="textOnly && !drafting" class="text-xs text-white/60">
+                Select text in the PDF to highlight it and add a comment.
+            </p>
             <div
+                v-if="!textOnly"
                 class="flex flex-wrap gap-1"
                 role="toolbar"
                 aria-label="Annotation tools"
@@ -161,6 +168,7 @@ defineExpose({ showResolved });
                 </button>
             </div>
             <div
+                v-if="!textOnly"
                 class="flex flex-wrap gap-1"
                 role="radiogroup"
                 aria-label="Colour"
@@ -190,9 +198,17 @@ defineExpose({ showResolved });
                         · {{ draftCount }} drawing{{
                             draftCount === 1 ? '' : 's'
                         }}</template
-                    >. Drag on the image to draw, or move the pin:
+                    ><template v-if="textOnly"
+                        >: comment on the highlighted text.</template
+                    ><template v-else
+                        >. Drag on the image to draw, or move the pin:</template
+                    >
                 </p>
-                <div class="flex gap-1" aria-label="Move the pin">
+                <div
+                    v-if="!textOnly"
+                    class="flex gap-1"
+                    aria-label="Move the pin"
+                >
                     <Button
                         size="sm"
                         variant="secondary"
@@ -237,7 +253,7 @@ defineExpose({ showResolved });
                         size="sm"
                         :disabled="busy || !body.trim()"
                         @click="save"
-                        >Save pin</Button
+                        >{{ textOnly ? 'Save highlight' : 'Save pin' }}</Button
                     >
                     <Button
                         size="sm"
@@ -249,7 +265,7 @@ defineExpose({ showResolved });
                 </div>
             </div>
             <Button
-                v-else
+                v-else-if="!textOnly"
                 size="sm"
                 variant="secondary"
                 class="w-full"
@@ -321,6 +337,15 @@ defineExpose({ showResolved });
                             }}</span
                         >
                         <span
+                            v-if="p.quote"
+                            class="mb-1 block border-l-2 border-yellow-300/70 pl-2 text-xs text-white/80 italic"
+                            >p. {{ p.page }} · “{{
+                                p.quote.length > 160
+                                    ? `${p.quote.slice(0, 160)}…`
+                                    : p.quote
+                            }}”</span
+                        >
+                        <span
                             class="block text-sm break-words whitespace-pre-line"
                             :class="
                                 p.resolved ? 'text-white/50 line-through' : ''
@@ -346,6 +371,14 @@ defineExpose({ showResolved });
                     </span>
                 </button>
                 <div v-if="selectedId === p.id" class="mt-2 space-y-2 pl-8">
+                    <!-- E-31: keep this as a reusable finding -->
+                    <SaveFindingButton
+                        v-if="canWrite"
+                        source-type="annotation"
+                        :source-id="p.id"
+                        :default-title="p.body"
+                        dark
+                    />
                     <div v-for="r in p.replies" :key="r.id" class="text-xs">
                         <p class="break-words whitespace-pre-line">
                             {{ r.body }}
@@ -409,8 +442,12 @@ defineExpose({ showResolved });
             </li>
         </ul>
         <p v-if="!pins.length && !drafting" class="text-xs text-white/50">
-            No pins yet.<template v-if="canWrite">
-                Choose the pin tool and click the spot, or draw first.</template
+            <template v-if="textOnly">No highlights yet.</template
+            ><template v-else
+                >No pins yet.<template v-if="canWrite">
+                    Choose the pin tool and click the spot, or draw
+                    first.</template
+                ></template
             >
         </p>
     </div>

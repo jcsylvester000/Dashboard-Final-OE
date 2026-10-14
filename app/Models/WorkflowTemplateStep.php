@@ -15,8 +15,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $description
  * @property int $offset_days
  * @property bool $depends_on_previous
+ * @property list<int>|null $review_user_ids E-40: named reviewers for this step's task
+ * @property bool $review_leads E-40: the client's leads review
+ * @property string|null $review_mode all | any
+ * @property int|null $review_sla_days working days before reminders
+ * @property list<string>|null $checklist lines ("? " = optional)
  */
-#[Fillable(['workflow_template_id', 'position', 'department_id', 'title', 'description', 'offset_days', 'depends_on_previous'])]
+#[Fillable(['workflow_template_id', 'position', 'department_id', 'title', 'description', 'offset_days', 'depends_on_previous', 'review_user_ids', 'review_leads', 'review_mode', 'review_sla_days', 'checklist'])]
 class WorkflowTemplateStep extends Model
 {
     /**
@@ -28,6 +33,10 @@ class WorkflowTemplateStep extends Model
             'position' => 'integer',
             'offset_days' => 'integer',
             'depends_on_previous' => 'boolean',
+            'review_user_ids' => 'array',
+            'review_leads' => 'boolean',
+            'review_sla_days' => 'integer',
+            'checklist' => 'array',
         ];
     }
 

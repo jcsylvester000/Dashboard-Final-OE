@@ -53,6 +53,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $custom_values B-07: custom field key => value
  * @property int|null $delivery_spec_id E-18: video spec chosen for this task (else matched by channel)
  * @property string|null $preview_url E-26: staging / preview link
+ * @property int|null $review_sla_days E-40: working days a review may take (else the project's)
  * @property string|null $preview_status up | down
  * @property int|null $preview_http last HTTP status
  * @property Carbon|null $preview_checked_at

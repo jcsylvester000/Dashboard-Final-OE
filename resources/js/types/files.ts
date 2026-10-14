@@ -91,6 +91,10 @@ export type AnnotationPin = {
     end_ms?: number | null;
     /** E-17: carried over from this earlier cut */
     carried_from_version?: number | null;
+    /** E-30: a text highlight on a PDF page (boxes as 0..1 of the page) */
+    page?: number | null;
+    quote?: string | null;
+    rects?: number[][];
     body: string;
     author: string;
     author_id: number | null;

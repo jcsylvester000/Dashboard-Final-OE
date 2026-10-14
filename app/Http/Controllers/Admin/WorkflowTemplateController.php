@@ -34,18 +34,27 @@ class WorkflowTemplateController extends Controller
                     'name' => $t->name,
                     'description' => $t->description,
                     'is_active' => $t->is_active,
+                    'working_days' => $t->working_days,
                     'steps' => $t->steps->map(fn (WorkflowTemplateStep $s) => [
                         'department_id' => $s->department_id,
                         'title' => $s->title,
                         'description' => $s->description,
                         'offset_days' => $s->offset_days,
                         'depends_on_previous' => $s->depends_on_previous,
+                        // E-40: review step and checklist.
+                        'review_user_ids' => $s->review_user_ids ?? [],
+                        'review_leads' => $s->review_leads,
+                        'review_mode' => $s->review_mode ?? 'all',
+                        'review_sla_days' => $s->review_sla_days,
+                        'checklist' => implode("\n", $s->checklist ?? []),
                     ])->values(),
                 ]),
             'departments' => Department::query()->active()->orderBy('position')->get(['id', 'name', 'color']),
             // E-25: agency definition of done per task type.
             'checklistDefaults' => collect(Task::TYPES)->mapWithKeys(fn ($label, $type) => [$type => implode("\n", app(ChecklistDefaults::class)->for($type))]),
             'taskTypes' => Task::TYPES,
+            // E-40: people who can be named as reviewers (applied only where they are on the client).
+            'reviewerOptions' => User::query()->active()->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -83,6 +92,7 @@ class WorkflowTemplateController extends Controller
                 'slug' => $this->uniqueSlug($data['name']),
                 'description' => $data['description'] ?? null,
                 'is_active' => $data['is_active'] ?? true,
+                'working_days' => $data['working_days'] ?? true,
                 'created_by' => $request->user()->id,
             ]);
             $this->syncSteps($template, $data['steps']);
@@ -103,6 +113,7 @@ class WorkflowTemplateController extends Controller
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
                 'is_active' => $data['is_active'] ?? true,
+                'working_days' => $data['working_days'] ?? $template->working_days,
             ])->save();
             $this->syncSteps($template, $data['steps']);
             $this->activity->log('workflow-template.updated', $template);
@@ -123,15 +134,22 @@ class WorkflowTemplateController extends Controller
     }
 
     /**
-     * @return array{name: string, description?: string|null, is_active?: bool, steps: list<array<string, mixed>>}
+     * @return array{name: string, description?: string|null, is_active?: bool, working_days?: bool, steps: list<array<string, mixed>>}
      */
     private function validated(Request $request): array
     {
-        /** @var array{name: string, description?: string|null, is_active?: bool, steps: list<array<string, mixed>>} */
+        /** @var array{name: string, description?: string|null, is_active?: bool, working_days?: bool, steps: list<array<string, mixed>>} */
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['boolean'],
+            'working_days' => ['boolean'],
+            'steps.*.review_user_ids' => ['nullable', 'array', 'max:10'],
+            'steps.*.review_user_ids.*' => ['integer', Rule::exists('users', 'id')],
+            'steps.*.review_leads' => ['boolean'],
+            'steps.*.review_mode' => ['nullable', Rule::in(['all', 'any'])],
+            'steps.*.review_sla_days' => ['nullable', 'integer', 'between:1,30'],
+            'steps.*.checklist' => ['nullable', 'string', 'max:3000'],
             'steps' => ['required', 'array', 'min:1', 'max:30'],
             'steps.*.department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')],
             'steps.*.title' => ['required', 'string', 'max:255'],
@@ -156,6 +174,11 @@ class WorkflowTemplateController extends Controller
                 'description' => $step['description'] ?? null,
                 'offset_days' => (int) $step['offset_days'],
                 'depends_on_previous' => $i > 0 && (bool) ($step['depends_on_previous'] ?? true),
+                'review_user_ids' => array_values(array_unique(array_map('intval', (array) ($step['review_user_ids'] ?? [])))) ?: null,
+                'review_leads' => (bool) ($step['review_leads'] ?? false),
+                'review_mode' => ($step['review_mode'] ?? null) === 'any' ? 'any' : 'all',
+                'review_sla_days' => isset($step['review_sla_days']) ? (int) $step['review_sla_days'] : null,
+                'checklist' => array_slice(array_values(array_filter(array_map(fn ($l) => mb_substr(trim($l), 0, 200), preg_split('/\R/', (string) ($step['checklist'] ?? '')) ?: []), fn ($l) => $l !== '')), 0, 30) ?: null,
             ]);
         }
     }

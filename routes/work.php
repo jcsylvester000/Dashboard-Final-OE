@@ -11,6 +11,7 @@ use App\Http\Controllers\Work\CalendarController;
 use App\Http\Controllers\Work\ChecklistController;
 use App\Http\Controllers\Work\CitationController;
 use App\Http\Controllers\Work\CommentController;
+use App\Http\Controllers\Work\FindingController;
 use App\Http\Controllers\Work\QueueController;
 use App\Http\Controllers\Work\ReleaseNotesController;
 use App\Http\Controllers\Work\ReviewQueueController;
@@ -34,6 +35,13 @@ Route::middleware('auth')->group(function () {
     Route::get('my-tasks', [QueueController::class, 'mine'])->name('tasks.mine');
     // E-32: everything waiting for my review, across clients.
     Route::get('reviews', ReviewQueueController::class)->name('reviews.index');
+    // E-31: findings library (across the clients you can see).
+    Route::get('findings', [FindingController::class, 'index'])->name('findings.index');
+    Route::post('findings', [FindingController::class, 'store'])->middleware('throttle:60,1')->name('findings.store');
+    Route::put('findings/{finding}', [FindingController::class, 'update'])->name('findings.update');
+    Route::delete('findings/{finding}', [FindingController::class, 'destroy'])->name('findings.destroy');
+    Route::post('findings/{finding}/tasks', [FindingController::class, 'link'])->name('findings.link');
+    Route::delete('findings/{finding}/tasks/{task}', [FindingController::class, 'unlink'])->name('findings.unlink');
     Route::get('tasks/new-options', [TaskController::class, 'newOptions'])->name('tasks.new-options');
 
     // People (findings batch 4): leave, workload, people report, directory

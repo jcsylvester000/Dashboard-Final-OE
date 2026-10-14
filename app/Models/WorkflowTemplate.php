@@ -16,8 +16,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $description
  * @property bool $is_active
  * @property int|null $created_by
+ * @property bool $working_days E-40: offsets count working days (weekends and holidays skipped)
  */
-#[Fillable(['name', 'slug', 'description', 'is_active', 'created_by'])]
+#[Fillable(['name', 'slug', 'description', 'is_active', 'created_by', 'working_days'])]
 class WorkflowTemplate extends Model
 {
     /**
@@ -25,7 +26,7 @@ class WorkflowTemplate extends Model
      */
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'working_days' => 'boolean'];
     }
 
     /** @return HasMany<WorkflowTemplateStep, $this> */

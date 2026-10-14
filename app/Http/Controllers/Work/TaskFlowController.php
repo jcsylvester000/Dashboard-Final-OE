@@ -172,7 +172,11 @@ class TaskFlowController extends Controller
             array_map(fn ($id) => $id === null ? null : (int) $id, $data['assignees'] ?? []),
         );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __(':n tasks created from ":t".', ['n' => count($created), 't' => $template->name])]);
+        $message = sprintf('%d tasks created from "%s".', count($created), $template->name);
+        if ($templates->notes !== []) {
+            $message .= ' '.implode(' ', array_slice($templates->notes, 0, 3)); // E-40: reviewers who could not be added
+        }
+        Inertia::flash('toast', ['type' => $templates->notes === [] ? 'success' : 'warning', 'message' => $message]);
 
         return to_route('workspaces.tasks.board', $workspace);
     }

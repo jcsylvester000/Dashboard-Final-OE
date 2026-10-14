@@ -42,7 +42,9 @@ class SendReviewReminders extends Command
                     $started = $task->review_requested_at->toDateString();
                     // Working days that have fully passed since the request (the request day doesn't count).
                     $elapsed = max(0, count($capacity->load($started, $today)->workingDays($started, $today)) - 1);
-                    $sla = $task->project_id !== null ? max(1, (int) Project::query()->whereKey($task->project_id)->value('review_sla_days')) : 1;
+                    // E-40: a template step can set the task's own review SLA.
+                    $sla = $task->review_sla_days !== null ? max(1, $task->review_sla_days)
+                        : ($task->project_id !== null ? max(1, (int) Project::query()->whereKey($task->project_id)->value('review_sla_days')) : 1);
                     if ($elapsed < $sla) {
                         continue;
                     }

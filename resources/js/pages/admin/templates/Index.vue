@@ -26,6 +26,12 @@ type Step = {
     description: string | null;
     offset_days: number;
     depends_on_previous: boolean;
+    // E-40: review step after this task, and its checklist.
+    review_user_ids: number[];
+    review_leads: boolean;
+    review_mode: 'all' | 'any';
+    review_sla_days: number | null;
+    checklist: string;
 };
 
 type Template = {
@@ -33,6 +39,7 @@ type Template = {
     name: string;
     description: string | null;
     is_active: boolean;
+    working_days?: boolean;
     steps: Step[];
 };
 
@@ -42,7 +49,22 @@ const props = defineProps<{
     // E-25
     checklistDefaults: Record<string, string>;
     taskTypes: Record<string, string>;
+    reviewerOptions?: { id: number; name: string }[];
 }>();
+
+const blankStep = (offset = 0): Step => ({
+    department_id: null,
+    title: '',
+    description: null,
+    offset_days: offset,
+    depends_on_previous: true,
+    review_user_ids: [],
+    review_leads: false,
+    review_mode: 'all',
+    review_sla_days: null,
+    checklist: '',
+});
+const openReview = ref<number | null>(null);
 
 // E-25: agency definition of done per task type.
 const dodForm = useForm<{ templates: Record<string, string> }>({
@@ -61,11 +83,13 @@ const draft = reactive<{
     name: string;
     description: string;
     is_active: boolean;
+    working_days: boolean;
     steps: Step[];
 }>({
     name: '',
     description: '',
     is_active: true,
+    working_days: true,
     steps: [],
 });
 
@@ -75,28 +99,16 @@ function edit(t: Template | null): void {
     draft.name = t?.name ?? '';
     draft.description = t?.description ?? '';
     draft.is_active = t?.is_active ?? true;
+    draft.working_days = t?.working_days ?? true;
+    openReview.value = null;
     draft.steps = t
-        ? t.steps.map((s) => ({ ...s }))
-        : [
-              {
-                  department_id: null,
-                  title: '',
-                  description: null,
-                  offset_days: 0,
-                  depends_on_previous: true,
-              },
-          ];
+        ? t.steps.map((s) => ({ ...blankStep(), ...s }))
+        : [blankStep()];
 }
 
 function addStep(): void {
     const last = draft.steps[draft.steps.length - 1];
-    draft.steps.push({
-        department_id: null,
-        title: '',
-        description: null,
-        offset_days: (last?.offset_days ?? 0) + 3,
-        depends_on_previous: true,
-    });
+    draft.steps.push(blankStep((last?.offset_days ?? 0) + 3));
 }
 
 function move(i: number, dir: -1 | 1): void {
@@ -110,6 +122,7 @@ function save(): void {
         name: draft.name,
         description: draft.description || null,
         is_active: draft.is_active,
+        working_days: draft.working_days,
         steps: draft.steps.map((s) => ({
             ...s,
             department_id: s.department_id || null,
@@ -206,6 +219,14 @@ function deptColor(id: number | null): string {
                     />
                     Active (shown when starting a workflow)
                 </label>
+                <label class="ml-4 inline-flex items-center gap-2 text-sm">
+                    <input
+                        v-model="draft.working_days"
+                        type="checkbox"
+                        class="size-4"
+                    />
+                    Count days as working days (skip weekends and holidays)
+                </label>
 
                 <ol class="space-y-2">
                     <li
@@ -288,6 +309,114 @@ function deptColor(id: number | null): string {
                                 <Trash2 class="size-3.5" />
                             </button>
                         </span>
+                        <!-- E-40: review step and checklist for this task -->
+                        <div class="text-xs sm:col-span-12">
+                            <button
+                                type="button"
+                                class="underline"
+                                :aria-expanded="openReview === i"
+                                @click="
+                                    openReview = openReview === i ? null : i
+                                "
+                            >
+                                Review and checklist<template
+                                    v-if="
+                                        s.review_user_ids.length ||
+                                        s.review_leads ||
+                                        s.checklist.trim()
+                                    "
+                                >
+                                    ·
+                                    {{
+                                        s.review_user_ids.length +
+                                        (s.review_leads ? 1 : 0)
+                                    }}
+                                    reviewer source(s),
+                                    {{
+                                        s.checklist
+                                            .split('\n')
+                                            .filter((l) => l.trim()).length
+                                    }}
+                                    checklist line(s)</template
+                                >
+                            </button>
+                            <div
+                                v-if="openReview === i"
+                                class="mt-2 grid gap-3 rounded border bg-muted/30 p-3 sm:grid-cols-2"
+                            >
+                                <div class="grid gap-1">
+                                    <span class="text-muted-foreground"
+                                        >Reviewers (added where they are on the
+                                        client)</span
+                                    >
+                                    <select
+                                        v-model="s.review_user_ids"
+                                        multiple
+                                        size="5"
+                                        class="rounded-md border bg-background p-1"
+                                        aria-label="Reviewers"
+                                    >
+                                        <option
+                                            v-for="u in reviewerOptions ?? []"
+                                            :key="u.id"
+                                            :value="u.id"
+                                        >
+                                            {{ u.name }}
+                                        </option>
+                                    </select>
+                                    <label class="flex items-center gap-1">
+                                        <input
+                                            v-model="s.review_leads"
+                                            type="checkbox"
+                                            class="size-3.5"
+                                        />
+                                        The client's leads review
+                                    </label>
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
+                                        <NativeSelect
+                                            v-model="s.review_mode"
+                                            class="h-8 w-40"
+                                            aria-label="Who must approve"
+                                        >
+                                            <option value="all">
+                                                All must approve
+                                            </option>
+                                            <option value="any">
+                                                Any one approves
+                                            </option>
+                                        </NativeSelect>
+                                        <label class="flex items-center gap-1"
+                                            >SLA
+                                            <input
+                                                v-model.number="
+                                                    s.review_sla_days
+                                                "
+                                                type="number"
+                                                min="1"
+                                                max="30"
+                                                class="h-8 w-16 rounded-md border bg-background px-2"
+                                                aria-label="Review SLA in working days"
+                                            />
+                                            working days</label
+                                        >
+                                    </div>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-muted-foreground"
+                                        >Checklist (one per line; start with ?
+                                        for optional)</span
+                                    >
+                                    <textarea
+                                        v-model="s.checklist"
+                                        rows="5"
+                                        class="rounded-md border bg-background p-2"
+                                        placeholder="Brief signed off&#10;? Moodboard attached"
+                                    />
+                                </label>
+                            </div>
+                        </div>
                     </li>
                 </ol>
                 <InputError :message="errors.steps" />

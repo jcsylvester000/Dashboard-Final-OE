@@ -23,6 +23,9 @@ use Illuminate\Support\Carbon;
  * @property int|null $end_ms E-15: end of a range comment
  * @property int|null $carried_from_id E-17: the open comment on the previous cut this continues
  * @property int|null $carried_from_version
+ * @property int|null $page E-30: PDF page (1-based)
+ * @property string|null $quote E-30: highlighted text
+ * @property list<list<float>>|null $rects E-30: highlight boxes [x, y, w, h] as 0..1 of the page
  * @property list<array<string, mixed>>|null $shapes
  * @property string|null $color
  * @property string $body
@@ -31,7 +34,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['attachment_id', 'parent_id', 'user_id', 'client_name', 'number', 'x', 'y', 'time_ms', 'end_ms', 'carried_from_id', 'carried_from_version', 'shapes', 'color', 'body'])]
+#[Fillable(['attachment_id', 'parent_id', 'user_id', 'client_name', 'number', 'x', 'y', 'time_ms', 'end_ms', 'carried_from_id', 'carried_from_version', 'page', 'quote', 'rects', 'shapes', 'color', 'body'])]
 class Annotation extends Model
 {
     /** Colour-blind-safe palette (Okabe-Ito), also used for pins. */
@@ -53,6 +56,8 @@ class Annotation extends Model
             'time_ms' => 'integer',
             'end_ms' => 'integer',
             'carried_from_version' => 'integer',
+            'page' => 'integer',
+            'rects' => 'array',
         ];
     }
 
