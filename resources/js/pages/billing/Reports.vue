@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import BillingNav from '@/components/billing/BillingNav.vue';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { formatDate, formatMinutes } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
+import { show as invoiceShow } from '@/routes/billing/invoices';
 import { index as invoicesIndex } from '@/routes/billing/invoices';
 import { index } from '@/routes/billing/reports';
 
@@ -27,6 +28,8 @@ const props = defineProps<{
         tax_minor: number;
         total_minor: number;
         paid_minor: number;
+        net_php_minor: number;
+        php_missing: boolean;
     }[];
     utilisation: {
         client: string;
@@ -41,6 +44,7 @@ const props = defineProps<{
         value_minor: number;
         unpriced_minutes: number;
         oldest: string | null;
+        value_php_minor: number | null;
     }[];
     profitability: {
         client: string;
@@ -51,8 +55,37 @@ const props = defineProps<{
         cost_minor: number;
         margin_minor: number;
         uncosted_minutes: number;
+        revenue_php_minor: number;
+        cost_php_minor: number;
+        margin_php_minor: number;
+        php_missing: boolean;
     }[];
+    fx: {
+        realised_php_minor: number;
+        unrealised_php_minor: number;
+        open: {
+            id: number;
+            number: string;
+            client: string;
+            currency: string;
+            balance_minor: number;
+            invoice_rate: string | null;
+            today_rate: string | null;
+            unrealised_php_minor: number | null;
+        }[];
+        missing_rates: string[];
+    };
+    base: string;
 }>();
+
+// E-107: one PHP total across currencies, at the invoices' locked rates.
+const revenuePhp = computed(() =>
+    props.revenue.reduce((t, r) => t + r.net_php_minor, 0),
+);
+const revenueMissing = computed(() => props.revenue.some((r) => r.php_missing));
+const marginPhp = computed(() =>
+    props.profitability.reduce((t, r) => t + r.margin_php_minor, 0),
+);
 
 defineOptions({
     layout: {
@@ -133,6 +166,9 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                             <th class="py-1.5 text-right font-medium">Tax</th>
                             <th class="py-1.5 text-right font-medium">Total</th>
                             <th class="py-1.5 text-right font-medium">Paid</th>
+                            <th class="py-1.5 text-right font-medium">
+                                Net in {{ base }}
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -154,8 +190,38 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                             <td class="py-1.5 text-right tabular-nums">
                                 {{ formatMoney(r.paid_minor, r.currency) }}
                             </td>
+                            <td
+                                class="py-1.5 text-right text-muted-foreground tabular-nums"
+                            >
+                                {{ formatMoney(r.net_php_minor, base)
+                                }}<span
+                                    v-if="r.php_missing"
+                                    class="text-amber-700"
+                                    title="Some invoices have no locked rate"
+                                    >*</span
+                                >
+                            </td>
                         </tr>
                     </tbody>
+                    <tfoot class="border-t font-semibold">
+                        <tr>
+                            <td colspan="6" class="py-1.5 text-right">
+                                All currencies, net in {{ base }}
+                            </td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                {{ formatMoney(revenuePhp, base) }}
+                            </td>
+                        </tr>
+                        <tr v-if="revenueMissing">
+                            <td
+                                colspan="7"
+                                class="py-1 text-right text-xs font-normal text-amber-700"
+                            >
+                                * Some foreign invoices have no locked rate yet
+                                (open them and lock the issue-date rate).
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </CardContent>
         </Card>
@@ -249,11 +315,19 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                                     without a rate</span
                                 >
                             </span>
-                            <span class="tabular-nums"
+                            <span class="text-right tabular-nums"
                                 >{{ formatMinutes(u.minutes) }} ·
-                                {{
-                                    formatMoney(u.value_minor, u.currency)
-                                }}</span
+                                {{ formatMoney(u.value_minor, u.currency) }}
+                                <span
+                                    v-if="
+                                        u.currency !== base &&
+                                        u.value_php_minor !== null
+                                    "
+                                    class="block text-xs text-muted-foreground"
+                                    >≈
+                                    {{ formatMoney(u.value_php_minor, base) }}
+                                    estimated at today's rate</span
+                                ></span
                             >
                         </li>
                     </ul>
@@ -292,6 +366,9 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                             <th class="py-1.5 text-right font-medium">
                                 Margin
                             </th>
+                            <th class="py-1.5 text-right font-medium">
+                                Margin in {{ base }}
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -328,6 +405,133 @@ function marginPct(r: { revenue_minor: number; margin_minor: number }): string {
                                 <span class="text-xs text-muted-foreground">{{
                                     marginPct(r)
                                 }}</span>
+                            </td>
+                            <td
+                                class="py-1.5 text-right tabular-nums"
+                                :class="{
+                                    'text-rose-600': r.margin_php_minor < 0,
+                                }"
+                            >
+                                {{ formatMoney(r.margin_php_minor, base)
+                                }}<span
+                                    v-if="r.php_missing"
+                                    class="text-amber-700"
+                                    >*</span
+                                >
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="border-t font-semibold">
+                        <tr>
+                            <td colspan="6" class="py-1.5 text-right">
+                                Total margin in {{ base }}
+                            </td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                {{ formatMoney(marginPhp, base) }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base">Foreign exchange</CardTitle>
+                <CardDescription
+                    >Realised gains and losses on payments received in this
+                    range, and what open foreign invoices are worth at today's
+                    rate compared with the rate locked when they were issued.
+                    Rates come from Billing > Exchange rates.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="space-y-3 text-sm">
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-md border p-3">
+                        <p class="text-xs text-muted-foreground">Realised</p>
+                        <p
+                            class="text-lg font-semibold tabular-nums"
+                            :class="
+                                fx.realised_php_minor < 0 ? 'text-rose-600' : ''
+                            "
+                        >
+                            {{ formatMoney(fx.realised_php_minor, base) }}
+                        </p>
+                    </div>
+                    <div class="rounded-md border p-3">
+                        <p class="text-xs text-muted-foreground">
+                            Unrealised on open invoices (today)
+                        </p>
+                        <p
+                            class="text-lg font-semibold tabular-nums"
+                            :class="
+                                fx.unrealised_php_minor < 0
+                                    ? 'text-rose-600'
+                                    : ''
+                            "
+                        >
+                            {{ formatMoney(fx.unrealised_php_minor, base) }}
+                        </p>
+                    </div>
+                </div>
+                <p
+                    v-if="fx.missing_rates.length"
+                    class="text-xs text-amber-700"
+                >
+                    No rate yet for {{ fx.missing_rates.join(', ') }}: add one
+                    on Exchange rates.
+                </p>
+                <table v-if="fx.open.length" class="w-full text-sm">
+                    <thead class="text-left text-xs text-muted-foreground">
+                        <tr>
+                            <th class="py-1.5 font-medium">Invoice</th>
+                            <th class="py-1.5 font-medium">Client</th>
+                            <th class="py-1.5 text-right font-medium">Open</th>
+                            <th class="py-1.5 text-right font-medium">
+                                Issued at
+                            </th>
+                            <th class="py-1.5 text-right font-medium">Today</th>
+                            <th class="py-1.5 text-right font-medium">
+                                Gain / loss
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="o in fx.open" :key="o.id">
+                            <td class="py-1.5">
+                                <a
+                                    :href="invoiceShow.url(o.id)"
+                                    class="underline underline-offset-4"
+                                    >{{ o.number }}</a
+                                >
+                            </td>
+                            <td class="py-1.5">{{ o.client }}</td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                {{ formatMoney(o.balance_minor, o.currency) }}
+                            </td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                {{
+                                    o.invoice_rate ? `₱${o.invoice_rate}` : '—'
+                                }}
+                            </td>
+                            <td class="py-1.5 text-right tabular-nums">
+                                {{ o.today_rate ? `₱${o.today_rate}` : '—' }}
+                            </td>
+                            <td
+                                class="py-1.5 text-right tabular-nums"
+                                :class="
+                                    (o.unrealised_php_minor ?? 0) < 0
+                                        ? 'text-rose-600'
+                                        : ''
+                                "
+                            >
+                                {{
+                                    o.unrealised_php_minor !== null
+                                        ? formatMoney(
+                                              o.unrealised_php_minor,
+                                              base,
+                                          )
+                                        : '—'
+                                }}
                             </td>
                         </tr>
                     </tbody>

@@ -27,8 +27,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $reversed_at
  * @property int|null $reversed_by
  * @property string|null $reversal_reason
+ * @property string|null $php_rate PHP per 1 unit on the payment date (E-104)
  */
-#[Fillable(['invoice_id', 'amount_minor', 'method', 'reference', 'received_on', 'note', 'recorded_by', 'fee_minor', 'withholding_minor', 'received_minor', 'received_currency', 'fx_rate', 'credit_minor'])]
+#[Fillable(['invoice_id', 'amount_minor', 'method', 'reference', 'received_on', 'note', 'recorded_by', 'fee_minor', 'withholding_minor', 'received_minor', 'received_currency', 'fx_rate', 'credit_minor', 'php_rate'])]
 class Payment extends Model
 {
     public const METHODS = [
@@ -74,6 +75,7 @@ class Payment extends Model
             'fx_rate' => 'decimal:8',
             'credit_minor' => 'integer',
             'reversed_at' => 'datetime',
+            'php_rate' => 'decimal:6',
         ];
     }
 

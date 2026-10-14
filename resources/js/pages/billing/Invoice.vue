@@ -35,6 +35,7 @@ import {
     pdf,
     recalculate,
     link as createLink,
+    lockRate,
     review as requestReview,
     unlink as revokeLink,
     sendBack,
@@ -665,6 +666,28 @@ async function removeDraft(): Promise<void> {
                                     }}
                                 </td>
                             </tr>
+                            <tr
+                                v-if="inv.fx && inv.fx.total_php_minor !== null"
+                            >
+                                <td
+                                    colspan="3"
+                                    class="py-1 text-right text-xs text-muted-foreground"
+                                >
+                                    In PHP at ₱{{ inv.fx.rate }} ({{
+                                        formatDate(inv.fx.rate_on)
+                                    }}), internal only
+                                </td>
+                                <td
+                                    class="py-1 text-right text-xs text-muted-foreground tabular-nums"
+                                >
+                                    {{
+                                        formatMoney(
+                                            inv.fx.total_php_minor,
+                                            'PHP',
+                                        )
+                                    }}
+                                </td>
+                            </tr>
                             <tr v-if="isOpen" class="font-semibold">
                                 <td colspan="3" class="py-1 text-right">
                                     Balance due
@@ -1285,6 +1308,40 @@ async function removeDraft(): Promise<void> {
                     >
                         None yet.
                     </p>
+                    <div
+                        v-if="
+                            inv.fx &&
+                            inv.status !== 'draft' &&
+                            inv.fx.rate === null
+                        "
+                        class="mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                        No {{ inv.currency }} rate was set when this invoice was
+                        finalized, so it has no PHP equivalent.
+                        <button
+                            v-if="can['billing.finalize']"
+                            type="button"
+                            class="font-medium underline"
+                            @click="post(lockRate.url(inv.id))"
+                        >
+                            Lock the issue-date rate
+                        </button>
+                    </div>
+                    <p
+                        v-if="inv.fx && inv.fx.realised_minor"
+                        class="mb-2 text-xs"
+                        :class="
+                            inv.fx.realised_minor > 0
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'text-rose-700 dark:text-rose-300'
+                        "
+                    >
+                        Realised exchange
+                        {{ inv.fx.realised_minor > 0 ? 'gain' : 'loss' }}:
+                        {{
+                            formatMoney(Math.abs(inv.fx.realised_minor), 'PHP')
+                        }}
+                    </p>
                     <ul class="divide-y">
                         <li
                             v-for="p in inv.payments"
@@ -1340,7 +1397,8 @@ async function removeDraft(): Promise<void> {
                                     p.fee_minor ||
                                     p.withholding_minor ||
                                     p.received_minor !== null ||
-                                    p.credit_minor
+                                    p.credit_minor ||
+                                    p.fx_gain_php_minor
                                 "
                                 class="text-xs text-muted-foreground"
                             >
@@ -1363,7 +1421,22 @@ async function removeDraft(): Promise<void> {
                                 </template>
                                 <template v-if="p.credit_minor"
                                     >{{ money(p.credit_minor) }} kept as client
-                                    credit</template
+                                    credit ·
+                                </template>
+                                <template v-if="p.fx_gain_php_minor"
+                                    >FX
+                                    {{
+                                        p.fx_gain_php_minor > 0
+                                            ? 'gain'
+                                            : 'loss'
+                                    }}
+                                    {{
+                                        formatMoney(
+                                            Math.abs(p.fx_gain_php_minor),
+                                            'PHP',
+                                        )
+                                    }}
+                                    at ₱{{ p.php_rate }}</template
                                 >
                             </p>
                             <p

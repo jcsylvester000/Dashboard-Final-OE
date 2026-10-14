@@ -54,6 +54,8 @@ use Illuminate\Support\Carbon;
  * @property int $collection_stage overdue follow-up stage reached (E-72): 0 none, 1 = 7 days, 2 = 14, 3 = 30
  * @property Carbon|null $promise_to_pay_on alerts pause until this date passes
  * @property Carbon|null $last_contact_at
+ * @property string|null $php_rate PHP per 1 unit, locked at finalize (E-104)
+ * @property Carbon|null $php_rate_on the day of the rate used
  */
 #[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by', 'service_label'])]
 class Invoice extends Model
@@ -74,7 +76,9 @@ class Invoice extends Model
     /** Columns that may still change after finalize. */
     private const MUTABLE_AFTER_FINALIZE = ['status', 'paid_minor', 'credited_minor', 'pdf_path', 'overdue_alerted_at', 'updated_at',
         // E-70 / E-72: client link and collection follow-up are not part of the document.
-        'share_token', 'share_expires_at', 'share_first_viewed_at', 'share_views', 'collection_stage', 'promise_to_pay_on', 'last_contact_at'];
+        'share_token', 'share_expires_at', 'share_first_viewed_at', 'share_views', 'collection_stage', 'promise_to_pay_on', 'last_contact_at',
+        // E-104: set once (at finalize, or by "Lock rate" when no rate existed yet).
+        'php_rate', 'php_rate_on'];
 
     /**
      * @var array<string, mixed>
@@ -129,6 +133,8 @@ class Invoice extends Model
             'collection_stage' => 'integer',
             'promise_to_pay_on' => 'date',
             'last_contact_at' => 'datetime',
+            'php_rate' => 'decimal:6',
+            'php_rate_on' => 'date',
         ];
     }
 

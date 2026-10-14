@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Billing\FinanceSettings;
 use App\Domain\Billing\Money;
+use App\Domain\Billing\PaymentAccounts;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Settings\CompanyProfile;
 use App\Http\Controllers\Controller;
@@ -36,9 +37,30 @@ class CompanySettingsController extends Controller
             'company' => [...$c, 'has_logo' => $c['logo_path'] !== null],
             'logoUrl' => $c['logo_path'] !== null ? route('admin.company.logo', ['v' => substr(md5($c['logo_path']), 0, 8)]) : null,
             'finance' => $this->finance->get(),
+            // E-106: payment details per currency (documents show the one for their currency).
+            'paymentAccounts' => app(PaymentAccounts::class)->all(),
             'reviewModes' => FinanceSettings::REVIEW_MODES,
             'currencies' => BillingProfile::currencies(),
         ]);
+    }
+
+    public function updateAccounts(Request $request, PaymentAccounts $accounts): RedirectResponse
+    {
+        $currencies = BillingProfile::currencies();
+        $data = $request->validate([
+            'accounts' => ['present', 'array'],
+            'accounts.*' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $values = array_intersect_key((array) $data['accounts'], array_flip($currencies));
+        $before = $accounts->all();
+        $accounts->save($values);
+        $after = $accounts->all();
+        // Which currencies changed, not the account numbers themselves.
+        $changed = array_values(array_filter($currencies, fn ($c) => ($before[$c] ?? null) !== ($after[$c] ?? null)));
+        $this->activity->log('settings.payment-accounts-updated', null, ['currencies' => $changed]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Payment details saved. New invoices and statements show the ones for their currency.')]);
+
+        return back();
     }
 
     /**

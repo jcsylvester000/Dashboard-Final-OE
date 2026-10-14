@@ -80,6 +80,13 @@ export type InvoiceDetail = InvoiceRow & {
         can_finalize: boolean;
     };
     client_credit_minor: number;
+    fx: {
+        rate: string | null;
+        rate_on: string | null;
+        total_php_minor: number | null;
+        balance_php_minor: number | null;
+        realised_minor: number;
+    } | null;
     share: {
         url: string;
         expires_at: string | null;
@@ -124,6 +131,8 @@ export type InvoiceDetail = InvoiceRow & {
         reversed_at: string | null;
         reversed_by: string | null;
         reversal_reason: string | null;
+        php_rate: string | null;
+        fx_gain_php_minor: number | null;
     }[];
     credit_notes: InvoiceRow[];
 };

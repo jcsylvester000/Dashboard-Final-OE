@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
+use App\Domain\Billing\PaymentAccounts;
 use App\Domain\Billing\StatementService;
 use App\Domain\Settings\CompanyProfile;
 use App\Models\BillingProfile;
@@ -42,7 +43,7 @@ class ClientDocumentController extends Controller
             'brand' => $company['brand_color'],
             'logo' => $this->company->logoDataUri(),
             'taxLabel' => sprintf('%s (%d.%02d%%)', $company['vat_registered'] ? 'VAT' : 'Tax', intdiv($invoice->tax_rate_bp, 100), $invoice->tax_rate_bp % 100),
-            'paymentInstructions' => $profile?->payment_instructions,
+            'paymentInstructions' => app(PaymentAccounts::class)->for($profile, $invoice->currency),
         ]);
     }
 
@@ -68,7 +69,7 @@ class ClientDocumentController extends Controller
             'agency' => $company['name'],
             'brand' => $company['brand_color'],
             'logo' => $this->company->logoDataUri(),
-            'paymentInstructions' => $profile->payment_instructions,
+            'paymentInstructions' => app(PaymentAccounts::class)->for($profile, $profile->currency),
         ]);
     }
 

@@ -35,6 +35,16 @@ const props = defineProps<{
             total: number;
         }
     >;
+    /** E-107: every currency's open balances in PHP at their locked rates. */
+    agingPhp: {
+        current: number;
+        '1_30': number;
+        '31_60': number;
+        '61_90': number;
+        '90_plus': number;
+        total: number;
+        missing: number;
+    };
     workspaces: { id: number; name: string }[];
 }>();
 
@@ -101,6 +111,28 @@ function filter(change: Record<string, string>): void {
                         }"
                     >
                         {{ formatMoney(row[b.key], String(currency)) }}
+                    </p>
+                </div>
+            </CardContent>
+        </Card>
+
+        <Card v-if="Object.keys(aging).length > 1 || agingPhp.missing">
+            <CardHeader>
+                <CardTitle class="text-base">All receivables in PHP</CardTitle>
+                <CardDescription
+                    >Every currency at the rate locked on each invoice · total
+                    {{ formatMoney(agingPhp.total, 'PHP')
+                    }}<template v-if="agingPhp.missing">
+                        · {{ agingPhp.missing }} invoice(s) without a locked
+                        rate left out</template
+                    ></CardDescription
+                >
+            </CardHeader>
+            <CardContent class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                <div v-for="b in buckets" :key="b.key">
+                    <p class="text-xs text-muted-foreground">{{ b.label }}</p>
+                    <p class="font-medium tabular-nums">
+                        {{ formatMoney(agingPhp[b.key], 'PHP') }}
                     </p>
                 </div>
             </CardContent>

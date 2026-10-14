@@ -15,7 +15,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { confirmDialog } from '@/composables/useConfirm';
 import NativeSelect from '@/components/NativeSelect.vue';
-import { edit, finance as financeRoute, update } from '@/routes/admin/company';
+import {
+    edit,
+    finance as financeRoute,
+    paymentAccounts as accountsRoute,
+    update,
+} from '@/routes/admin/company';
 import {
     destroy as removeLogoRoute,
     store as storeLogo,
@@ -46,6 +51,7 @@ const props = defineProps<{
         receipt_thresholds: Record<string, number>;
     };
     reviewModes: Record<string, string>;
+    paymentAccounts: Record<string, string>;
     currencies: string[];
 }>();
 
@@ -85,6 +91,13 @@ const financeForm = useForm({
                 ? (props.finance.receipt_thresholds[c] / 100).toFixed(2)
                 : '',
         ]),
+    ) as Record<string, string>,
+});
+
+// E-106: what each currency's invoices tell the client to pay to.
+const accountsForm = useForm({
+    accounts: Object.fromEntries(
+        props.currencies.map((c) => [c, props.paymentAccounts[c] ?? '']),
     ) as Record<string, string>,
 });
 
@@ -391,6 +404,54 @@ async function removeLogo(): Promise<void> {
                     <div class="sm:col-span-2">
                         <Button type="submit" :disabled="financeForm.processing"
                             >Save invoice rules</Button
+                        >
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-base"
+                    >Payment details per currency</CardTitle
+                >
+                <CardDescription
+                    >Shown on invoices, statements and client links in that
+                    currency (a client's own instructions on their billing page
+                    take priority). Only people with billing settings access see
+                    these here.</CardDescription
+                >
+            </CardHeader>
+            <CardContent>
+                <form
+                    class="grid gap-3"
+                    @submit.prevent="
+                        accountsForm.put(accountsRoute.url(), {
+                            preserveScroll: true,
+                        })
+                    "
+                >
+                    <div v-for="c in currencies" :key="c" class="grid gap-1">
+                        <Label :for="`acct-${c}`">{{ c }}</Label>
+                        <textarea
+                            :id="`acct-${c}`"
+                            v-model="accountsForm.accounts[c]"
+                            rows="3"
+                            maxlength="1000"
+                            class="w-full rounded-md border bg-transparent p-2 text-sm"
+                            :placeholder="
+                                c === 'PHP'
+                                    ? 'BPI 1234-5678-90 · OverEasy Media Solutions Inc.\nGCash 0917 123 4567'
+                                    : c === 'EUR'
+                                      ? 'IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX'
+                                      : 'Wise USD account 1234567 · routing 026073150'
+                            "
+                        />
+                    </div>
+                    <div>
+                        <Button
+                            type="submit"
+                            :disabled="accountsForm.processing"
+                            >Save payment details</Button
                         >
                     </div>
                 </form>

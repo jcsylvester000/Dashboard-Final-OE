@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Domain\Billing\BillingReports;
+use App\Domain\Billing\FxRates;
 use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -35,6 +36,9 @@ class BillingReportController extends Controller
             'utilisation' => $reports->retainerUtilisation($month),
             'unbilled' => $reports->unbilled(),
             'profitability' => $reports->profitability($from, $to),
+            // E-107: exchange gains/losses and the base currency.
+            'fx' => $reports->foreignExchange($from->startOfMonth(), $to),
+            'base' => FxRates::BASE,
         ]);
     }
 }

@@ -3,6 +3,7 @@
 use App\Domain\Identity\Permissions;
 use App\Http\Controllers\Billing\BillingReportController;
 use App\Http\Controllers\Billing\ClientBillingController;
+use App\Http\Controllers\Billing\ExchangeRateController;
 use App\Http\Controllers\Billing\ExpenseController;
 use App\Http\Controllers\Billing\InvoiceController;
 use App\Http\Controllers\Billing\RateCardController;
@@ -33,6 +34,7 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
     Route::get('rates', [RateCardController::class, 'index'])->name('rates.index');
     Route::get('rates/history', [RateCardController::class, 'history'])->name('rates.history');
     Route::get('rate-templates/{rateTemplate}', [RateTemplateController::class, 'edit'])->name('rate-templates.edit');
+    Route::get('fx', [ExchangeRateController::class, 'index'])->name('fx.index'); // E-103
 
     // Preparing invoices: periods, drafts and their lines, expenses, fixed fees.
     Route::middleware('can:'.Permissions::BILLING_DRAFT)->group(function () {
@@ -60,6 +62,7 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
         Route::post('invoices/{invoice}/void', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
         Route::post('invoices/{invoice}/credit', [InvoiceController::class, 'credit'])->name('invoices.credit');
         Route::post('expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
+        Route::post('invoices/{invoice}/lock-rate', [InvoiceController::class, 'lockRate'])->name('invoices.lock-rate'); // E-104
     });
 
     // Collecting: payments, reversals, follow-ups, client links.
@@ -83,5 +86,6 @@ Route::middleware(['auth', 'can:'.Permissions::BILLING_VIEW])->prefix('billing')
         Route::put('rate-templates/{rateTemplate}', [RateTemplateController::class, 'update'])->name('rate-templates.update');
         Route::delete('rate-templates/{rateTemplate}', [RateTemplateController::class, 'destroy'])->name('rate-templates.destroy');
         Route::post('clients/{workspace:slug}/rate-template', [RateTemplateController::class, 'apply'])->name('clients.rate-template');
+        Route::post('fx', [ExchangeRateController::class, 'store'])->name('fx.store'); // E-103
     });
 });

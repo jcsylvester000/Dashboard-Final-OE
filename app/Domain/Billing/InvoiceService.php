@@ -31,6 +31,7 @@ class InvoiceService
         private readonly PeriodService $periods,
         private readonly ActivityLogger $activity,
         private readonly FinanceSettings $finance,
+        private readonly FxRates $fx,
     ) {}
 
     /**
@@ -299,7 +300,11 @@ class InvoiceService
                 ->orderByDesc('number')->lockForUpdate()->value('number');
             $now = now();
 
+            // E-104: the PHP rate of the issue date stays with the invoice for good.
+            $fx = $this->fx->rate($invoice->currency, $issue);
             $invoice->forceFill([
+                'php_rate' => $fx['rate'] ?? null,
+                'php_rate_on' => $fx['on'] ?? null,
                 'number' => (int) $last + 1,
                 'status' => Invoice::FINALIZED,
                 'issue_date' => $issue->toDateString(),
@@ -450,7 +455,9 @@ class InvoiceService
             $applied = min($data['amount_minor'], $invoice->balanceMinor());
             $excess = $data['amount_minor'] - $applied;
 
-            $payment = Payment::create([...$data, 'amount_minor' => $applied, 'credit_minor' => $excess, 'invoice_id' => $invoice->id, 'recorded_by' => $actor->id]);
+            $payment = Payment::create([...$data, 'amount_minor' => $applied, 'credit_minor' => $excess, 'invoice_id' => $invoice->id, 'recorded_by' => $actor->id,
+                // E-104: the rate on the payment date, for realised FX gain/loss.
+                'php_rate' => $this->fx->rate($invoice->currency, $data['received_on'])['rate'] ?? null]);
             $invoice->forceFill(['paid_minor' => $invoice->paid_minor + $applied])->save();
             if ($excess > 0) {
                 ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => $excess,
@@ -511,13 +518,32 @@ class InvoiceService
         }
 
         $payment = Payment::create(['invoice_id' => $invoice->id, 'amount_minor' => $use, 'method' => 'credit', 'received_on' => now()->toDateString(),
-            'note' => 'Client credit applied', 'recorded_by' => $actor->id]);
+            'note' => 'Client credit applied', 'recorded_by' => $actor->id, 'php_rate' => $this->fx->rate($invoice->currency, now()->toImmutable())['rate'] ?? null]);
         ClientCredit::create(['workspace_id' => $invoice->workspace_id, 'currency' => $invoice->currency, 'amount_minor' => -$use,
             'payment_id' => $payment->id, 'invoice_id' => $invoice->id, 'note' => 'Applied to '.$invoice->displayNumber(), 'created_by' => $actor->id]);
         $invoice->forceFill(['paid_minor' => $invoice->paid_minor + $use])->save();
         $this->settle($invoice, $actor, sprintf('Payment %s via %s', Money::format($use, $invoice->currency), Payment::METHODS['credit']));
 
         return $use;
+    }
+
+    /**
+     * E-104: an invoice finalized before its currency had a rate gets the issue-date rate
+     * once one exists. A locked rate never changes.
+     */
+    public function lockRate(Invoice $invoice, User $actor): Invoice
+    {
+        if ($invoice->isDraft() || $invoice->php_rate !== null) {
+            throw new BillingException('This invoice already has its rate, or is still a draft.');
+        }
+        $fx = $this->fx->rate($invoice->currency, $invoice->issue_date?->toImmutable() ?? now()->toImmutable());
+        if ($fx === null) {
+            throw new BillingException(__('Add a :c rate on Billing > Exchange rates first.', ['c' => $invoice->currency]));
+        }
+        $invoice->forceFill(['php_rate' => $fx['rate'], 'php_rate_on' => $fx['on']])->save();
+        $this->activity->log('billing.invoice-rate-locked', $invoice, ['rate' => $fx['rate'], 'on' => $fx['on']], $actor);
+
+        return $invoice;
     }
 
     /*

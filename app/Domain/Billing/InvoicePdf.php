@@ -48,7 +48,7 @@ class InvoicePdf
             'invoice' => $invoice,
             'company' => $this->company->get(),
             'logo' => $this->company->logoDataUri(),
-            'paymentInstructions' => $profile?->payment_instructions,
+            'paymentInstructions' => app(PaymentAccounts::class)->for($profile, $invoice->currency),
             'draft' => $invoice->isDraft(),
         ]));
     }
@@ -97,7 +97,7 @@ class InvoicePdf
             'client' => $profile->bill_to['name'] ?? $workspace->name,
             'company' => $this->company->get(),
             'logo' => $this->company->logoDataUri(),
-            'paymentInstructions' => $profile?->payment_instructions,
+            'paymentInstructions' => app(PaymentAccounts::class)->for($profile, (string) $statement['currency']),
         ]));
     }
 

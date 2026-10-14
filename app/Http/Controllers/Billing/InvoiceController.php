@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Domain\Billing\BillingException;
+use App\Domain\Billing\BillingReports;
 use App\Domain\Billing\FinanceSettings;
+use App\Domain\Billing\FxRates;
 use App\Domain\Billing\InvoicePdf;
 use App\Domain\Billing\InvoiceService;
 use App\Domain\Billing\Money;
@@ -61,6 +63,7 @@ class InvoiceController extends Controller
             'invoices' => $page->through(fn (Invoice $i): array => $this->row($i)),
             'filters' => $filters,
             'aging' => $this->invoices->aging(),
+            'agingPhp' => app(BillingReports::class)->agingInPhp(), // E-107
             'workspaces' => Workspace::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -108,6 +111,15 @@ class InvoiceController extends Controller
                 ],
                 // E-68: credit the client holds in this currency (applied automatically at finalize).
                 'client_credit_minor' => ClientCredit::balance($invoice->workspace_id, $invoice->currency),
+                // E-104: PHP equivalent at the locked rate (internal view only).
+                'fx' => $invoice->currency !== FxRates::BASE ? [
+                    'rate' => $invoice->php_rate !== null ? (string) $invoice->php_rate : null,
+                    'rate_on' => $invoice->php_rate_on?->toDateString(),
+                    'total_php_minor' => FxRates::toPhp($invoice->total_minor, $invoice->php_rate !== null ? (string) $invoice->php_rate : null),
+                    'balance_php_minor' => FxRates::toPhp($invoice->balanceMinor(), $invoice->php_rate !== null ? (string) $invoice->php_rate : null),
+                    'realised_minor' => $invoice->payments->whereNull('reversed_at')
+                        ->sum(fn (Payment $p) => self::fxGain($invoice, $p) ?? 0),
+                ] : null,
                 // E-70: the client link.
                 'share' => $invoice->share_token !== null ? [
                     'url' => route('invoice-link.show', $invoice->share_token),
@@ -167,6 +179,9 @@ class InvoiceController extends Controller
                     'reversed_at' => $p->reversed_at?->toIso8601String(),
                     'reversed_by' => $p->reverser?->name,
                     'reversal_reason' => $p->reversal_reason,
+                    // E-104: rate on the payment date and the realised gain (+) or loss (-) in PHP.
+                    'php_rate' => $p->php_rate !== null ? (string) $p->php_rate : null,
+                    'fx_gain_php_minor' => self::fxGain($invoice, $p),
                 ])->values(),
                 'credit_notes' => Invoice::query()->where('credited_invoice_id', $invoice->id)->get()
                     ->map(fn (Invoice $c): array => $this->row($c))->values(),
@@ -360,6 +375,25 @@ class InvoiceController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => isset($data['promise_to_pay_on'])
             ? __('Follow-up saved. Overdue alerts pause until :d.', ['d' => $data['promise_to_pay_on']])
             : __('Follow-up saved.')]);
+
+        return back();
+    }
+
+    /** E-104: realised FX gain (+) or loss (-) in PHP on the part of the invoice this payment settled. */
+    public static function fxGain(Invoice $invoice, Payment $payment): ?int
+    {
+        if ($invoice->currency === FxRates::BASE || $invoice->php_rate === null || $payment->php_rate === null || $payment->method === 'credit') {
+            return null;
+        }
+
+        return (int) FxRates::toPhp($payment->amount_minor, (string) $payment->php_rate) - (int) FxRates::toPhp($payment->amount_minor, (string) $invoice->php_rate);
+    }
+
+    /** E-104: lock the issue-date rate on an invoice finalized before a rate existed. */
+    public function lockRate(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $this->invoices->lockRate($invoice, $this->user($request));
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rate locked on :n.', ['n' => $invoice->displayNumber()])]);
 
         return back();
     }

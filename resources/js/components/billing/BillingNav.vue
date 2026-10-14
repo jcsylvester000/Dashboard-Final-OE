@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { index as clientsIndex } from '@/routes/billing/clients';
+import { index as fxIndex } from '@/routes/billing/fx';
 import { index as invoicesIndex } from '@/routes/billing/invoices';
 import { index as ratesIndex } from '@/routes/billing/rates';
 import { index as reportsIndex } from '@/routes/billing/reports';
@@ -12,6 +13,7 @@ const items = [
     { title: 'Invoices', href: invoicesIndex() },
     { title: 'Clients', href: clientsIndex() },
     { title: 'Rates', href: ratesIndex() },
+    { title: 'Exchange rates', href: fxIndex() },
     { title: 'Reports', href: reportsIndex() },
 ];
 </script>
