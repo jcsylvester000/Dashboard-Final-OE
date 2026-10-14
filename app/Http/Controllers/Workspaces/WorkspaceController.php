@@ -12,6 +12,8 @@ use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
+use App\Models\ChatChannel;
+use App\Models\CodeRepository;
 use App\Models\DeliverySpec;
 use App\Models\Project;
 use App\Models\ReviewRule;
@@ -183,6 +185,15 @@ class WorkspaceController extends Controller
             'deliverySpecs' => DeliverySpec::query()->where('workspace_id', $workspace->id)->orderBy('name')->get()
                 ->map(fn (DeliverySpec $d): array => $d->only(['id', 'name', 'channel', 'deliverable', 'aspect', 'min_width', 'min_height', 'max_duration_s', 'max_size_mb', 'captions_required']))->values(),
             'channelOptions' => Task::WORK_DETAIL_FIELDS['marketing']['channel'][2],
+            // E-24 / E-41: GitHub repositories and chat channels.
+            'repositories' => CodeRepository::query()->where('workspace_id', $workspace->id)->orderBy('full_name')->get(['id', 'full_name', 'on_open_status', 'on_merge_status']),
+            'githubWebhook' => ['url' => route('webhooks.github'), 'configured' => (string) config('services.github.webhook_secret') !== ''],
+            'chatChannels' => ChatChannel::query()->where('workspace_id', $workspace->id)->orderBy('id')->get()
+                ->map(fn (ChatChannel $c): array => [
+                    'id' => $c->id, 'provider' => $c->provider, 'name' => $c->name, 'url' => $c->maskedUrl(), 'events' => $c->events,
+                    'enabled' => $c->enabled, 'last_ok_at' => $c->last_ok_at?->toIso8601String(), 'last_error' => $c->last_error,
+                ])->values(),
+            'chatEvents' => ChatChannel::EVENTS,
             'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2],
             'projectOptions' => $workspace->projects()->where('status', '!=', 'archived')->orderBy('name')->get(['id', 'name']),
             'memberOptions' => $this->presenter->memberOptions($workspace),

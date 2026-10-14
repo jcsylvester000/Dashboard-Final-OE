@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Workspaces\DeliverySpecController;
+use App\Http\Controllers\Workspaces\IntegrationsController;
 use App\Http\Controllers\Workspaces\LabelController;
 use App\Http\Controllers\Workspaces\ProjectBudgetController;
 use App\Http\Controllers\Workspaces\ProjectController;
@@ -32,6 +33,14 @@ Route::middleware('auth')->group(function () {
         Route::post('settings/delivery-specs', [DeliverySpecController::class, 'store'])->name('delivery-specs.store');
         Route::put('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'update'])->name('delivery-specs.update');
         Route::delete('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'destroy'])->name('delivery-specs.destroy');
+        // E-24 / E-41: GitHub repositories and chat channels (leads).
+        Route::post('settings/repositories', [IntegrationsController::class, 'storeRepository'])->name('repositories.store');
+        Route::put('settings/repositories/{repository}', [IntegrationsController::class, 'updateRepository'])->name('repositories.update');
+        Route::delete('settings/repositories/{repository}', [IntegrationsController::class, 'destroyRepository'])->name('repositories.destroy');
+        Route::post('settings/chat-channels', [IntegrationsController::class, 'storeChannel'])->name('chat-channels.store');
+        Route::put('settings/chat-channels/{channel}', [IntegrationsController::class, 'updateChannel'])->name('chat-channels.update');
+        Route::delete('settings/chat-channels/{channel}', [IntegrationsController::class, 'destroyChannel'])->name('chat-channels.destroy');
+        Route::post('settings/chat-channels/{channel}/test', [IntegrationsController::class, 'testChannel'])->middleware('throttle:10,1')->name('chat-channels.test');
         Route::get('settings', [WorkspaceController::class, 'edit'])->name('edit');
         Route::put('/', [WorkspaceController::class, 'update'])->name('update');
 

@@ -96,6 +96,15 @@ export type TaskDetail = TaskRow & {
         done: boolean;
         done_by: string | null;
     }[];
+    /** E-26: preview link and its last check */
+    preview?: {
+        url: string;
+        status: 'up' | 'down' | null;
+        http: number | null;
+        checked_at: string | null;
+    } | null;
+    /** E-24: pull requests, branches and commits naming this task */
+    code_links?: CodeLink[];
     /** E-18: delivery spec chosen for this task's videos (null = match by channel). */
     delivery_spec_id?: number | null;
     /** E-29: sources pasted on the task (shown in the work report). */
@@ -188,4 +197,19 @@ export type TaskCitation = {
     site: string | null;
     accessed_at: string;
     archive_url: string;
+};
+
+/** E-24: a pull request, branch or commit that names a task. */
+export type CodeLink = {
+    id: number;
+    kind: 'pr' | 'branch' | 'commit';
+    repository: string;
+    ref: string;
+    title: string | null;
+    url: string;
+    state: 'open' | 'draft' | 'merged' | 'closed' | null;
+    checks: 'success' | 'failure' | 'pending' | null;
+    reviewers: string[];
+    author: string | null;
+    updated_at: string | null;
 };

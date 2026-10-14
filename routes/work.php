@@ -21,6 +21,7 @@ use App\Http\Controllers\Work\TaskController;
 use App\Http\Controllers\Work\TaskDeliverySpecController;
 use App\Http\Controllers\Work\TaskFlowController;
 use App\Http\Controllers\Work\TaskMuteController;
+use App\Http\Controllers\Work\TaskPreviewController;
 use App\Http\Controllers\Work\TimeController;
 use App\Http\Controllers\Work\TimelineController;
 use Illuminate\Support\Facades\Route;
@@ -110,6 +111,7 @@ Route::middleware('auth')->group(function () {
             Route::post('tasks/{task}/mute', [TaskMuteController::class, 'store'])->name('tasks.mute'); // E-58
             Route::post('tasks/{task}/citations', [CitationController::class, 'store'])->middleware('throttle:30,1')->name('tasks.citations.store'); // E-29
             Route::put('tasks/{task}/delivery-spec', [TaskDeliverySpecController::class, 'update'])->name('tasks.delivery-spec'); // E-18
+            Route::put('tasks/{task}/preview', [TaskPreviewController::class, 'update'])->middleware('throttle:20,1')->name('tasks.preview'); // E-26
             Route::delete('tasks/{task}/citations/{citation}', [CitationController::class, 'destroy'])->name('tasks.citations.destroy');
             Route::delete('tasks/{task}/mute', [TaskMuteController::class, 'destroy'])->name('tasks.unmute');
             Route::put('comments/{comment}', [CommentController::class, 'update'])->name('comments.update');

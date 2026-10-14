@@ -26,6 +26,7 @@ enum NotificationKind: string
     case BillingDraft = 'billing_draft';
     case System = 'system';
     case Budget = 'budget';
+    case Preview = 'preview';
 
     public const MODE_REALTIME = 'realtime';
 
@@ -55,6 +56,7 @@ enum NotificationKind: string
             self::BillingDraft => 'Retainer drafts ready to check (Finance)',
             self::System => 'System notices: health, holidays, access ending (admins)',
             self::Budget => 'Project budget burn at 75 / 90 / 100% (leads, Finance)',
+            self::Preview => 'Preview link on my task stopped working',
         };
     }
 
@@ -70,6 +72,6 @@ enum NotificationKind: string
     /** Kinds listed under "Needs my attention" even after being read. */
     public function needsAction(): bool
     {
-        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue, self::BillingDraft, self::System, self::Budget], true);
+        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue, self::BillingDraft, self::System, self::Budget, self::Preview], true);
     }
 }

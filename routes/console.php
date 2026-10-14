@@ -56,6 +56,10 @@ Schedule::command('time:nudges --monday')->weeklyOn(1, '09:00')->timezone('Asia/
 Schedule::command('drive:prune')->hourly()->withoutOverlapping();
 // E-11: unfinished video uploads (quota + storage).
 Schedule::command('video:prune-uploads')->hourlyAt(35)->withoutOverlapping();
+// E-26: preview links on open tasks.
+Schedule::command('previews:check')->everyFifteenMinutes()->withoutOverlapping();
+// E-24: keep 90 days of GitHub delivery records (idempotency window).
+Schedule::call(fn () => DB::table('github_deliveries')->where('created_at', '<', now()->subDays(90))->delete())->daily()->name('prune-github-deliveries');
 
 // API housekeeping (P7): expired tokens and old idempotency records.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Notifications;
 
+use App\Domain\Integrations\ChatNotifier;
 use App\Domain\Workspaces\MentionService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Events\Work\CommentAdded;
@@ -140,6 +141,9 @@ class WorkEventSubscriber
         $status = $statusModel->name ?? '';
         $followers = $this->followers($task);
 
+        // E-41: optional chat channels (title + link only).
+        $this->chat($task, $workspace, TaskStatus::ordered()->firstWhere('id', $event->fromStatusId)?->slug, $statusModel?->slug);
+
         // Ready for review: the reviewers hear about it right away (not only in the digest).
         if ($statusModel !== null && $statusModel->slug === 'in-review') {
             $reviewers = $this->reviewersFor($task, $workspace);
@@ -229,6 +233,20 @@ class WorkEventSubscriber
     /**
      * The task's workspace, or null when it was archived away / deleted.
      */
+    private function chat(Task $task, Workspace $workspace, ?string $from, ?string $to): void
+    {
+        $event = match (true) {
+            $to === 'in-review' => 'review_requested',
+            $from === 'in-review' && $to === 'done' => 'approved',
+            $from === 'in-review' && $to === 'in-progress' => 'changes_requested',
+            $to === 'done' => 'done',
+            default => null,
+        };
+        if ($event !== null) {
+            app(ChatNotifier::class)->notify($workspace, $event, ($workspace->key !== null && $task->number !== null ? $workspace->key.'-'.$task->number.' ' : '').$task->title, url($this->notifier->taskUrl($task, $workspace)));
+        }
+    }
+
     private function workspaceOf(Task $task): ?Workspace
     {
         $task->loadMissing('workspace');

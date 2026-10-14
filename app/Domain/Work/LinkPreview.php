@@ -59,6 +59,46 @@ class LinkPreview
         return ['title' => null, 'site' => $site];
     }
 
+    /**
+     * E-26: final HTTP status of a public URL (redirects followed, each hop checked);
+     * null when it can't be reached or points into a private network.
+     */
+    public function status(string $url, int $timeoutSeconds = 5): ?int
+    {
+        try {
+            for ($hop = 0; $hop <= 3; $hop++) {
+                if (! $this->allowed($url)) {
+                    return null;
+                }
+                $response = Http::timeout($timeoutSeconds)->connectTimeout($timeoutSeconds)
+                    ->withOptions(['allow_redirects' => false, 'stream' => true])
+                    ->withHeaders(['User-Agent' => 'OverEasyDashboard/1.0 (preview check)'])
+                    ->get($url);
+                if ($response->redirect()) {
+                    $next = (string) $response->header('Location');
+                    if ($next === '') {
+                        return $response->status();
+                    }
+                    $url = str_starts_with($next, '/') ? (parse_url($url, PHP_URL_SCHEME).'://'.parse_url($url, PHP_URL_HOST).$next) : $next;
+
+                    continue;
+                }
+
+                return $response->status();
+            }
+        } catch (Throwable) {
+            return null;
+        }
+
+        return null; // too many redirects
+    }
+
+    /** E-26 / E-41: true for http(s) URLs whose host resolves only to public addresses. */
+    public function isPublic(string $url): bool
+    {
+        return $this->allowed($url);
+    }
+
     public static function host(string $url): ?string
     {
         $host = parse_url($url, PHP_URL_HOST);

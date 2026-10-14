@@ -52,6 +52,11 @@ use Illuminate\Support\Carbon;
  * @property array<string, string|null>|null $bug_report steps, expected, actual, environment, severity (E-21)
  * @property array<string, mixed>|null $custom_values B-07: custom field key => value
  * @property int|null $delivery_spec_id E-18: video spec chosen for this task (else matched by channel)
+ * @property string|null $preview_url E-26: staging / preview link
+ * @property string|null $preview_status up | down
+ * @property int|null $preview_http last HTTP status
+ * @property Carbon|null $preview_checked_at
+ * @property Carbon|null $preview_alerted_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -170,6 +175,9 @@ class Task extends Model implements Mentionable
             'position' => 'integer',
             'number' => 'integer',
             'story_points' => 'integer',
+            'preview_http' => 'integer',
+            'preview_checked_at' => 'datetime',
+            'preview_alerted_at' => 'datetime',
         ];
     }
 
@@ -261,6 +269,12 @@ class Task extends Model implements Mentionable
     public function watchers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'task_watchers');
+    }
+
+    /** @return HasMany<TaskCodeLink, $this> E-24: PRs, branches and commits naming this task */
+    public function codeLinks(): HasMany
+    {
+        return $this->hasMany(TaskCodeLink::class)->orderByDesc('updated_at');
     }
 
     /**

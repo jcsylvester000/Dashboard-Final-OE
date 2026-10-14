@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import DeliverySpecsCard from '@/components/workspaces/DeliverySpecsCard.vue';
+import IntegrationsCard from '@/components/workspaces/IntegrationsCard.vue';
+import type {
+    ChatChannelRow,
+    RepositoryRow,
+} from '@/components/workspaces/IntegrationsCard.vue';
 import type { DeliverySpecRow } from '@/components/workspaces/DeliverySpecsCard.vue';
 import { Form, Head, router, useForm } from '@inertiajs/vue3';
 import { Trash2 } from '@lucide/vue';
@@ -54,6 +59,11 @@ const props = defineProps<{
     taskTypes?: Record<string, string>;
     // E-25 / E-34
     checklistDefaults?: Record<string, string>;
+    // E-24 / E-41
+    repositories?: RepositoryRow[];
+    githubWebhook?: { url: string; configured: boolean };
+    chatChannels?: ChatChannelRow[];
+    chatEvents?: Record<string, string>;
     // E-18
     deliverySpecs?: DeliverySpecRow[];
     channelOptions?: string[];
@@ -729,6 +739,22 @@ async function removeLabel(label: {
             :specs="deliverySpecs"
             :channels="channelOptions ?? []"
             :deliverables="deliverableTypes ?? []"
+        />
+
+        <IntegrationsCard
+            v-if="
+                workspace.can.lead &&
+                repositories &&
+                githubWebhook &&
+                chatChannels &&
+                chatEvents
+            "
+            :workspace-slug="workspace.slug"
+            :task-key="details.key"
+            :repositories="repositories"
+            :webhook="githubWebhook"
+            :channels="chatChannels"
+            :events="chatEvents"
         />
     </div>
 </template>

@@ -29,6 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        // E-24: signed webhooks from GitHub carry no CSRF token (HMAC signature instead).
+        $middleware->validateCsrfTokens(except: ['webhooks/*']);
 
         $middleware->append(SecurityHeaders::class);
         // E-130: Server-Timing + X-Query-Count when APP_DEBUG or PERF_HEADERS is on.

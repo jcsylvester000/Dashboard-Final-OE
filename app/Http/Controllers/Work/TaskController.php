@@ -25,6 +25,7 @@ use App\Models\SavedView;
 use App\Models\Task;
 use App\Models\TaskChecklistItem;
 use App\Models\TaskCitation;
+use App\Models\TaskCodeLink;
 use App\Models\TaskReviewer;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -291,6 +292,17 @@ class TaskController extends Controller
                 'muted_until' => app(QuietHours::class)->mutedUntil($user, $task->id)?->toIso8601String(),
                 // E-29: sources.
                 'delivery_spec_id' => $task->delivery_spec_id, // E-18
+                // E-26: preview link and its last check.
+                'preview' => $task->preview_url !== null ? [
+                    'url' => $task->preview_url, 'status' => $task->preview_status, 'http' => $task->preview_http,
+                    'checked_at' => $task->preview_checked_at?->toIso8601String(),
+                ] : null,
+                // E-24: pull requests, branches and commits that name this task.
+                'code_links' => $task->codeLinks()->limit(30)->get()->map(fn (TaskCodeLink $l): array => [
+                    'id' => $l->id, 'kind' => $l->kind, 'repository' => $l->repository, 'ref' => $l->ref, 'title' => $l->title, 'url' => $l->url,
+                    'state' => $l->state, 'checks' => $l->checks, 'reviewers' => $l->reviewers ?? [], 'author' => $l->author,
+                    'updated_at' => $l->updated_at?->toIso8601String(),
+                ])->values(),
                 'citations' => $task->citations()->get()->map(fn (TaskCitation $c): array => [
                     'id' => $c->id, 'url' => $c->url, 'title' => $c->title, 'site' => $c->site,
                     'accessed_at' => $c->accessed_at->toIso8601String(), 'archive_url' => $c->archiveUrl(),

@@ -9,6 +9,7 @@ use App\Http\Controllers\ClientReviewLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GettingStartedController;
 use App\Http\Controllers\InboxController;
+use App\Http\Controllers\Integrations\GitHubWebhookController;
 use App\Http\Controllers\PrivacyController;
 use App\Http\Controllers\VideoUploadController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,9 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/dashboard')->name('home');
 
 // One-time account setup / password reset links issued by an admin (no email).
+// E-24: GitHub webhooks (no login; HMAC-signed, CSRF-exempt in bootstrap/app.php).
+Route::post('webhooks/github', GitHubWebhookController::class)->middleware('throttle:120,1')->name('webhooks.github');
+
 Route::middleware('throttle:access-links')->group(function () {
     Route::get('access/{token}', [AccessLinkController::class, 'show'])->name('access-link.show');
     Route::post('access/{token}', [AccessLinkController::class, 'store'])->name('access-link.store');

@@ -32,6 +32,12 @@ return [
     // (base64 JSON with apiKey, appId and regions). Files are stored private and served
     // through short-lived signed links; set UPLOADTHING_ACL= (empty) if the app doesn't
     // allow per-file ACLs (check with: php artisan uploadthing:check).
+    // E-24 (D-04): GitHub webhooks (Settings > Webhooks on the repo or organisation).
+    // Payload URL /webhooks/github, content type application/json, this secret.
+    'github' => [
+        'webhook_secret' => env('GITHUB_WEBHOOK_SECRET'),
+    ],
+
     'uploadthing' => [
         'token' => env('UPLOADTHING_TOKEN'),
         'acl' => env('UPLOADTHING_ACL', 'private'),

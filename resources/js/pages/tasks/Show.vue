@@ -38,6 +38,7 @@ import BugReportCard from '@/components/work/BugReportCard.vue';
 import TaskDeliverySpecController from '@/actions/App/Http/Controllers/Work/TaskDeliverySpecController';
 import ChecklistCard from '@/components/work/ChecklistCard.vue';
 import CitationsCard from '@/components/work/CitationsCard.vue';
+import CodeCard from '@/components/work/CodeCard.vue';
 import CustomFieldsCard from '@/components/work/CustomFieldsCard.vue';
 import QuickTaskForm from '@/components/work/QuickTaskForm.vue';
 import ReviewersCard from '@/components/work/ReviewersCard.vue';
@@ -862,6 +863,21 @@ function describe(entry: TimelineEntry): string {
                     :task-id="task.id"
                     :citations="task.citations ?? []"
                     :can-edit="can"
+                />
+
+                <CodeCard
+                    :workspace-slug="ws"
+                    :task-id="task.id"
+                    :task-key="task.key.startsWith('#') ? null : task.key"
+                    :links="task.code_links ?? []"
+                    :preview="task.preview ?? null"
+                    :can-edit="can"
+                    :show-empty="
+                        can &&
+                        (task.department?.slug === 'development' ||
+                            task.type === 'bug' ||
+                            task.type === 'story')
+                    "
                 />
 
                 <!-- Comments -->
