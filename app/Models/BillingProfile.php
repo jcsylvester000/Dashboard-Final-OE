@@ -24,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $payment_instructions
  * @property int|null $rate_template_id
  * @property Carbon|null $rate_template_applied_at
+ * @property string|null $statement_token client link to the statement of account (E-69)
+ * @property Carbon|null $statement_token_expires_at
  */
 #[Fillable(['workspace_id', 'currency', 'cycle', 'retainer_minor', 'included_minutes', 'overage_rule', 'terms_days', 'tax_rate_bp', 'invoice_series', 'bill_to', 'payment_instructions'])]
 class BillingProfile extends Model
@@ -74,6 +76,7 @@ class BillingProfile extends Model
             'tax_rate_bp' => 'integer',
             'bill_to' => 'array',
             'rate_template_applied_at' => 'datetime',
+            'statement_token_expires_at' => 'datetime',
         ];
     }
 

@@ -53,17 +53,31 @@ class CompanySettingsController extends Controller
             'thresholds' => ['nullable', 'array'],
             'thresholds.*' => ['nullable', 'regex:'.Money::INPUT_REGEX],
             'backdate_days' => ['required', 'integer', 'min:0', 'max:366'],
+            'expense_approval' => ['boolean'],
+            'receipt_thresholds' => ['nullable', 'array'],
+            'receipt_thresholds.*' => ['nullable', 'regex:'.Money::INPUT_REGEX],
         ]);
-        $thresholds = [];
-        foreach ((array) ($data['thresholds'] ?? []) as $currency => $amount) {
-            if (in_array($currency, $currencies, true) && $amount !== null && Money::parse((string) $amount) > 0) {
-                $thresholds[(string) $currency] = Money::parse((string) $amount);
+        $amounts = function (mixed $raw) use ($currencies): array {
+            $out = [];
+            foreach ((array) $raw as $currency => $amount) {
+                if (in_array($currency, $currencies, true) && $amount !== null && Money::parse((string) $amount) > 0) {
+                    $out[(string) $currency] = Money::parse((string) $amount);
+                }
             }
-        }
+
+            return $out;
+        };
+        $thresholds = $amounts($data['thresholds'] ?? []);
         if ($data['review'] === 'above' && $thresholds === []) {
             return back()->withErrors(['thresholds' => __('Set an amount for at least one currency.')]);
         }
-        $values = ['review' => (string) $data['review'], 'thresholds' => $thresholds, 'backdate_days' => (int) $data['backdate_days']];
+        $values = [
+            'review' => (string) $data['review'],
+            'thresholds' => $thresholds,
+            'backdate_days' => (int) $data['backdate_days'],
+            'expense_approval' => $request->boolean('expense_approval'),
+            'receipt_thresholds' => $amounts($data['receipt_thresholds'] ?? []),
+        ];
         $before = $this->finance->get();
         $this->finance->save($values);
         $this->activity->log('settings.finance-updated', null, ['before' => $before, 'after' => $values]);

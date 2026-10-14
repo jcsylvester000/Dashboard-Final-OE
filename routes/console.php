@@ -31,6 +31,8 @@ Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping(
 
 // Overdue client invoices -> Finance inbox (P6).
 Schedule::command('billing:alerts')->dailyAt('07:00')->withoutOverlapping();
+// E-73: open the current period per client and build retainer drafts for ended periods.
+Schedule::command('billing:periods')->dailyAt('06:00')->timezone('Asia/Manila')->withoutOverlapping();
 
 // E-33: overdue reviews (reminder, then escalation); E-39: timesheet nudges (Manila time).
 Schedule::command('work:review-reminders')->hourlyAt(15)->weekdays()->withoutOverlapping();

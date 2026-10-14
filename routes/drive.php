@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\DriveController;
 use App\Http\Controllers\ProjectStatusController;
 use App\Http\Controllers\ShareController;
@@ -27,4 +28,9 @@ Route::middleware('throttle:60,1')->group(function () {
     // B-06: read-only client status page per project.
     Route::get('p/{token}', ProjectStatusController::class)->name('project-status.show');
     Route::get('s/{token}/file', [ShareController::class, 'file'])->name('share.file');
+    // E-70 / E-69: client invoice and statement links.
+    Route::get('i/{token}', [ClientDocumentController::class, 'invoice'])->name('invoice-link.show');
+    Route::get('i/{token}/pdf', [ClientDocumentController::class, 'invoicePdf'])->name('invoice-link.pdf');
+    Route::get('st/{token}', [ClientDocumentController::class, 'statement'])->name('statement-link.show');
+    Route::get('st/{token}/pdf', [ClientDocumentController::class, 'statementPdf'])->name('statement-link.pdf');
 });

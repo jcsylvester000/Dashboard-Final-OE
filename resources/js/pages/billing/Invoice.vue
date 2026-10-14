@@ -34,7 +34,9 @@ import {
     index,
     pdf,
     recalculate,
+    link as createLink,
     review as requestReview,
+    unlink as revokeLink,
     sendBack,
     show,
     update,
@@ -42,6 +44,7 @@ import {
     cancel as voidInvoice,
 } from '@/routes/billing/invoices';
 import { destroy as destroyLine } from '@/routes/billing/invoice-lines';
+import { store as storeFollowUp } from '@/routes/billing/invoices/follow-ups';
 import { store as storeDiscount } from '@/routes/billing/invoices/discounts';
 import { store as storeLine } from '@/routes/billing/invoices/lines';
 import { store as storePayment } from '@/routes/billing/invoices/payments';
@@ -149,6 +152,20 @@ async function doFinalize(): Promise<void> {
         );
     }
 }
+
+// E-70: client link. E-72: follow-ups on overdue invoices.
+const linkExpiry = ref('30');
+function makeLink(): void {
+    router.post(
+        createLink.url(inv.value.id),
+        { expires_days: linkExpiry.value ? Number(linkExpiry.value) : null },
+        opts,
+    );
+}
+function copyLink(url: string): void {
+    void navigator.clipboard?.writeText(url);
+}
+const followUp = useForm({ note: '', promise_to_pay_on: '' });
 
 // E-68: reverse a payment with a reason.
 const reverseFor = ref<number | null>(null);
@@ -991,6 +1008,171 @@ async function removeDraft(): Promise<void> {
                                 >Record payment</Button
                             >
                         </form>
+                    </CardContent>
+                </Card>
+
+                <Card
+                    v-if="
+                        inv.kind === 'invoice' &&
+                        !['draft', 'void'].includes(inv.status)
+                    "
+                >
+                    <CardHeader>
+                        <CardTitle class="text-base">Client link</CardTitle>
+                        <CardDescription
+                            >The client opens the invoice online and downloads
+                            the PDF. No login.</CardDescription
+                        >
+                    </CardHeader>
+                    <CardContent class="space-y-2 text-sm">
+                        <template v-if="inv.share">
+                            <div class="flex gap-2">
+                                <Input
+                                    :model-value="inv.share.url"
+                                    readonly
+                                    class="min-w-0 flex-1 text-xs"
+                                    aria-label="Client link"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    @click="copyLink(inv.share.url)"
+                                    >Copy</Button
+                                >
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                <template v-if="inv.share.first_viewed_at"
+                                    >Opened
+                                    {{
+                                        formatDateTime(
+                                            inv.share.first_viewed_at,
+                                        )
+                                    }}
+                                    · {{ inv.share.views }} view{{
+                                        inv.share.views === 1 ? '' : 's'
+                                    }}</template
+                                >
+                                <template v-else>Not opened yet</template>
+                                ·
+                                {{
+                                    inv.share.expires_at
+                                        ? `expires ${formatDate(inv.share.expires_at)}`
+                                        : 'no expiry'
+                                }}
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                @click="
+                                    router.delete(revokeLink.url(inv.id), opts)
+                                "
+                                >Turn off link</Button
+                            >
+                        </template>
+                        <div v-else class="flex gap-2">
+                            <NativeSelect
+                                v-model="linkExpiry"
+                                class="h-9"
+                                aria-label="Link expiry"
+                            >
+                                <option value="7">Expires in 7 days</option>
+                                <option value="30">Expires in 30 days</option>
+                                <option value="90">Expires in 90 days</option>
+                                <option value="">No expiry</option>
+                            </NativeSelect>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                @click="makeLink"
+                                >Create link</Button
+                            >
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card v-if="isOpen && inv.kind === 'invoice'">
+                    <CardHeader>
+                        <CardTitle class="text-base">Follow-up</CardTitle>
+                        <CardDescription>
+                            <template v-if="inv.collection.days_overdue > 0"
+                                >{{ inv.collection.days_overdue }} days overdue.
+                            </template>
+                            <template v-if="inv.collection.promise_to_pay_on"
+                                >Client promised to pay by
+                                {{
+                                    formatDate(
+                                        inv.collection.promise_to_pay_on,
+                                    )
+                                }}; alerts paused until then.</template
+                            >
+                            <template v-else
+                                >Alerts at 7, 14 and 30 days overdue (the
+                                client's leads hear at 30).</template
+                            >
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-3 text-sm">
+                        <form
+                            class="grid gap-2"
+                            @submit.prevent="
+                                followUp.post(storeFollowUp.url(inv.id), {
+                                    ...opts,
+                                    onSuccess: () => followUp.reset(),
+                                })
+                            "
+                        >
+                            <textarea
+                                v-model="followUp.note"
+                                rows="2"
+                                class="w-full rounded-md border bg-transparent p-2 text-sm"
+                                placeholder="Called Carla; payment is with their accounting."
+                                aria-label="Follow-up note"
+                            />
+                            <InputError :message="followUp.errors.note" />
+                            <label
+                                class="flex items-center gap-2 text-xs text-muted-foreground"
+                                >Promised to pay by
+                                <Input
+                                    v-model="followUp.promise_to_pay_on"
+                                    type="date"
+                                    class="h-8 w-40"
+                                    :min="localToday()"
+                                    aria-label="Promised to pay by"
+                            /></label>
+                            <InputError
+                                :message="followUp.errors.promise_to_pay_on"
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                                :disabled="
+                                    followUp.processing || !followUp.note.trim()
+                                "
+                                >Log follow-up</Button
+                            >
+                        </form>
+                        <ul
+                            v-if="inv.collection.contacts.length"
+                            class="divide-y border-t"
+                        >
+                            <li
+                                v-for="c in inv.collection.contacts"
+                                :key="c.id"
+                                class="py-1.5"
+                            >
+                                <p>{{ c.note }}</p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ c.by }} · {{ formatDateTime(c.at) }}
+                                    <template v-if="c.promise_to_pay_on">
+                                        · promised by
+                                        {{
+                                            formatDate(c.promise_to_pay_on)
+                                        }}</template
+                                    >
+                                </p>
+                            </li>
+                        </ul>
                     </CardContent>
                 </Card>
 

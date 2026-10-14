@@ -76,7 +76,7 @@ class ClientBillingController extends Controller
         ]);
     }
 
-    public function show(Workspace $workspace): Response
+    public function show(Request $request, Workspace $workspace): Response
     {
         $profile = BillingProfile::query()->firstOrNew(['workspace_id' => $workspace->id]);
 
@@ -118,8 +118,19 @@ class ClientBillingController extends Controller
                 ->map(fn (Expense $e): array => [
                     'id' => $e->id, 'description' => $e->description, 'amount_minor' => $e->amount_minor,
                     'incurred_on' => $e->incurred_on->toDateString(), 'is_billable' => $e->is_billable,
-                    'project' => $e->project?->name, 'billed' => $e->invoice_item_id !== null,
+                    'project' => $e->project?->name, 'project_id' => $e->project_id, 'billed' => $e->invoice_item_id !== null,
+                    // E-75
+                    'category' => $e->category, 'markup_bp' => $e->markup_bp, 'taxable' => $e->taxable,
+                    'billed_minor' => $e->billedMinor(), 'has_receipt' => $e->receipt_path !== null, 'receipt_name' => $e->receipt_name,
+                    'approved' => $e->isApproved(),
+                    'can_approve' => ! $e->isApproved() && $e->created_by !== $request->user()?->id,
                 ])->values(),
+            'expenseCategories' => Expense::CATEGORIES,
+            // E-69: the client's statement link.
+            'statementLink' => $profile->statement_token !== null ? [
+                'url' => route('statement-link.show', $profile->statement_token),
+                'expires_at' => $profile->statement_token_expires_at?->toIso8601String(),
+            ] : null,
             'projects' => Project::query()->where('workspace_id', $workspace->id)->orderBy('name')
                 ->get(['id', 'name', 'status', 'due_on', 'fixed_fee_minor', 'fixed_fee_billed_at'])
                 ->map(fn (Project $p): array => [
@@ -252,48 +263,6 @@ class ClientBillingController extends Controller
         $invoice = $invoices->buildDraft($period, $user, null, $projectId !== null ? Project::query()->findOrFail($projectId) : null);
 
         return to_route('billing.invoices.show', $invoice);
-    }
-
-    public function storeExpense(Request $request, Workspace $workspace): RedirectResponse
-    {
-        $data = $request->validate([
-            'description' => ['required', 'string', 'max:255'],
-            'amount' => ['required', 'regex:'.Money::INPUT_REGEX],
-            'incurred_on' => ['required', 'date_format:Y-m-d'],
-            'is_billable' => ['boolean'],
-            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')->where('workspace_id', $workspace->id)],
-        ]);
-
-        $expense = Expense::create([
-            'workspace_id' => $workspace->id,
-            'project_id' => $data['project_id'] ?? null,
-            'description' => $data['description'],
-            'amount_minor' => Money::parse((string) $data['amount']),
-            'incurred_on' => $data['incurred_on'],
-            'is_billable' => (bool) ($data['is_billable'] ?? true),
-            'created_by' => $request->user()?->id,
-        ]);
-        $this->activity->log('billing.expense-added', $workspace, ['expense_id' => $expense->id, 'description' => $expense->description, 'amount_minor' => $expense->amount_minor, 'billable' => $expense->is_billable]);
-
-        return back();
-    }
-
-    public function destroyExpense(Expense $expense): RedirectResponse
-    {
-        $onInvoice = DB::table('invoice_item_sources as s')
-            ->join('invoice_items as i', 'i.id', '=', 's.invoice_item_id')
-            ->join('invoices as v', 'v.id', '=', 'i.invoice_id')
-            ->where('s.source_type', $expense->getMorphClass())
-            ->where('s.source_id', $expense->id)
-            ->where('v.status', '!=', Invoice::VOID)
-            ->exists();
-        if ($expense->invoice_item_id !== null || $onInvoice) {
-            throw new BillingException('This expense is on an invoice (or draft) and cannot be removed.');
-        }
-        $expense->delete();
-        $this->activity->log('billing.expense-deleted', null, ['workspace_id' => $expense->workspace_id, 'expense_id' => $expense->id, 'description' => $expense->description, 'amount_minor' => $expense->amount_minor]);
-
-        return back();
     }
 
     public function updateFixedFee(Request $request, Project $project): RedirectResponse

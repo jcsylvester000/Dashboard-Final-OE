@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property string $status
  * @property Carbon|null $locked_at
  * @property int|null $locked_by
+ * @property Carbon|null $auto_drafted_at retainer draft built by billing:periods (E-73)
  */
 #[Fillable(['workspace_id', 'starts_on', 'ends_on', 'status'])]
 class BillingPeriod extends Model
@@ -42,6 +43,7 @@ class BillingPeriod extends Model
             'starts_on' => 'date',
             'ends_on' => 'date',
             'locked_at' => 'datetime',
+            'auto_drafted_at' => 'datetime',
         ];
     }
 

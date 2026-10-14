@@ -69,12 +69,12 @@ class PeriodService
         ]);
     }
 
-    public function lock(BillingPeriod $period, User $by): void
+    public function lock(BillingPeriod $period, ?User $by): void
     {
         if (! $period->isOpen()) {
             return;
         }
-        $period->forceFill(['status' => BillingPeriod::LOCKED, 'locked_at' => now(), 'locked_by' => $by->id])->save();
+        $period->forceFill(['status' => BillingPeriod::LOCKED, 'locked_at' => now(), 'locked_by' => $by?->id])->save();
     }
 
     public function unlock(BillingPeriod $period): void

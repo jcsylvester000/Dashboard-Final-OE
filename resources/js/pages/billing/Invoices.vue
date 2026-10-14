@@ -193,6 +193,22 @@ function filter(change: Record<string, string>): void {
                                     invoiceStatusLabel[inv.status] ?? inv.status
                                 }}</span
                             >
+                            <!-- E-72: collection follow-up at a glance -->
+                            <span
+                                v-if="inv.promise_to_pay_on"
+                                class="mt-0.5 block text-xs text-muted-foreground"
+                                >Promised by
+                                {{ formatDate(inv.promise_to_pay_on) }}</span
+                            >
+                            <span
+                                v-else-if="(inv.days_overdue ?? 0) >= 7"
+                                class="mt-0.5 block text-xs text-rose-700 dark:text-rose-300"
+                                >{{ inv.days_overdue }} days overdue{{
+                                    inv.last_contact_at
+                                        ? ` · last follow-up ${formatDate(inv.last_contact_at)}`
+                                        : ' · no follow-up yet'
+                                }}</span
+                            >
                         </td>
                         <td
                             class="px-3 py-2 text-xs whitespace-nowrap"

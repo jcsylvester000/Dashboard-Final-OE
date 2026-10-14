@@ -42,6 +42,8 @@ const props = defineProps<{
         review: string;
         thresholds: Record<string, number>;
         backdate_days: number;
+        expense_approval: boolean;
+        receipt_thresholds: Record<string, number>;
     };
     reviewModes: Record<string, string>;
     currencies: string[];
@@ -75,6 +77,15 @@ const financeForm = useForm({
         ]),
     ) as Record<string, string>,
     backdate_days: props.finance.backdate_days,
+    expense_approval: props.finance.expense_approval,
+    receipt_thresholds: Object.fromEntries(
+        props.currencies.map((c) => [
+            c,
+            props.finance.receipt_thresholds[c]
+                ? (props.finance.receipt_thresholds[c] / 100).toFixed(2)
+                : '',
+        ]),
+    ) as Record<string, string>,
 });
 
 const logoForm = useForm<{ logo: File | null }>({ logo: null });
@@ -349,6 +360,32 @@ async function removeLogo(): Promise<void> {
                         </div>
                         <InputError
                             :message="financeForm.errors.backdate_days"
+                        />
+                    </div>
+                    <label
+                        class="flex items-center gap-2 text-sm sm:col-span-2"
+                    >
+                        <input
+                            v-model="financeForm.expense_approval"
+                            type="checkbox"
+                            class="size-4"
+                        />
+                        Expenses wait for a second person in Finance before they
+                        are billed
+                    </label>
+                    <div
+                        v-for="c in currencies"
+                        :key="`r-${c}`"
+                        class="grid gap-1"
+                    >
+                        <Label :for="`f-rc-${c}`"
+                            >Receipt required from ({{ c }})</Label
+                        >
+                        <Input
+                            :id="`f-rc-${c}`"
+                            v-model="financeForm.receipt_thresholds[c]"
+                            inputmode="decimal"
+                            placeholder="Leave blank: optional"
                         />
                     </div>
                     <div class="sm:col-span-2">

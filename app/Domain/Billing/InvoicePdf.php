@@ -4,6 +4,7 @@ namespace App\Domain\Billing;
 
 use App\Domain\Settings\CompanyProfile;
 use App\Models\Invoice;
+use App\Models\Workspace;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as PdfDocument;
 use Illuminate\Support\Facades\Storage;
@@ -79,6 +80,24 @@ class InvoicePdf
             'logo' => $this->company->logoDataUri(),
             'report' => $report,
             'draft' => $draft,
+        ]));
+    }
+
+    /**
+     * E-69: statement of account PDF (always rendered live).
+     *
+     * @param  array<string, mixed>  $statement  StatementService::build()
+     */
+    public function statement(Workspace $workspace, array $statement): string
+    {
+        $profile = $workspace->loadMissing('billingProfile')->billingProfile;
+
+        return $this->finish(Pdf::loadView('pdf.statement', [
+            's' => $statement,
+            'client' => $profile->bill_to['name'] ?? $workspace->name,
+            'company' => $this->company->get(),
+            'logo' => $this->company->logoDataUri(),
+            'paymentInstructions' => $profile?->payment_instructions,
         ]));
     }
 

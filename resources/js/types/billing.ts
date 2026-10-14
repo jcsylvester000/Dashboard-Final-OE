@@ -18,6 +18,9 @@ export type InvoiceRow = {
     due_date: string | null;
     total_minor: number;
     balance_minor: number;
+    days_overdue?: number;
+    promise_to_pay_on?: string | null;
+    last_contact_at?: string | null;
 };
 
 export type InvoiceSource = {
@@ -77,6 +80,24 @@ export type InvoiceDetail = InvoiceRow & {
         can_finalize: boolean;
     };
     client_credit_minor: number;
+    share: {
+        url: string;
+        expires_at: string | null;
+        views: number;
+        first_viewed_at: string | null;
+    } | null;
+    collection: {
+        days_overdue: number;
+        stage: number;
+        promise_to_pay_on: string | null;
+        contacts: {
+            id: number;
+            note: string;
+            promise_to_pay_on: string | null;
+            by: string | null;
+            at: string | null;
+        }[];
+    };
     items: InvoiceLine[];
     history: {
         id: number;

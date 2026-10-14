@@ -14,6 +14,7 @@ use App\Models\BillingProfile;
 use App\Models\ClientCredit;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\InvoiceContact;
 use App\Models\InvoiceHistory;
 use App\Models\InvoiceItem;
 use App\Models\InvoiceItemSource;
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -75,6 +77,7 @@ class InvoiceController extends Controller
             'history.user:id,name',
             'payments.recorder:id,name',
             'payments.reverser:id,name',
+            'contacts.user:id,name',
         ]);
         $user = $this->user($request);
         $needsReview = $invoice->isDraft() && $finance->needsReview($invoice);
@@ -105,6 +108,23 @@ class InvoiceController extends Controller
                 ],
                 // E-68: credit the client holds in this currency (applied automatically at finalize).
                 'client_credit_minor' => ClientCredit::balance($invoice->workspace_id, $invoice->currency),
+                // E-70: the client link.
+                'share' => $invoice->share_token !== null ? [
+                    'url' => route('invoice-link.show', $invoice->share_token),
+                    'expires_at' => $invoice->share_expires_at?->toIso8601String(),
+                    'views' => $invoice->share_views,
+                    'first_viewed_at' => $invoice->share_first_viewed_at?->toIso8601String(),
+                ] : null,
+                // E-72: collection follow-up.
+                'collection' => [
+                    'days_overdue' => in_array($invoice->status, [Invoice::FINALIZED, Invoice::PARTIALLY_PAID], true) ? $invoice->daysOverdue() : 0,
+                    'stage' => $invoice->collection_stage,
+                    'promise_to_pay_on' => $invoice->promise_to_pay_on?->toDateString(),
+                    'contacts' => $invoice->contacts->map(fn (InvoiceContact $c): array => [
+                        'id' => $c->id, 'note' => $c->note, 'promise_to_pay_on' => $c->promise_to_pay_on?->toDateString(),
+                        'by' => $c->user?->name, 'at' => $c->created_at?->toIso8601String(),
+                    ])->values(),
+                ],
                 // E-64: work this draft could not price yet (Finalize stays blocked).
                 'missing_rates' => $invoice->isDraft() ? ($invoice->missing_rates ?? []) : [],
                 'items' => $invoice->items->map(fn (InvoiceItem $item): array => [
@@ -295,6 +315,55 @@ class InvoiceController extends Controller
         return sprintf('%d.%08d', intdiv($scaled, 100_000_000), $scaled % 100_000_000);
     }
 
+    /** E-70: an expiring, revocable link the client opens without logging in. */
+    public function shareLink(Request $request, Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->kind !== 'invoice' || in_array($invoice->status, [Invoice::DRAFT, Invoice::VOID], true)) {
+            throw new BillingException('Only finalized invoices can be shared with the client.');
+        }
+        $data = $request->validate(['expires_days' => ['nullable', 'integer', 'in:7,30,90']]);
+        $invoice->forceFill([
+            'share_token' => Str::random(40),
+            'share_expires_at' => isset($data['expires_days']) ? now()->addDays((int) $data['expires_days']) : null,
+            'share_first_viewed_at' => null,
+            'share_views' => 0,
+        ])->save();
+        $this->invoices->history($invoice, $invoice->status, $invoice->status, 'Client link created'.(isset($data['expires_days']) ? ' (expires in '.$data['expires_days'].' days)' : ''), $this->user($request));
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Client link ready. Copy it and send it to the client.')]);
+
+        return back();
+    }
+
+    public function revokeLink(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $invoice->forceFill(['share_token' => null, 'share_expires_at' => null])->save();
+        $this->invoices->history($invoice, $invoice->status, $invoice->status, 'Client link turned off', $this->user($request));
+
+        return back();
+    }
+
+    /** E-72: log a collection call or message, optionally with the date the client promised to pay. */
+    public function followUp(Request $request, Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->kind !== 'invoice' || ! in_array($invoice->status, [Invoice::FINALIZED, Invoice::PARTIALLY_PAID], true)) {
+            throw new BillingException('Follow-ups are for open invoices.');
+        }
+        $data = $request->validate([
+            'note' => ['required', 'string', 'max:1000'],
+            'promise_to_pay_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
+        ]);
+        $user = $this->user($request);
+        InvoiceContact::create(['invoice_id' => $invoice->id, 'user_id' => $user->id, 'note' => $data['note'], 'promise_to_pay_on' => $data['promise_to_pay_on'] ?? null]);
+        $invoice->forceFill(['last_contact_at' => now(), 'promise_to_pay_on' => $data['promise_to_pay_on'] ?? null])->save();
+        $this->invoices->history($invoice, $invoice->status, $invoice->status,
+            Str::limit('Follow-up: '.$data['note'].(isset($data['promise_to_pay_on']) ? ' (promised to pay by '.$data['promise_to_pay_on'].')' : ''), 490), $user);
+        Inertia::flash('toast', ['type' => 'success', 'message' => isset($data['promise_to_pay_on'])
+            ? __('Follow-up saved. Overdue alerts pause until :d.', ['d' => $data['promise_to_pay_on']])
+            : __('Follow-up saved.')]);
+
+        return back();
+    }
+
     /** E-68: undo a payment recorded by mistake, keeping it in the history. */
     public function reversePayment(Request $request, Payment $payment): RedirectResponse
     {
@@ -407,6 +476,10 @@ class InvoiceController extends Controller
             'due_date' => $i->due_date?->toDateString(),
             'total_minor' => $i->total_minor,
             'balance_minor' => $i->kind === 'invoice' && in_array($i->status, [Invoice::FINALIZED, Invoice::PARTIALLY_PAID], true) ? $i->balanceMinor() : 0,
+            // E-72: where collection stands on an overdue invoice.
+            'days_overdue' => $i->kind === 'invoice' && in_array($i->status, [Invoice::FINALIZED, Invoice::PARTIALLY_PAID], true) ? $i->daysOverdue() : 0,
+            'promise_to_pay_on' => $i->promise_to_pay_on?->toDateString(),
+            'last_contact_at' => $i->last_contact_at?->toIso8601String(),
         ];
     }
 

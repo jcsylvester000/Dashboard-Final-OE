@@ -47,6 +47,13 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $review_requested_at draft sent for a second person's check (E-66)
  * @property int|null $review_requested_by
  * @property string|null $review_note last send-back note
+ * @property string|null $share_token client link (E-70)
+ * @property Carbon|null $share_expires_at
+ * @property Carbon|null $share_first_viewed_at
+ * @property int $share_views
+ * @property int $collection_stage overdue follow-up stage reached (E-72): 0 none, 1 = 7 days, 2 = 14, 3 = 30
+ * @property Carbon|null $promise_to_pay_on alerts pause until this date passes
+ * @property Carbon|null $last_contact_at
  */
 #[Fillable(['workspace_id', 'billing_period_id', 'project_id', 'kind', 'credited_invoice_id', 'series', 'currency', 'period_start', 'period_end', 'tax_rate_bp', 'line_grouping', 'bill_to', 'notes', 'created_by', 'service_label'])]
 class Invoice extends Model
@@ -65,12 +72,14 @@ class Invoice extends Model
     public const VOID = 'void';
 
     /** Columns that may still change after finalize. */
-    private const MUTABLE_AFTER_FINALIZE = ['status', 'paid_minor', 'credited_minor', 'pdf_path', 'overdue_alerted_at', 'updated_at'];
+    private const MUTABLE_AFTER_FINALIZE = ['status', 'paid_minor', 'credited_minor', 'pdf_path', 'overdue_alerted_at', 'updated_at',
+        // E-70 / E-72: client link and collection follow-up are not part of the document.
+        'share_token', 'share_expires_at', 'share_first_viewed_at', 'share_views', 'collection_stage', 'promise_to_pay_on', 'last_contact_at'];
 
     /**
      * @var array<string, mixed>
      */
-    protected $attributes = ['status' => self::DRAFT, 'kind' => 'invoice', 'paid_minor' => 0, 'credited_minor' => 0];
+    protected $attributes = ['status' => self::DRAFT, 'kind' => 'invoice', 'paid_minor' => 0, 'credited_minor' => 0, 'share_views' => 0, 'collection_stage' => 0];
 
     protected static function booted(): void
     {
@@ -114,6 +123,12 @@ class Invoice extends Model
             'overdue_alerted_at' => 'datetime',
             'review_requested_at' => 'datetime',
             'review_requested_by' => 'integer',
+            'share_expires_at' => 'datetime',
+            'share_first_viewed_at' => 'datetime',
+            'share_views' => 'integer',
+            'collection_stage' => 'integer',
+            'promise_to_pay_on' => 'date',
+            'last_contact_at' => 'datetime',
         ];
     }
 
@@ -151,6 +166,22 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class)->orderBy('received_on')->orderBy('id');
+    }
+
+    /** @return HasMany<InvoiceContact, $this> */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(InvoiceContact::class)->orderByDesc('id');
+    }
+
+    /** Days past due today (0 when not yet due or no due date). */
+    public function daysOverdue(): int
+    {
+        if ($this->due_date === null) {
+            return 0;
+        }
+
+        return max(0, (int) $this->due_date->copy()->startOfDay()->diffInDays(now()->startOfDay(), false));
     }
 
     public function isDraft(): bool

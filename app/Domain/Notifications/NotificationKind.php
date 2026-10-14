@@ -23,6 +23,7 @@ enum NotificationKind: string
     case Escalation = 'escalation';
     case InvoiceOverdue = 'invoice_overdue';
     case FileShared = 'file_shared';
+    case BillingDraft = 'billing_draft';
 
     public const MODE_REALTIME = 'realtime';
 
@@ -49,6 +50,7 @@ enum NotificationKind: string
             self::Escalation => 'Overdue escalations (leads)',
             self::InvoiceOverdue => 'Client invoice overdue (Finance)',
             self::FileShared => 'Files shared with me',
+            self::BillingDraft => 'Retainer drafts ready to check (Finance)',
         };
     }
 
@@ -64,6 +66,6 @@ enum NotificationKind: string
     /** Kinds listed under "Needs my attention" even after being read. */
     public function needsAction(): bool
     {
-        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue], true);
+        return in_array($this, [self::Assigned, self::Mentioned, self::Handoff, self::Review, self::Timesheet, self::Leave, self::Overdue, self::Escalation, self::InvoiceOverdue, self::BillingDraft], true);
     }
 }

@@ -44,7 +44,7 @@ class InvoiceService
      *  - fixed-fee projects that are completed or due by the period end, not yet billed
      *  - billable expenses dated up to the period end, not yet billed
      */
-    public function buildDraft(BillingPeriod $period, User $actor, ?string $grouping = null, ?Project $project = null): Invoice
+    public function buildDraft(BillingPeriod $period, ?User $actor, ?string $grouping = null, ?Project $project = null): Invoice
     {
         if ($grouping !== null && ! array_key_exists($grouping, Invoice::GROUPINGS)) {
             throw new BillingException('Unknown line grouping.');
@@ -76,7 +76,7 @@ class InvoiceService
             $isNew = $invoice === null;
             $droppedDiscounts = 0;
             if ($invoice === null) {
-                $invoice = new Invoice(['workspace_id' => $workspace->id, 'billing_period_id' => $period->id, 'project_id' => $project?->id, 'created_by' => $actor->id]);
+                $invoice = new Invoice(['workspace_id' => $workspace->id, 'billing_period_id' => $period->id, 'project_id' => $project?->id, 'created_by' => $actor?->id]);
             } else {
                 // E-63: Finance's own lines and whole-invoice discounts survive a rebuild; a discount
                 // on a generated line goes with that line (the line is rebuilt with new numbers).
@@ -221,6 +221,7 @@ class InvoiceService
             $expenses = Expense::query()
                 ->where('workspace_id', $workspace->id)
                 ->where('is_billable', true)
+                ->whereNotNull('approved_at') // E-75: only approved expenses are billed
                 ->whereNull('invoice_item_id')
                 ->whereDate('incurred_on', '<=', $to)
                 ->whereNotIn('id', $this->alreadyOnInvoices('expense', $invoice->id))
@@ -229,14 +230,17 @@ class InvoiceService
                 ->orderBy('id')
                 ->get();
             foreach ($expenses as $expense) {
+                $billed = $expense->billedMinor();
                 $line = $this->item($invoice, $position++, [
                     'type' => 'expense',
-                    'description' => sprintf('Expense (%s) – %s', $expense->incurred_on->format('M j'), $expense->description),
+                    'description' => sprintf('Expense (%s) – %s%s', $expense->incurred_on->format('M j'), $expense->description,
+                        $expense->markup_bp > 0 ? sprintf(' (incl. %s%% handling)', rtrim(rtrim(sprintf('%d.%02d', intdiv($expense->markup_bp, 100), $expense->markup_bp % 100), '0'), '.')) : ''),
                     'quantity' => '1.00',
-                    'unit_minor' => $expense->amount_minor,
-                    'amount_minor' => $expense->amount_minor,
+                    'unit_minor' => $billed,
+                    'amount_minor' => $billed,
+                    'taxable' => $expense->taxable,
                 ]);
-                $this->source($line, $expense, null, $expense->amount_minor);
+                $this->source($line, $expense, null, $billed);
             }
 
             // Finance's lines follow the generated ones; discounts come last.
@@ -809,6 +813,9 @@ class InvoiceService
             $note !== null && str_starts_with($note, 'Payment reversed') => 'payment-reversed',
             $note !== null && str_starts_with($note, 'Payment') => 'payment-recorded',
             $note === 'Ready for review' => 'review-requested',
+            $note !== null && str_starts_with($note, 'Opened by the client') => 'viewed',
+            $note !== null && str_starts_with($note, 'Follow-up') => 'followed-up',
+            $note !== null && str_starts_with($note, 'Client link') => 'link-changed',
             $note !== null && str_starts_with($note, 'Sent back') => 'sent-back',
             $from === Invoice::DRAFT && $to === Invoice::DRAFT => 'adjusted',
             $note !== null && str_starts_with($note, 'Credit note') => 'credited',

@@ -22,11 +22,19 @@ import { formatMoney, invoiceStatusLabel } from '@/lib/money';
 import {
     profile as profileRoute,
     rateTemplate as applyTemplateRoute,
+    statement as statementRoute,
+    statementLink as statementLinkRoute,
+    statementUnlink,
 } from '@/routes/billing/clients';
 import { store as storeRate } from '@/routes/billing/rates';
 import { store as storeExpense } from '@/routes/billing/clients/expenses';
 import { store as storePeriod } from '@/routes/billing/clients/periods';
-import { destroy as destroyExpense } from '@/routes/billing/expenses';
+import {
+    approve as approveExpense,
+    destroy as destroyExpense,
+    receipt as expenseReceipt,
+    update as updateExpense,
+} from '@/routes/billing/expenses';
 import {
     index as invoicesIndex,
     show as invoiceShow,
@@ -79,8 +87,19 @@ const props = defineProps<{
         incurred_on: string;
         is_billable: boolean;
         project: string | null;
+        project_id: number | null;
         billed: boolean;
+        category: string | null;
+        markup_bp: number;
+        taxable: boolean;
+        billed_minor: number;
+        has_receipt: boolean;
+        receipt_name: string | null;
+        approved: boolean;
+        can_approve: boolean;
     }[];
+    expenseCategories: Record<string, string>;
+    statementLink: { url: string; expires_at: string | null } | null;
     projects: {
         id: number;
         name: string;
@@ -194,12 +213,79 @@ const form = useForm({
 });
 
 const periodForm = useForm({ starts_on: '', ends_on: '' });
-const expenseForm = useForm({
+// E-75: one form adds or edits an expense (receipts upload as multipart).
+const expenseForm = useForm<{
+    description: string;
+    amount: string;
+    incurred_on: string;
+    is_billable: boolean;
+    category: string;
+    markup: string;
+    taxable: boolean;
+    project_id: string | number;
+    receipt: File | null;
+}>({
     description: '',
     amount: '',
     incurred_on: localToday(),
     is_billable: true,
+    category: '',
+    markup: '',
+    taxable: true,
+    project_id: '',
+    receipt: null,
 });
+const editingExpense = ref<number | null>(null);
+const receiptInput = ref<HTMLInputElement | null>(null);
+function editExpense(e: (typeof props.expenses)[number]): void {
+    editingExpense.value = e.id;
+    expenseForm.description = e.description;
+    expenseForm.amount = (e.amount_minor / 100).toFixed(2);
+    expenseForm.incurred_on = e.incurred_on;
+    expenseForm.is_billable = e.is_billable;
+    expenseForm.category = e.category ?? '';
+    expenseForm.markup = e.markup_bp ? String(e.markup_bp / 100) : '';
+    expenseForm.taxable = e.taxable;
+    expenseForm.project_id = e.project_id ?? '';
+    expenseForm.receipt = null;
+}
+function resetExpense(): void {
+    editingExpense.value = null;
+    expenseForm.reset();
+    if (receiptInput.value) {
+        receiptInput.value.value = '';
+    }
+}
+function saveExpense(): void {
+    const url =
+        editingExpense.value !== null
+            ? updateExpense.url(editingExpense.value)
+            : storeExpense.url(props.workspace.slug);
+    expenseForm.post(url, {
+        ...opts,
+        forceFormData: true,
+        onSuccess: () => resetExpense(),
+    });
+}
+
+// E-69: statement of account (PDF for any range; a client link for the last 6 months).
+const statement = reactive({
+    currency: props.profile.currency,
+    from: '',
+    to: localToday(),
+});
+const statementUrl = computed(() => {
+    const q = new URLSearchParams({
+        currency: statement.currency,
+        to: statement.to,
+        ...(statement.from ? { from: statement.from } : {}),
+    });
+    return `${statementRoute.url(props.workspace.slug)}?${q.toString()}`;
+});
+const statementExpiry = ref('30');
+function copy(text: string): void {
+    void navigator.clipboard?.writeText(text);
+}
 const fees = reactive<Record<string, string>>(
     Object.fromEntries(props.projects.map((p) => [String(p.id), p.fixed_fee])),
 );
@@ -887,51 +973,235 @@ const statusText: Record<Period['status'], string> = {
 
         <Card>
             <CardHeader>
+                <CardTitle class="text-base">Statement of account</CardTitle>
+                <CardDescription
+                    >Invoices, payments and credits with the running balance and
+                    what is overdue. Download it, or send the client a link that
+                    always shows the last 6 months.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="space-y-3 text-sm">
+                <div class="flex flex-wrap items-end gap-2">
+                    <label class="grid gap-1 text-xs text-muted-foreground"
+                        >Currency
+                        <NativeSelect
+                            v-model="statement.currency"
+                            class="h-9 w-24"
+                        >
+                            <option
+                                v-for="c in options.currencies"
+                                :key="c"
+                                :value="c"
+                            >
+                                {{ c }}
+                            </option>
+                        </NativeSelect>
+                    </label>
+                    <label class="grid gap-1 text-xs text-muted-foreground"
+                        >From (blank: 6 months back)
+                        <Input
+                            v-model="statement.from"
+                            type="date"
+                            class="w-40"
+                    /></label>
+                    <label class="grid gap-1 text-xs text-muted-foreground"
+                        >To
+                        <Input v-model="statement.to" type="date" class="w-40"
+                    /></label>
+                    <Button size="sm" variant="outline" as-child>
+                        <a :href="statementUrl">Download PDF</a>
+                    </Button>
+                </div>
+                <div
+                    v-if="statementLink"
+                    class="flex flex-wrap items-center gap-2 rounded-md border p-2"
+                >
+                    <Input
+                        :model-value="statementLink.url"
+                        readonly
+                        class="min-w-0 flex-1 text-xs"
+                        aria-label="Statement link"
+                    />
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        @click="copy(statementLink.url)"
+                        >Copy</Button
+                    >
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        @click="
+                            router.delete(
+                                statementUnlink.url(workspace.slug),
+                                opts,
+                            )
+                        "
+                        >Turn off</Button
+                    >
+                    <span class="w-full text-xs text-muted-foreground">{{
+                        statementLink.expires_at
+                            ? `Expires ${formatDate(statementLink.expires_at)}`
+                            : 'No expiry'
+                    }}</span>
+                </div>
+                <div v-else class="flex flex-wrap items-center gap-2">
+                    <NativeSelect
+                        v-model="statementExpiry"
+                        class="h-9 w-36"
+                        aria-label="Link expiry"
+                    >
+                        <option value="7">Expires in 7 days</option>
+                        <option value="30">Expires in 30 days</option>
+                        <option value="90">Expires in 90 days</option>
+                        <option value="">No expiry</option>
+                    </NativeSelect>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        @click="
+                            router.post(
+                                statementLinkRoute.url(workspace.slug),
+                                {
+                                    expires_days: statementExpiry
+                                        ? Number(statementExpiry)
+                                        : null,
+                                },
+                                opts,
+                            )
+                        "
+                        >Create client link</Button
+                    >
+                </div>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
                 <CardTitle class="text-base">Expenses</CardTitle>
                 <CardDescription
-                    >Billable expenses go on the next invoice up to their
-                    date.</CardDescription
-                >
+                    >Approved billable expenses go on the next invoice up to
+                    their date, plus any handling markup. Receipts stay private.
+                </CardDescription>
             </CardHeader>
             <CardContent class="space-y-3">
                 <form
-                    class="grid gap-2 text-sm sm:grid-cols-5"
-                    @submit.prevent="
-                        expenseForm.post(storeExpense.url(workspace.slug), {
-                            ...opts,
-                            onSuccess: () =>
-                                expenseForm.reset('description', 'amount'),
-                        })
-                    "
+                    class="grid gap-2 text-sm sm:grid-cols-6"
+                    @submit.prevent="saveExpense"
                 >
                     <Input
                         v-model="expenseForm.description"
                         placeholder="Description"
-                        class="sm:col-span-2"
+                        class="sm:col-span-3"
                         aria-label="Description"
                     />
                     <Input
                         v-model="expenseForm.amount"
                         inputmode="decimal"
-                        placeholder="Amount"
+                        placeholder="Cost"
                         aria-label="Amount"
                     />
                     <Input
                         v-model="expenseForm.incurred_on"
                         type="date"
+                        class="sm:col-span-2"
                         aria-label="Date"
                     />
-                    <Button
-                        size="sm"
-                        type="submit"
-                        :disabled="expenseForm.processing"
-                        >Add expense</Button
+                    <NativeSelect
+                        v-model="expenseForm.category"
+                        class="sm:col-span-2"
+                        aria-label="Category"
                     >
+                        <option value="">Category…</option>
+                        <option
+                            v-for="(label, key) in expenseCategories"
+                            :key="key"
+                            :value="key"
+                        >
+                            {{ label }}
+                        </option>
+                    </NativeSelect>
+                    <NativeSelect
+                        v-model="expenseForm.project_id"
+                        class="sm:col-span-2"
+                        aria-label="Project"
+                    >
+                        <option value="">No project</option>
+                        <option
+                            v-for="pr in projects"
+                            :key="pr.id"
+                            :value="pr.id"
+                        >
+                            {{ pr.name }}
+                        </option>
+                    </NativeSelect>
+                    <Input
+                        v-model="expenseForm.markup"
+                        inputmode="decimal"
+                        placeholder="Markup %"
+                        class="sm:col-span-2"
+                        aria-label="Markup percent"
+                    />
+                    <label
+                        class="flex items-center gap-2 text-xs sm:col-span-2"
+                    >
+                        <input
+                            v-model="expenseForm.is_billable"
+                            type="checkbox"
+                            class="size-4"
+                        />
+                        Bill to client
+                    </label>
+                    <label
+                        class="flex items-center gap-2 text-xs sm:col-span-2"
+                    >
+                        <input
+                            v-model="expenseForm.taxable"
+                            type="checkbox"
+                            class="size-4"
+                        />
+                        Taxable
+                    </label>
+                    <label class="grid gap-1 text-xs sm:col-span-2"
+                        >Receipt (PDF or photo)
+                        <input
+                            ref="receiptInput"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            class="text-xs"
+                            @change="
+                                expenseForm.receipt =
+                                    ($event.target as HTMLInputElement)
+                                        .files?.[0] ?? null
+                            "
+                    /></label>
+                    <div class="flex gap-2 sm:col-span-6">
+                        <Button
+                            size="sm"
+                            type="submit"
+                            :disabled="expenseForm.processing"
+                            >{{
+                                editingExpense !== null
+                                    ? 'Save expense'
+                                    : 'Add expense'
+                            }}</Button
+                        >
+                        <Button
+                            v-if="editingExpense !== null"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            @click="resetExpense"
+                            >Cancel</Button
+                        >
+                    </div>
                     <InputError
-                        class="sm:col-span-5"
+                        class="sm:col-span-6"
                         :message="
                             expenseForm.errors.description ??
-                            expenseForm.errors.amount
+                            expenseForm.errors.amount ??
+                            expenseForm.errors.markup ??
+                            expenseForm.errors.receipt
                         "
                     />
                 </form>
@@ -939,15 +1209,30 @@ const statusText: Record<Period['status'], string> = {
                     <li
                         v-for="e in expenses"
                         :key="e.id"
-                        class="flex items-center justify-between gap-2 py-1.5"
+                        class="flex flex-wrap items-center justify-between gap-2 py-1.5"
                     >
-                        <span
+                        <span class="min-w-0"
                             >{{ formatDate(e.incurred_on) }} · {{ e.description
-                            }}<span
-                                v-if="!e.is_billable"
-                                class="text-xs text-muted-foreground"
-                            >
-                                · not billable</span
+                            }}<span class="text-xs text-muted-foreground">
+                                <template v-if="e.category">
+                                    ·
+                                    {{
+                                        expenseCategories[e.category]
+                                    }}</template
+                                >
+                                <template v-if="e.project">
+                                    · {{ e.project }}</template
+                                >
+                                <template v-if="!e.is_billable">
+                                    · not billable</template
+                                >
+                                <template v-if="!e.taxable"> · no tax</template>
+                            </span>
+                            <a
+                                v-if="e.has_receipt"
+                                :href="expenseReceipt.url(e.id)"
+                                class="ml-1 text-xs underline"
+                                >receipt</a
                             ></span
                         >
                         <span class="flex items-center gap-2">
@@ -955,23 +1240,56 @@ const statusText: Record<Period['status'], string> = {
                                 formatMoney(e.amount_minor, form.currency)
                             }}</span>
                             <span
+                                v-if="e.markup_bp"
+                                class="text-xs text-muted-foreground"
+                                >→
+                                {{
+                                    formatMoney(e.billed_minor, form.currency)
+                                }}</span
+                            >
+                            <span
                                 v-if="e.billed"
                                 class="text-xs text-muted-foreground"
                                 >billed</span
                             >
-                            <Button
-                                v-else
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Remove expense"
-                                @click="
-                                    router.delete(
-                                        destroyExpense.url(e.id),
-                                        opts,
-                                    )
-                                "
-                                ><Trash2 class="size-4"
-                            /></Button>
+                            <template v-else>
+                                <span
+                                    v-if="!e.approved"
+                                    class="rounded bg-amber-100 px-1.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                    >needs approval</span
+                                >
+                                <Button
+                                    v-if="e.can_approve"
+                                    size="sm"
+                                    variant="outline"
+                                    @click="
+                                        router.post(
+                                            approveExpense.url(e.id),
+                                            {},
+                                            opts,
+                                        )
+                                    "
+                                    >Approve</Button
+                                >
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="editExpense(e)"
+                                    >Edit</Button
+                                >
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Remove expense"
+                                    @click="
+                                        router.delete(
+                                            destroyExpense.url(e.id),
+                                            opts,
+                                        )
+                                    "
+                                    ><Trash2 class="size-4"
+                                /></Button>
+                            </template>
                         </span>
                     </li>
                 </ul>

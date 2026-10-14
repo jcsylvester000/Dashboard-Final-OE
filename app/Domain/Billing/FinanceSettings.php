@@ -12,6 +12,8 @@ use App\Models\Invoice;
  *    user must finalize every invoice) or "above" (only invoices whose total reaches the
  *    threshold for their currency).
  *  - backdate_days: how far back an issue date may be set at finalize.
+ *  - expense_approval (E-75): expenses wait for a second Finance user before billing.
+ *  - receipt_thresholds (E-75): a receipt is required from this amount, per currency.
  */
 class FinanceSettings
 {
@@ -22,33 +24,52 @@ class FinanceSettings
     public function __construct(private readonly AppSettings $settings) {}
 
     /**
-     * @return array{review: string, thresholds: array<string, int>, backdate_days: int}
+     * @return array{review: string, thresholds: array<string, int>, backdate_days: int, expense_approval: bool, receipt_thresholds: array<string, int>}
      */
     public function get(): array
     {
         $saved = (array) $this->settings->get('finance', []);
         $mode = is_string($saved['review'] ?? null) && array_key_exists($saved['review'], self::REVIEW_MODES) ? $saved['review'] : 'off';
-        $thresholds = [];
-        foreach ((array) ($saved['thresholds'] ?? []) as $currency => $minor) {
-            if (is_string($currency) && is_int($minor) && $minor > 0) {
-                $thresholds[$currency] = $minor;
-            }
-        }
         $days = $saved['backdate_days'] ?? self::DEFAULT_BACKDATE_DAYS;
 
         return [
             'review' => $mode,
-            'thresholds' => $thresholds,
+            'thresholds' => self::amounts($saved['thresholds'] ?? []),
             'backdate_days' => is_int($days) && $days >= 0 && $days <= 366 ? $days : self::DEFAULT_BACKDATE_DAYS,
+            'expense_approval' => ($saved['expense_approval'] ?? false) === true,
+            'receipt_thresholds' => self::amounts($saved['receipt_thresholds'] ?? []),
         ];
     }
 
     /**
-     * @param  array{review: string, thresholds: array<string, int>, backdate_days: int}  $values
+     * @return array<string, int>
+     */
+    private static function amounts(mixed $raw): array
+    {
+        $out = [];
+        foreach ((array) $raw as $currency => $minor) {
+            if (is_string($currency) && is_int($minor) && $minor > 0) {
+                $out[$currency] = $minor;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $values  merged over what is saved
      */
     public function save(array $values): void
     {
-        $this->settings->set('finance', $values);
+        $this->settings->set('finance', [...(array) $this->settings->get('finance', []), ...$values]);
+    }
+
+    /** E-75: receipt required for this expense amount (client currency)? */
+    public function needsReceipt(string $currency, int $amountMinor): bool
+    {
+        $from = $this->get()['receipt_thresholds'][$currency] ?? null;
+
+        return $from !== null && $amountMinor >= $from;
     }
 
     /** Whether this invoice needs a second person to finalize it. */
