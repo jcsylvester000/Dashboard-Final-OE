@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GettingStartedController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\PrivacyController;
+use App\Http\Controllers\VideoUploadController;
 use Illuminate\Support\Facades\Route;
 
 // Internal app: there is no public landing page.
@@ -52,6 +53,13 @@ Route::middleware('auth')->group(function () {
     Route::get('attachments/{attachment}/feedback-sheet', [ClientReviewLinkController::class, 'feedbackSheet'])->name('attachments.feedback-sheet');
     Route::post('attachments/from-drive', [AttachmentController::class, 'fromDrive'])->middleware('throttle:60,1')->name('attachments.from-drive');
     Route::get('files/{attachment}', [AttachmentController::class, 'show'])->middleware('signed:relative')->name('files.show');
+    // E-11: direct, resumable video uploads (JSON). Parts go straight to storage.
+    Route::post('video-uploads', [VideoUploadController::class, 'start'])->middleware('throttle:30,1')->name('video-uploads.start');
+    Route::post('video-uploads/{attachment}/parts', [VideoUploadController::class, 'parts'])->middleware('throttle:600,1')->name('video-uploads.parts');
+    Route::put('video-uploads/{attachment}/parts/{part}', [VideoUploadController::class, 'part'])->whereNumber('part')
+        ->middleware(['signed:relative', 'throttle:1200,1'])->name('video-uploads.part'); // local driver only
+    Route::post('video-uploads/{attachment}/complete', [VideoUploadController::class, 'complete'])->name('video-uploads.complete');
+    Route::delete('video-uploads/{attachment}', [VideoUploadController::class, 'abort'])->name('video-uploads.abort');
 
     // In-app alerts inbox (P4)
     Route::get('inbox', [InboxController::class, 'index'])->name('inbox.index');

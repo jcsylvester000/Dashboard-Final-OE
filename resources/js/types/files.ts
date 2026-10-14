@@ -9,6 +9,15 @@ export type AttachmentRow = {
     download_url: string;
     thumb_url: string | null;
     previewable: boolean;
+    /** E-11 / E-13: video processing state and details (null for other files). */
+    video?: {
+        status: 'processing' | 'ready' | 'failed' | null;
+        duration_ms: number | null;
+        width: number | null;
+        height: number | null;
+        fps: number | null;
+        error: string | null;
+    } | null;
     /** E-23: same-origin plain-text link for logs, JSON, CSV, Markdown. */
     text_url?: string | null;
     can_delete: boolean;
@@ -49,7 +58,12 @@ export type AttachmentRow = {
     }[];
 };
 
-export type FileLimits = { max_mb: number; extensions: string[] };
+export type FileLimits = {
+    max_mb: number;
+    extensions: string[];
+    /** E-11: direct-to-storage video uploads (tasks and projects). */
+    video?: { extensions: string[]; max_mb: number };
+};
 
 /** E-05: one vector shape; points are fractions (0..1) of the image. */
 export type AnnotationShape = {

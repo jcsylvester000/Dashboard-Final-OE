@@ -3,7 +3,7 @@
 namespace App\Domain\Files;
 
 use Illuminate\Http\UploadedFile;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * The private local disk (attachments when UploadThing is off or public, and all
@@ -20,8 +20,8 @@ interface FileStore
     /** Store raw bytes (e.g. a generated thumbnail) at the given key. */
     public function putContents(string $key, string $contents): void;
 
-    /** Send the file to the browser. */
-    public function response(string $key, string $filename, string $mime, bool $inline): StreamedResponse;
+    /** Send the file to the browser (E-12: Range requests answer 206 where the disk allows). */
+    public function response(string $key, string $filename, string $mime, bool $inline): Response;
 
     /** The stored bytes, or null when missing (E-09 feedback sheet). */
     public function contents(string $key): ?string;

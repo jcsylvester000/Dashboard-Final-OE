@@ -2,6 +2,7 @@
 
 namespace App\Domain\Files;
 
+use App\Domain\Files\Video\VideoUploads;
 use App\Models\Attachment;
 use App\Models\Task;
 use App\Models\User;
@@ -30,6 +31,7 @@ class AttachmentPresenter
             ->withCount(['annotations as open_pins' => fn ($q) => $q->whereNull('parent_id')->whereNull('resolved_at')])
             ->where('attachable_type', $record->getMorphClass())
             ->where('attachable_id', $record->getKey())
+            ->whereNull('upload_state') // E-11: unfinished video uploads stay hidden
             ->get();
         // E-02: one row per file (its latest version) with the older versions inside.
         $byStack = $all->groupBy(fn (Attachment $a) => $a->stackId());
@@ -68,6 +70,7 @@ class AttachmentPresenter
                 'thumb_url' => $a->thumbnail_key !== null ? $this->files->url($a, thumbnail: true) : null,
                 'previewable' => $a->previewable(),
                 'text_url' => $a->isText() ? $this->files->url($a, text: true) : null,
+                'video' => self::video($a),
                 'can_delete' => ! $readOnly && ($a->uploaded_by === $user->id || $canLead),
                 'approved' => $a->approved_at !== null,
                 'approved_by' => $a->approver?->name,
@@ -105,6 +108,7 @@ class AttachmentPresenter
             ->where('attachable_type', (new Task)->getMorphClass())
             ->whereIn('attachable_id', $taskIds)
             ->where('is_latest', true)
+            ->whereNull('upload_state')
             ->orderByRaw('approved_at is null')
             ->latest('id')
             ->limit($limit)
@@ -132,6 +136,28 @@ class AttachmentPresenter
     }
 
     /**
+     * E-13: processing state and details of a video (null for other files).
+     *
+     * @return array{status: string|null, duration_ms: int|null, width: int|null, height: int|null, fps: float|null, error: string|null}|null
+     */
+    public static function video(Attachment $a): ?array
+    {
+        if (! $a->isVideoAsset()) {
+            return null;
+        }
+        $m = $a->media ?? [];
+
+        return [
+            'status' => $a->media_status,
+            'duration_ms' => $m['duration_ms'] ?? null,
+            'width' => $m['width'] ?? null,
+            'height' => $m['height'] ?? null,
+            'fps' => $m['fps'] ?? null,
+            'error' => $a->media_error,
+        ];
+    }
+
+    /**
      * Who may mark a file approved: task reviewers (see TaskPolicy::review) for task
      * files, workspace leads for everything else.
      */
@@ -145,10 +171,15 @@ class AttachmentPresenter
     /**
      * Upload limits for the UI hint.
      *
-     * @return array{max_mb: int, extensions: list<string>}
+     * @return array{max_mb: int, extensions: list<string>, video: array{extensions: list<string>, max_mb: int}}
      */
     public function limits(): array
     {
-        return ['max_mb' => $this->files->maxMb(), 'extensions' => $this->files->allowedExtensions()];
+        return [
+            'max_mb' => $this->files->maxMb(),
+            'extensions' => $this->files->allowedExtensions(),
+            // E-11: videos upload straight to storage (bigger limit, own quota).
+            'video' => ['extensions' => array_values(array_map('strval', (array) config('video.extensions', []))), 'max_mb' => (int) round(VideoUploads::maxBytes() / 1024 / 1024)],
+        ];
     }
 }

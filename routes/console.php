@@ -54,6 +54,8 @@ Schedule::command('time:nudges --monday')->weeklyOn(1, '09:00')->timezone('Asia/
 
 // Team file drive: free quota held by abandoned uploads.
 Schedule::command('drive:prune')->hourly()->withoutOverlapping();
+// E-11: unfinished video uploads (quota + storage).
+Schedule::command('video:prune-uploads')->hourlyAt(35)->withoutOverlapping();
 
 // API housekeeping (P7): expired tokens and old idempotency records.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();

@@ -4,6 +4,7 @@ namespace App\Domain\Files;
 
 use App\Domain\Files\UploadThing\UploadThingClient;
 use App\Domain\Files\UploadThing\UploadThingException;
+use App\Domain\Files\Video\VideoStorage;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Settings\AppSettings;
 use App\Models\Attachment;
@@ -145,6 +146,18 @@ class AttachmentService
                 $this->uploadThing->deleteFiles([$attachment->key]);
             } catch (UploadThingException $e) {
                 report($e); // the row goes anyway; an orphaned remote file is cleaned up by hand
+            }
+        }
+        // E-11: videos live in video storage (original + web proxy).
+        if ($attachment->isVideoAsset()) {
+            $video = app(VideoStorage::class);
+            try {
+                $video->delete($attachment->key);
+                if ($attachment->proxy_key !== null) {
+                    $video->delete($attachment->proxy_key);
+                }
+            } catch (\Throwable $e) {
+                report($e); // the row goes anyway; storage lifecycle rules catch leftovers
             }
         }
         if ($attachment->thumbnail_key !== null) {

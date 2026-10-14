@@ -562,10 +562,28 @@ function decide(decision: 'approve' | 'changes' | 'clear'): void {
             />
             <video
                 v-else-if="kind === 'video'"
+                :key="shown.url"
                 :src="shown.url"
+                :poster="
+                    shown.latest ? (item.thumb_url ?? undefined) : undefined
+                "
                 controls
+                playsinline
+                preload="metadata"
                 class="max-h-full max-w-full"
             />
+            <p
+                v-if="
+                    kind === 'video' &&
+                    shown.latest &&
+                    item.video?.status === 'processing'
+                "
+                class="absolute bottom-4 left-1/2 -translate-x-1/2 rounded bg-black/70 px-3 py-1 text-xs"
+                role="status"
+            >
+                Preparing a web copy. If the video doesn't play yet, try again
+                in a few minutes.
+            </p>
             <div v-else class="text-center text-sm">
                 <p>No preview for this file type.</p>
                 <a :href="shown.download_url" class="underline"

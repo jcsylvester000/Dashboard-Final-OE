@@ -35,6 +35,8 @@ import {
     fromDrive,
     store,
 } from '@/routes/attachments';
+import { uploadVideo } from '@/composables/useVideoUpload';
+import type { VideoUploadState } from '@/composables/useVideoUpload';
 import { picker } from '@/routes/drive';
 import type { AttachmentRow, FileLimits } from '@/types/files';
 
@@ -76,9 +78,98 @@ const form = useForm<{
     attachable_id: props.attachableId,
     file: null,
 });
-const accept = computed(() =>
-    props.limits.extensions.map((e) => `.${e}`).join(','),
+// E-11: videos upload straight to storage on tasks and projects.
+const videoTarget = computed(
+    () => props.attachableType === 'task' || props.attachableType === 'project',
 );
+const videoExts = computed(() =>
+    videoTarget.value ? (props.limits.video?.extensions ?? []) : [],
+);
+const accept = computed(() =>
+    [...new Set([...props.limits.extensions, ...videoExts.value])]
+        .map((e) => `.${e}`)
+        .join(','),
+);
+function isVideo(file: File): boolean {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+    return videoExts.value.includes(ext);
+}
+const videoUploads = ref<VideoUploadState[]>([]);
+async function sendVideo(file: File, versionOf?: number): Promise<boolean> {
+    const maxMb = props.limits.video?.max_mb ?? 0;
+    if (maxMb && file.size > maxMb * 1024 * 1024) {
+        videoUploads.value.push({
+            name: file.name,
+            loaded: 0,
+            total: file.size,
+            status: 'error',
+            error: `Videos can be at most ${Math.round(maxMb / 1024)} GB.`,
+            pause: () => {},
+            resume: () => {},
+            cancel: () => {},
+        });
+
+        return false;
+    }
+    const { state, done } = uploadVideo(file, {
+        attachableType: props.attachableType as 'task' | 'project',
+        attachableId: props.attachableId,
+        versionOf,
+    });
+    videoUploads.value.push(state);
+    const ok = await done;
+    if (ok) {
+        router.reload({ only: ['attachments'] });
+        setTimeout(
+            () =>
+                (videoUploads.value = videoUploads.value.filter(
+                    (v) => v !== state,
+                )),
+            2500,
+        );
+    }
+
+    return ok;
+}
+function percent(v: VideoUploadState): number {
+    return v.total ? Math.floor((v.loaded / v.total) * 100) : 0;
+}
+// Warn before leaving the page while a video is still uploading.
+function beforeUnload(e: BeforeUnloadEvent): void {
+    if (
+        videoUploads.value.some((v) =>
+            [
+                'starting',
+                'uploading',
+                'paused',
+                'waiting-network',
+                'finishing',
+            ].includes(v.status),
+        )
+    ) {
+        e.preventDefault();
+    }
+}
+// E-13: while a video is being prepared, refresh the list every 15 s (visible tab only).
+let processingTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+    window.addEventListener('beforeunload', beforeUnload);
+    processingTimer = setInterval(() => {
+        if (
+            document.visibilityState === 'visible' &&
+            props.attachments.some((a) => a.video?.status === 'processing')
+        ) {
+            router.reload({ only: ['attachments'] });
+        }
+    }, 15000);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', beforeUnload);
+    if (processingTimer) {
+        clearInterval(processingTimer);
+    }
+});
 const fileError = computed(
     () =>
         form.errors.file ??
@@ -113,6 +204,14 @@ async function uploadMany(
 ): Promise<void> {
     const list = Array.from(files ?? []);
     if (!list.length || !props.canUpload) {
+        return;
+    }
+    const videos = list.filter((f) => isVideo(f));
+    for (const v of videos) {
+        void sendVideo(v);
+    }
+    list.splice(0, list.length, ...list.filter((f) => !isVideo(f)));
+    if (!list.length) {
         return;
     }
     queue.value = list.map((f) => ({ name: f.name, status: 'waiting' }));
@@ -233,6 +332,15 @@ function uploadVersion(e: Event): void {
     if (!file || versionOf.value === null) {
         return;
     }
+    if (isVideo(file)) {
+        void sendVideo(file, versionOf.value);
+        versionOf.value = null;
+        if (versionInput.value) {
+            versionInput.value.value = '';
+        }
+
+        return;
+    }
     router.post(
         store.url(),
         {
@@ -295,12 +403,23 @@ async function remove(id: number, name: string): Promise<void> {
     }
 }
 
+function duration(ms: number): string {
+    const s = Math.round(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = String(s % 60).padStart(2, '0');
+
+    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
 function size(bytes: number): string {
     if (bytes < 1024) {
         return `${bytes} B`;
     }
     if (bytes < 1024 * 1024) {
         return `${Math.round(bytes / 1024)} KB`;
+    }
+    if (bytes >= 1024 ** 3) {
+        return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
     }
 
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -380,6 +499,91 @@ function size(bytes: number): string {
                             "
                             >{{ q.status }}</span
                         >
+                    </li>
+                </ul>
+                <ul v-if="videoUploads.length" class="space-y-2 text-xs">
+                    <li
+                        v-for="(v, i) in videoUploads"
+                        :key="`v${i}`"
+                        class="space-y-1 rounded border p-2"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="truncate font-medium">{{
+                                v.name
+                            }}</span>
+                            <span
+                                class="shrink-0"
+                                :class="
+                                    v.status === 'error'
+                                        ? 'text-rose-600'
+                                        : v.status === 'done'
+                                          ? 'text-emerald-700'
+                                          : 'text-muted-foreground'
+                                "
+                                aria-live="polite"
+                                >{{
+                                    v.status === 'uploading'
+                                        ? `${percent(v)}% · ${size(v.loaded)} of ${size(v.total)}`
+                                        : v.status === 'waiting-network'
+                                          ? 'Offline: resumes when you reconnect'
+                                          : v.status === 'finishing'
+                                            ? 'Finishing…'
+                                            : v.status === 'done'
+                                              ? 'Uploaded, preparing preview'
+                                              : v.status
+                                }}</span
+                            >
+                        </div>
+                        <div
+                            class="h-1.5 overflow-hidden rounded bg-muted"
+                            role="progressbar"
+                            :aria-valuenow="percent(v)"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-label="`Uploading ${v.name}`"
+                        >
+                            <div
+                                class="h-full bg-primary transition-all"
+                                :style="{ width: `${percent(v)}%` }"
+                            />
+                        </div>
+                        <p v-if="v.error" class="text-rose-600">
+                            {{ v.error }}
+                        </p>
+                        <div
+                            v-if="
+                                [
+                                    'uploading',
+                                    'paused',
+                                    'waiting-network',
+                                ].includes(v.status)
+                            "
+                            class="flex gap-2"
+                        >
+                            <button
+                                v-if="v.status === 'paused'"
+                                type="button"
+                                class="underline"
+                                @click="v.resume()"
+                            >
+                                Resume
+                            </button>
+                            <button
+                                v-else
+                                type="button"
+                                class="underline"
+                                @click="v.pause()"
+                            >
+                                Pause
+                            </button>
+                            <button
+                                type="button"
+                                class="text-rose-600 underline"
+                                @click="v.cancel()"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </li>
                 </ul>
                 <InputError :message="fileError" />
@@ -490,6 +694,24 @@ function size(bytes: number): string {
                             class="rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
                             :title="a.review_note ?? ''"
                             >Changes requested</span
+                        >
+                        <span
+                            v-if="a.video?.status === 'processing'"
+                            class="mr-1 rounded bg-sky-100 px-1 text-[10px] font-medium text-sky-900 dark:bg-sky-950 dark:text-sky-200"
+                            >Preparing preview…</span
+                        >
+                        <span
+                            v-else-if="a.video?.status === 'failed'"
+                            class="mr-1 rounded bg-rose-100 px-1 text-[10px] font-medium text-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                            :title="a.video.error ?? ''"
+                            >Preview failed (original downloadable)</span
+                        >
+                        <span
+                            v-else-if="a.video?.duration_ms"
+                            class="mr-1 rounded bg-muted px-1 text-[10px] font-medium"
+                            :title="a.video.fps ? `${a.video.fps} fps` : ''"
+                            >{{ duration(a.video.duration_ms) }} ·
+                            {{ a.video.width }}×{{ a.video.height }}</span
                         >
                         <p class="text-xs text-muted-foreground">
                             {{ size(a.size) }} ·

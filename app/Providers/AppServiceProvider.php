@@ -5,6 +5,10 @@ namespace App\Providers;
 use App\Domain\Files\FileStore;
 use App\Domain\Files\LocalFileStore;
 use App\Domain\Files\UploadThing\UploadThingClient;
+use App\Domain\Files\Video\LocalVideoStorage;
+use App\Domain\Files\Video\S3Client;
+use App\Domain\Files\Video\S3VideoStorage;
+use App\Domain\Files\Video\VideoStorage;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Identity\Permissions;
 use App\Domain\Identity\ViewAs;
@@ -48,6 +52,18 @@ class AppServiceProvider extends ServiceProvider
         // Local private disk for attachment bytes and thumbnails; AttachmentService sends
         // originals to UploadThing instead when FILES_DRIVER allows it (R-03).
         $this->app->bind(FileStore::class, fn () => new LocalFileStore((string) config('files.local_disk', 'local')));
+        // E-11 / D-01: video storage (R2 or any S3-compatible bucket; local disk for development).
+        $this->app->bind(VideoStorage::class, function () {
+            $minutes = (int) config('video.link_minutes', 15);
+            if (config('video.driver') === 's3') {
+                return new S3VideoStorage(new S3Client(
+                    (string) config('video.s3.endpoint'), (string) config('video.s3.region', 'auto'), (string) config('video.s3.bucket'),
+                    (string) config('video.s3.key'), (string) config('video.s3.secret'), (bool) config('video.s3.path_style', true),
+                ), $minutes);
+            }
+
+            return new LocalVideoStorage((string) config('files.local_disk', 'local'), $minutes);
+        });
         $this->app->scoped(AppSettings::class);
         $this->app->scoped(AlertBatch::class);
         // Team file drive (My files) on UploadThing.
@@ -87,6 +103,8 @@ class AppServiceProvider extends ServiceProvider
         // `composer dev` also runs the scheduler (hourly alerts) and, once installed, Reverb.
         if ($this->app->runningInConsole()) {
             DevCommands::artisan('schedule:work', 'scheduler');
+            // E-128 / E-13: invoice PDFs and video processing run on their own queues.
+            DevCommands::artisan('queue:listen --queue='.(string) config('billing.pdf_queue', 'pdf').','.(string) config('video.processing.queue', 'media').' --tries=1 --timeout=0', 'media');
             if (class_exists('Laravel\\Reverb\\ReverbServiceProvider') && config('broadcasting.default') === 'reverb') {
                 DevCommands::artisan('reverb:start', 'reverb');
             }

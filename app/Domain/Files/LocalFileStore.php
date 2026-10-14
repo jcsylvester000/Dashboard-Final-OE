@@ -6,6 +6,8 @@ use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -35,9 +37,22 @@ class LocalFileStore implements FileStore
         $this->disk()->put($key, $contents);
     }
 
-    public function response(string $key, string $filename, string $mime, bool $inline): StreamedResponse
+    public function response(string $key, string $filename, string $mime, bool $inline): BinaryFileResponse|StreamedResponse
     {
         $disposition = $inline ? 'inline' : 'attachment';
+        // E-12: a real file on this server -> BinaryFileResponse, which answers Range requests (206)
+        // so videos seek instantly and large downloads can resume.
+        $path = $this->disk()->path($key);
+        if (is_file($path)) {
+            $response = new BinaryFileResponse($path, 200, [
+                'Content-Type' => $mime,
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, max-age=600',
+            ], false, null);
+            $response->setContentDisposition($inline ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT, $filename, Str::ascii($filename) ?: 'file');
+
+            return $response;
+        }
 
         return $this->disk()->response($key, $filename, [
             'Content-Type' => $mime,

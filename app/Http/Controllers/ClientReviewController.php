@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Domain\Files\ClientReview;
 use App\Domain\Files\FileStore;
 use App\Domain\Files\UploadThing\UploadThingClient;
+use App\Domain\Files\Video\VideoStorage;
 use App\Domain\Settings\CompanyProfile;
 use App\Models\Attachment;
 use Illuminate\Http\RedirectResponse;
@@ -42,9 +43,15 @@ class ClientReviewController extends Controller
         ]);
     }
 
-    public function file(string $token, FileStore $store, UploadThingClient $uploadThing): Response
+    public function file(string $token, FileStore $store, UploadThingClient $uploadThing, VideoStorage $video): Response
     {
         $attachment = $this->attachment($token);
+        // E-11: client review of a video plays the web proxy (or the original) from video storage.
+        if ($attachment->isVideoAsset()) {
+            $proxy = $attachment->proxy_key;
+
+            return $video->respond($proxy ?? $attachment->key, $attachment->original_name, $proxy !== null ? 'video/mp4' : $attachment->mime, true);
+        }
         if ($attachment->disk === 'uploadthing') {
             return redirect()->away($uploadThing->fileUrl($attachment->key, (int) config('files.drive.link_seconds', 300)));
         }

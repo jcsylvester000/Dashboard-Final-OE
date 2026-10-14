@@ -7,6 +7,7 @@ use App\Domain\Files\AttachmentService;
 use App\Domain\Files\FileStore;
 use App\Domain\Files\UploadThing\UploadThingClient;
 use App\Domain\Files\UploadThing\UploadThingException;
+use App\Domain\Files\Video\VideoStorage;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Work\CommentService;
 use App\Domain\Work\TaskService;
@@ -30,7 +31,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * Upload, download (signed, expiring links only) and delete attachments.
@@ -90,7 +91,7 @@ class AttachmentController extends Controller
     /**
      * GET /files/{attachment}?download=1&thumb=1 - signed URL + signed-in member who can open the workspace.
      */
-    public function show(Request $request, Attachment $attachment, WorkspaceAccess $access, FileStore $store, UploadThingClient $uploadThing): StreamedResponse|RedirectResponse|Response
+    public function show(Request $request, Attachment $attachment, WorkspaceAccess $access, FileStore $store, UploadThingClient $uploadThing, VideoStorage $video): SymfonyResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -104,7 +105,24 @@ class AttachmentController extends Controller
 
         // Thumbnails always live on the local disk, whatever stored the original.
         if ($request->boolean('thumb') && $attachment->thumbnail_key !== null) {
-            return $store->response($attachment->thumbnail_key, 'thumb.webp', 'image/webp', true);
+            // E-13: video posters are JPEG; image thumbnails WebP.
+            $jpeg = str_ends_with($attachment->thumbnail_key, '.jpg');
+
+            return $store->response($attachment->thumbnail_key, $jpeg ? 'poster.jpg' : 'thumb.webp', $jpeg ? 'image/jpeg' : 'image/webp', true);
+        }
+
+        // E-11 / E-12: videos stream from video storage (Range, 206); the web proxy when ready.
+        if ($attachment->isVideoAsset()) {
+            abort_if($attachment->upload_state !== null, 404);
+            $download = $request->boolean('download');
+            $useProxy = ! $download && $attachment->proxy_key !== null;
+
+            return $video->respond(
+                $useProxy ? (string) $attachment->proxy_key : $attachment->key,
+                $useProxy ? pathinfo($attachment->original_name, PATHINFO_FILENAME).'.mp4' : $attachment->original_name,
+                $useProxy ? 'video/mp4' : $attachment->mime,
+                ! $download,
+            );
         }
 
         // On UploadThing (uploaded there, or linked from My files): hand out a short-lived link.

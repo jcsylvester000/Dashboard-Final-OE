@@ -6,6 +6,7 @@ use App\Models\DriveFile;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 
 /**
@@ -34,6 +35,7 @@ class HealthChecks
             $this->drive(),
             $this->backup(),
             $this->opcache(),
+            $this->video(),
             $this->version(),
         ];
     }
@@ -149,6 +151,35 @@ class HealthChecks
 
         return $this->row('opcache', 'PHP OPcache', $rate >= 99 || ! $production ? 'ok' : 'warn',
             sprintf('%.1f%% hits', $rate), self::bytes($free).' free; '.((int) ($stats['num_cached_scripts'] ?? 0)).' scripts cached');
+    }
+
+    /**
+     * E-11 / E-13 (D-01, D-02): video storage driver and ffmpeg on the media worker's server.
+     *
+     * @return array{key: string, label: string, status: string, value: string, detail: string|null}
+     */
+    private function video(): array
+    {
+        $driver = (string) config('video.driver', 'local');
+        $ffmpeg = (string) Cache::remember('health:ffmpeg', 600, function (): string {
+            try {
+                $result = Process::timeout(5)->run([(string) config('video.processing.ffmpeg', 'ffmpeg'), '-version']);
+
+                return $result->successful() ? (string) strtok($result->output(), "\n") : '';
+            } catch (\Throwable) {
+                return '';
+            }
+        });
+        $s3Ready = $driver !== 's3' || (config('video.s3.endpoint') && config('video.s3.bucket') && config('video.s3.key') && config('video.s3.secret'));
+        $warn = $ffmpeg === '' || ! $s3Ready || ($driver === 'local' && app()->isProduction());
+        $detail = match (true) {
+            ! $s3Ready => 'VIDEO_DRIVER=s3 but VIDEO_S3_* settings are incomplete.',
+            $ffmpeg === '' => 'ffmpeg not found: videos upload but get no poster or web copy. Install ffmpeg (see the Runbook: Video).',
+            $driver === 'local' && app()->isProduction() => 'Videos are on the server disk. Set VIDEO_DRIVER=s3 (Cloudflare R2) for large files.',
+            default => $ffmpeg,
+        };
+
+        return $this->row('video', 'Video storage + processing', $warn ? 'warn' : 'ok', $driver === 's3' ? 'Bucket (S3/R2)' : 'Server disk', $detail);
     }
 
     /**

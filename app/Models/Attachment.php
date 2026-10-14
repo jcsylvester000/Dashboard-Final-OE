@@ -37,9 +37,16 @@ use Illuminate\Support\Carbon;
  * @property int $review_views
  * @property int|null $review_link_by staff member who shared the link
  * @property string|null $client_decision_by E-08: client's name on their approve / request changes
+ * @property string|null $upload_state E-11: "uploading" until every part is in storage
+ * @property string|null $upload_id storage multipart upload id
+ * @property string|null $media_status E-13: processing | ready | failed
+ * @property array{duration_ms?: int, width?: int, height?: int, fps?: float, video_codec?: string, audio_codec?: string|null}|null $media
+ * @property string|null $media_error
+ * @property string|null $proxy_key E-13: web-playable copy of a video
  * @property Carbon|null $created_at
  */
-#[Fillable(['workspace_id', 'attachable_type', 'attachable_id', 'uploaded_by', 'disk', 'key', 'original_name', 'mime', 'size', 'thumbnail_key', 'drive_file_id', 'version_root_id', 'version', 'is_latest'])]
+#[Fillable(['workspace_id', 'attachable_type', 'attachable_id', 'uploaded_by', 'disk', 'key', 'original_name', 'mime', 'size', 'thumbnail_key', 'drive_file_id', 'version_root_id', 'version', 'is_latest',
+    'upload_state', 'upload_id', 'media_status', 'media', 'media_error', 'proxy_key'])]
 class Attachment extends Model
 {
     use SoftDeletes;
@@ -57,7 +64,7 @@ class Attachment extends Model
     protected function casts(): array
     {
         return ['size' => 'integer', 'approved_at' => 'datetime', 'version' => 'integer', 'is_latest' => 'boolean', 'version_root_id' => 'integer',
-            'review_token_expires_at' => 'datetime', 'review_views' => 'integer'];
+            'review_token_expires_at' => 'datetime', 'review_views' => 'integer', 'media' => 'array'];
     }
 
     /** @return MorphTo<Model, $this> */
@@ -93,6 +100,12 @@ class Attachment extends Model
     public function previewable(): bool
     {
         return $this->isImage() || $this->mime === 'application/pdf' || str_starts_with($this->mime, 'video/');
+    }
+
+    /** E-11: a video stored through VideoStorage (direct upload, processed by the media job). */
+    public function isVideoAsset(): bool
+    {
+        return in_array($this->disk, ['video-s3', 'video-local'], true);
     }
 
     /** E-23: plain-text files (logs, JSON, CSV, Markdown) open in the text viewer. */
