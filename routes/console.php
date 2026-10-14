@@ -27,6 +27,9 @@ Schedule::call(function () {
 
 Schedule::command('queue:prune-failed --hours=720')->daily();
 
+// E-99: sign-in history and devices (IP, browser) are kept PRIVACY_LOGIN_HISTORY_DAYS.
+Schedule::command('privacy:prune-logins')->dailyAt('03:00')->withoutOverlapping();
+
 // Weekly report snapshots for workspace leads (P5).
 Schedule::command('reports:snapshot')->weeklyOn(1, '06:00')->withoutOverlapping();
 

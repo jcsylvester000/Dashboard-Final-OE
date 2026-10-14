@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Identity\Permissions;
 use App\Domain\Identity\ViewAs;
+use App\Domain\Privacy\PrivacyProgram;
 use App\Models\Department;
 use App\Models\InboxNotification;
 use App\Models\TimeEntry;
@@ -62,6 +63,8 @@ class HandleInertiaRequests extends Middleware
                 'expires_at' => app(ViewAs::class)->state($request)['expires_at'] ?? null,
                 'reason' => app(ViewAs::class)->state($request)['reason'] ?? null,
             ] : null,
+            // E-99: DPO contact (footer) and the notice to acknowledge (never while viewing as someone).
+            'privacy' => fn () => $user !== null ? $this->privacy($request, $user) : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'workspaceNav' => fn () => $user ? $this->workspaceNav($request, $user) : null,
             'runningTimer' => fn () => $user ? $this->runningTimer($user) : null,
@@ -69,6 +72,22 @@ class HandleInertiaRequests extends Middleware
             'notifications' => fn () => $user ? [
                 'unread' => InboxNotification::query()->forUser($user)->bell()->count(),
             ] : null,
+        ];
+    }
+
+    /**
+     * @return array{dpo: array{name: string|null, email: string|null, phone: string|null}|null, notice: array{version: int, title: string, body: string}|null}
+     */
+    private function privacy(Request $request, User $user): array
+    {
+        $program = app(PrivacyProgram::class);
+        $p = $program->get();
+        $hasDpo = $p['dpo_name'] !== null || $p['dpo_email'] !== null || $p['dpo_phone'] !== null;
+
+        return [
+            'dpo' => $hasDpo ? ['name' => $p['dpo_name'], 'email' => $p['dpo_email'], 'phone' => $p['dpo_phone']] : null,
+            'notice' => $request->attributes->get('view_as') !== true && $program->needsAcknowledgement($user)
+                ? ['version' => $p['version'], 'title' => $p['title'], 'body' => $p['body']] : null,
         ];
     }
 

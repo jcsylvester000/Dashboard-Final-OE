@@ -32,6 +32,15 @@ declare module '@inertiajs/core' {
                 expires_at: string | null;
                 reason: string | null;
             } | null;
+            /** E-99: DPO contact for the footer; the notice to acknowledge, if any. */
+            privacy: {
+                dpo: {
+                    name: string | null;
+                    email: string | null;
+                    phone: string | null;
+                } | null;
+                notice: { version: number; title: string; body: string } | null;
+            } | null;
             [key: string]: unknown;
         };
     }

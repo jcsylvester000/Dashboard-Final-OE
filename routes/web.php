@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\AccessLinkController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InboxController;
+use App\Http\Controllers\PrivacyController;
 use Illuminate\Support\Facades\Route;
 
 // Internal app: there is no public landing page.
@@ -18,6 +19,10 @@ Route::middleware('throttle:access-links')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // E-99: staff privacy notice, DPO contact, retention schedule.
+    Route::get('privacy', [PrivacyController::class, 'index'])->name('privacy.index');
+    Route::post('privacy/acknowledge', [PrivacyController::class, 'acknowledge'])->name('privacy.acknowledge');
+
     Route::get('password/change', [ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');
     Route::put('password/change', [ForcePasswordChangeController::class, 'update'])
         ->middleware('throttle:6,1')

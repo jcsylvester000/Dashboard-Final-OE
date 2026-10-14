@@ -50,6 +50,8 @@ import {
 import { dashboard, directory, workload } from '@/routes';
 import { index as holidaysIndex } from '@/routes/admin/holidays';
 import { index as leaveIndex } from '@/routes/leave';
+import { index as privacyIndex } from '@/routes/privacy';
+import { index as privacyAdmin } from '@/routes/admin/privacy';
 import { health } from '@/routes/admin';
 import { index as activityIndex } from '@/routes/admin/activity';
 import { index as apiTokensAdmin } from '@/routes/admin/api-tokens';
@@ -87,6 +89,7 @@ import type { NavItem } from '@/types';
 
 const page = usePage();
 const can = computed(() => page.props.auth.can ?? {});
+const dpo = computed(() => page.props.privacy?.dpo ?? null);
 
 const mainNavItems: NavItem[] = [
     {
@@ -276,6 +279,13 @@ const adminNavItems = computed<NavItem[]>(() => {
     }
     if (can.value['users.manage']) {
         items.push({
+            title: 'Privacy',
+            href: privacyAdmin(),
+            icon: ShieldCheck,
+        });
+    }
+    if (can.value['users.manage']) {
+        items.push({
             title: 'API tokens',
             href: apiTokensAdmin(),
             icon: KeyRound,
@@ -311,6 +321,26 @@ const adminNavItems = computed<NavItem[]>(() => {
         </SidebarContent>
 
         <SidebarFooter>
+            <!-- E-99: privacy notice, retention schedule and the DPO contact -->
+            <div
+                class="px-2 text-xs leading-snug text-muted-foreground group-data-[collapsible=icon]:hidden"
+            >
+                <Link
+                    :href="privacyIndex()"
+                    class="underline-offset-2 hover:underline"
+                    >Privacy</Link
+                >
+                <template v-if="dpo">
+                    · DPO: {{ dpo.name ?? '' }}
+                    <a
+                        v-if="dpo.email"
+                        :href="`mailto:${dpo.email}`"
+                        class="underline-offset-2 hover:underline"
+                        >{{ dpo.email }}</a
+                    >
+                    <span v-if="dpo.phone"> · {{ dpo.phone }}</span>
+                </template>
+            </div>
             <NavUser />
         </SidebarFooter>
     </Sidebar>

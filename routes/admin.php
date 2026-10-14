@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\FailedJobController;
 use App\Http\Controllers\Admin\FileSettingsController;
 use App\Http\Controllers\Admin\HolidayController;
+use App\Http\Controllers\Admin\PrivacyAdminController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\UserController;
@@ -84,6 +85,15 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
     });
     Route::get('health', SystemHealthController::class)->middleware('can:'.Permissions::SYSTEM_HEALTH)->name('health');
+    // E-99: privacy notice, DPO contact, incident log (admins only).
+    Route::middleware('can:'.Permissions::USERS_MANAGE)->group(function () {
+        Route::get('privacy', [PrivacyAdminController::class, 'index'])->name('privacy.index');
+        Route::post('privacy/notice', [PrivacyAdminController::class, 'publish'])->name('privacy.notice');
+        Route::put('privacy/dpo', [PrivacyAdminController::class, 'dpo'])->name('privacy.dpo');
+        Route::post('privacy/incidents', [PrivacyAdminController::class, 'storeIncident'])->name('privacy.incidents.store');
+        Route::put('privacy/incidents/{privacyIncident}', [PrivacyAdminController::class, 'updateIncident'])->name('privacy.incidents.update');
+    });
+
     // E-97: every API token in the agency (owner, abilities, last used) with revoke.
     Route::middleware('can:'.Permissions::USERS_MANAGE)->group(function () {
         Route::get('api-tokens', [ApiTokenAdminController::class, 'index'])->name('api-tokens.index');
