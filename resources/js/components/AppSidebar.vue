@@ -19,6 +19,7 @@ import {
     CheckSquare,
     CalendarDays,
     ClipboardCheck,
+    ClipboardList,
     Clock,
     Columns3,
     Inbox,
@@ -28,6 +29,7 @@ import {
     History,
     LayoutDashboard,
     LayoutGrid,
+    LayoutTemplate,
     Lightbulb,
     ListTodo,
     ShieldCheck,
@@ -60,6 +62,7 @@ import { index as failedJobsIndex } from '@/routes/admin/failed-jobs';
 import { edit as companySettings } from '@/routes/admin/company';
 import { index as reviewsIndex } from '@/routes/reviews';
 import { index as findingsIndex } from '@/routes/findings';
+import { index as galleryIndex } from '@/routes/gallery';
 import { edit as fileSettings } from '@/routes/admin/files';
 import { index as billingInvoices } from '@/routes/billing/invoices';
 import { index as driveIndex } from '@/routes/drive';
@@ -79,6 +82,7 @@ import {
     index as workspacesIndex,
     show as workspaceShow,
 } from '@/routes/workspaces';
+import { index as wsForms } from '@/routes/workspaces/forms';
 import { index as wsMembers } from '@/routes/workspaces/members';
 import { index as wsProjects } from '@/routes/workspaces/projects';
 import { approvals, timesheet } from '@/routes/time';
@@ -118,6 +122,11 @@ const mainNavItems: NavItem[] = [
         title: 'Findings',
         href: findingsIndex(),
         icon: Lightbulb,
+    },
+    {
+        title: 'Templates',
+        href: galleryIndex(),
+        icon: LayoutTemplate,
     },
     {
         title: 'My files',
@@ -197,6 +206,7 @@ const workspaceNavItems = computed<NavItem[]>(() => {
         { title: 'Calendar', href: wsCalendar(ws.slug), icon: CalendarDays },
         { title: 'Projects', href: wsProjects(ws.slug), icon: FolderKanban },
         { title: 'Members', href: wsMembers(ws.slug), icon: UsersRound },
+        { title: 'Forms', href: wsForms(ws.slug), icon: ClipboardList },
     ];
 });
 

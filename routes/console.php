@@ -58,6 +58,8 @@ Schedule::command('drive:prune')->hourly()->withoutOverlapping();
 Schedule::command('video:prune-uploads')->hourlyAt(35)->withoutOverlapping();
 // E-26: preview links on open tasks.
 Schedule::command('previews:check')->everyFifteenMinutes()->withoutOverlapping();
+// E-51: scheduled client report packs.
+Schedule::command('reports:packs')->dailyAt('06:30')->timezone('Asia/Manila')->withoutOverlapping();
 // E-24: keep 90 days of GitHub delivery records (idempotency window).
 Schedule::call(fn () => DB::table('github_deliveries')->where('created_at', '<', now()->subDays(90))->delete())->daily()->name('prune-github-deliveries');
 

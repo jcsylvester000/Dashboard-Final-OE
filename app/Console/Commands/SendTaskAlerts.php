@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\Work\AutomationEngine;
 use App\Domain\Work\TaskPresenter;
 use App\Events\Work\TaskDueSoon;
 use App\Events\Work\TaskOverdue;
@@ -45,6 +46,7 @@ class SendTaskAlerts extends Command
                 foreach ($tasks as $task) {
                     if ($this->claim($task, 'due_soon')) {
                         TaskDueSoon::dispatch($task);
+                        app(AutomationEngine::class)->handle('due_soon', $task); // E-37
                         $counts['due_soon']++;
                     }
                 }

@@ -46,9 +46,6 @@ class DevAdmin extends Command
             'password' => $password,
             'is_active' => true,
             'must_change_password' => false,
-            'two_factor_secret' => null,
-            'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at' => null,
         ])->save();
         $user->accessLinks()->open()->update(['revoked_at' => now()]);
 

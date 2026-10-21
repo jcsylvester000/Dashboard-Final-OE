@@ -128,7 +128,11 @@ class TaskService
             }
 
             if (array_key_exists('label_ids', $data)) {
-                $task->labels()->sync(array_map('intval', (array) $data['label_ids']));
+                $changes = $task->labels()->sync(array_map('intval', (array) $data['label_ids']));
+                // E-37: "label added" rules run once the save is committed.
+                foreach ($changes['attached'] as $labelId) {
+                    DB::afterCommit(fn () => app(AutomationEngine::class)->handle('label_added', $task, (string) $labelId));
+                }
             }
             if ($task->wasChanged('assignee_id')) {
                 $this->watch($task, [$task->assignee_id]);

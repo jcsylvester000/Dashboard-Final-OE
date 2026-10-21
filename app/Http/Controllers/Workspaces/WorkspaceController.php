@@ -12,10 +12,14 @@ use App\Domain\Workspaces\LinkService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
+use App\Models\AutomationRule;
+use App\Models\AutomationRun;
 use App\Models\ChatChannel;
 use App\Models\CodeRepository;
 use App\Models\DeliverySpec;
+use App\Models\Department;
 use App\Models\Project;
+use App\Models\ReportPack;
 use App\Models\ReviewRule;
 use App\Models\Task;
 use App\Models\TaskStatus;
@@ -194,6 +198,25 @@ class WorkspaceController extends Controller
                     'enabled' => $c->enabled, 'last_ok_at' => $c->last_ok_at?->toIso8601String(), 'last_error' => $c->last_error,
                 ])->values(),
             'chatEvents' => ChatChannel::EVENTS,
+            // E-37 / E-51: automation rules (with their latest runs) and report packs.
+            'automations' => AutomationRule::query()->where('workspace_id', $workspace->id)->with(['runLog' => fn ($q) => $q->limit(200)])->orderBy('id')->get()
+                ->map(fn (AutomationRule $r): array => [
+                    'id' => $r->id, 'name' => $r->name, 'trigger' => $r->trigger, 'trigger_value' => $r->trigger_value, 'conditions' => $r->conditions,
+                    'actions' => $r->actions, 'enabled' => $r->enabled, 'runs' => $r->runs,
+                    'log' => $r->runLog->take(5)->map(fn (AutomationRun $run) => ['outcome' => $run->outcome, 'detail' => $run->detail, 'at' => $run->created_at->toIso8601String()])->values(),
+                ])->values(),
+            'automationTriggers' => AutomationRule::TRIGGERS,
+            'automationActions' => AutomationRule::ACTIONS,
+            'statusSlugs' => TaskStatus::ordered()->pluck('name', 'slug'),
+            'labelOptions' => $workspace->labels()->orderBy('name')->get(['id', 'name']),
+            'departmentOptions' => Department::query()->active()->orderBy('position')->get(['id', 'name']),
+            'reportPacks' => ReportPack::query()->where('workspace_id', $workspace->id)->orderBy('id')->get()
+                ->map(fn (ReportPack $p): array => [
+                    'id' => $p->id, 'name' => $p->name, 'sections' => $p->sections, 'frequency' => $p->frequency, 'day' => $p->day,
+                    'recipient_ids' => $p->recipient_ids, 'enabled' => $p->enabled, 'next_run_on' => $p->next_run_on->toDateString(),
+                    'last_run_at' => $p->last_run_at?->toIso8601String(), 'runs' => $p->runs,
+                ])->values(),
+            'packSections' => ReportPack::SECTIONS,
             'deliverableTypes' => Task::WORK_DETAIL_FIELDS['marketing']['deliverable_type'][2],
             'projectOptions' => $workspace->projects()->where('status', '!=', 'archived')->orderBy('name')->get(['id', 'name']),
             'memberOptions' => $this->presenter->memberOptions($workspace),

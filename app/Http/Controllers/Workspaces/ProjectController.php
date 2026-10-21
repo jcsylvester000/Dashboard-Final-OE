@@ -14,6 +14,7 @@ use App\Domain\Workspaces\WorkspaceAccess;
 use App\Domain\Workspaces\WorkspacePresenter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Workspaces\SaveProjectRequest;
+use App\Models\DocumentTemplate;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\Task;
@@ -179,6 +180,8 @@ class ProjectController extends Controller
             'canDelete' => Gate::allows('lead', $workspace),
             'attachments' => app(AttachmentPresenter::class)->for($project, $workspace, $user),
             'fileLimits' => app(AttachmentPresenter::class)->limits(),
+            // E-52: document templates that can be generated for this project.
+            'documentTemplates' => DocumentTemplate::query()->where('archived', false)->orderBy('name')->get(['id', 'name', 'kind']),
             ...$this->work($workspace, $project),
         ]);
     }

@@ -3,6 +3,7 @@
 namespace App\Domain\Notifications;
 
 use App\Domain\Integrations\ChatNotifier;
+use App\Domain\Work\AutomationEngine;
 use App\Domain\Workspaces\MentionService;
 use App\Domain\Workspaces\WorkspaceAccess;
 use App\Events\Work\CommentAdded;
@@ -141,6 +142,10 @@ class WorkEventSubscriber
         $status = $statusModel->name ?? '';
         $followers = $this->followers($task);
 
+        // E-37: the client's automation rules.
+        if ($statusModel !== null) {
+            app(AutomationEngine::class)->handle('status_changed', $task, $statusModel->slug);
+        }
         // E-41: optional chat channels (title + link only).
         $this->chat($task, $workspace, TaskStatus::ordered()->firstWhere('id', $event->fromStatusId)?->slug, $statusModel?->slug);
 

@@ -23,6 +23,7 @@ use App\Http\Controllers\Work\TaskDeliverySpecController;
 use App\Http\Controllers\Work\TaskFlowController;
 use App\Http\Controllers\Work\TaskMuteController;
 use App\Http\Controllers\Work\TaskPreviewController;
+use App\Http\Controllers\Work\TemplateGalleryController;
 use App\Http\Controllers\Work\TimeController;
 use App\Http\Controllers\Work\TimelineController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,17 @@ Route::middleware('auth')->group(function () {
     Route::get('my-tasks', [QueueController::class, 'mine'])->name('tasks.mine');
     // E-32: everything waiting for my review, across clients.
     Route::get('reviews', ReviewQueueController::class)->name('reviews.index');
+    // E-55: template gallery (workflows, document templates, forms, report packs).
+    Route::get('template-gallery', [TemplateGalleryController::class, 'index'])->name('gallery.index');
+    Route::post('template-gallery/workflows/{template}/duplicate', [TemplateGalleryController::class, 'duplicateWorkflow'])->name('gallery.workflows.duplicate');
+    Route::post('template-gallery/workflows/{template}/archive', [TemplateGalleryController::class, 'archiveWorkflow'])->name('gallery.workflows.archive');
+    Route::post('template-gallery/documents', [TemplateGalleryController::class, 'storeDocument'])->name('gallery.documents.store');
+    Route::put('template-gallery/documents/{document}', [TemplateGalleryController::class, 'updateDocument'])->name('gallery.documents.update');
+    Route::post('template-gallery/documents/{document}/duplicate', [TemplateGalleryController::class, 'duplicateDocument'])->name('gallery.documents.duplicate');
+    Route::post('template-gallery/documents/{document}/archive', [TemplateGalleryController::class, 'archiveDocument'])->name('gallery.documents.archive');
+    Route::post('template-gallery/forms/{form}/duplicate', [TemplateGalleryController::class, 'duplicateForm'])->name('gallery.forms.duplicate');
+    Route::post('template-gallery/packs/{pack}/duplicate', [TemplateGalleryController::class, 'duplicatePack'])->name('gallery.packs.duplicate');
+
     // E-31: findings library (across the clients you can see).
     Route::get('findings', [FindingController::class, 'index'])->name('findings.index');
     Route::post('findings', [FindingController::class, 'store'])->middleware('throttle:60,1')->name('findings.store');

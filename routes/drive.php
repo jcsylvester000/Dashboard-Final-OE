@@ -3,6 +3,7 @@
 use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\ClientReviewController;
 use App\Http\Controllers\DriveController;
+use App\Http\Controllers\IntakeController;
 use App\Http\Controllers\ProjectStatusController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\Work\ReleaseNotesController;
@@ -39,6 +40,10 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('r/{token}', [ClientReviewController::class, 'show'])->name('client-review.show');
     // E-27: shared sprint release notes.
     Route::get('rn/{token}', [ReleaseNotesController::class, 'shared'])->name('release-notes.shared');
+    // E-42: public intake forms.
+    Route::get('f/{token}', [IntakeController::class, 'show'])->name('intake.show');
+    Route::post('f/{token}', [IntakeController::class, 'submit'])->middleware('throttle:5,1')->name('intake.submit');
+    Route::get('f/{token}/thanks', [IntakeController::class, 'thanks'])->name('intake.thanks');
     Route::get('r/{token}/file', [ClientReviewController::class, 'file'])->name('client-review.file');
     Route::post('r/{token}/name', [ClientReviewController::class, 'setName'])->name('client-review.name');
     Route::post('r/{token}/comments', [ClientReviewController::class, 'comment'])->middleware('throttle:20,1')->name('client-review.comment');

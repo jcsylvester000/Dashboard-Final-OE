@@ -86,6 +86,7 @@ class TemplateService
                 $previous = $task;
             }
 
+            $template->increment('uses'); // E-55
             $this->activity->log('workflow.applied', $workspace, [
                 'template' => $template->name,
                 'project_id' => $project?->id,

@@ -49,6 +49,7 @@ import type {
     WorkspaceHeader as Header,
 } from '@/types/workspace';
 import ProjectFields from './partials/ProjectFields.vue';
+import GenerateDocument from '@/components/projects/GenerateDocument.vue';
 
 const props = defineProps<{
     workspace: Header;
@@ -75,6 +76,7 @@ const props = defineProps<{
     };
     taskFiles: AttachmentRow[];
     departments: DepartmentOption[];
+    documentTemplates?: { id: number; name: string; kind: string }[];
 }>();
 
 const showDone = ref(false);
@@ -613,6 +615,13 @@ async function destroy(): Promise<void> {
                 />
             </CardContent>
         </Card>
+
+        <GenerateDocument
+            v-if="workspace.can.contribute && documentTemplates?.length"
+            :workspace-slug="workspace.slug"
+            :project-id="project.id"
+            :templates="documentTemplates"
+        />
 
         <AttachmentsPanel
             attachable-type="project"

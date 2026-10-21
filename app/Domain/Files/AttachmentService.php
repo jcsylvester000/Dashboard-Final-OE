@@ -7,10 +7,13 @@ use App\Domain\Files\UploadThing\UploadThingException;
 use App\Domain\Files\Video\VideoStorage;
 use App\Domain\Identity\ActivityLogger;
 use App\Domain\Settings\AppSettings;
+use App\Domain\Work\AutomationEngine;
 use App\Models\Attachment;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
@@ -131,6 +134,10 @@ class AttachmentService
         }
 
         $this->activity->log($version > 1 ? 'file.version-uploaded' : 'file.uploaded', $attachable, ['attachment_id' => $attachment->id, 'name' => $attachment->original_name, 'version' => $version], $by);
+        // E-37: "file uploaded" rules.
+        if ($attachable instanceof Task) {
+            DB::afterCommit(fn () => app(AutomationEngine::class)->handle('file_uploaded', $attachable));
+        }
 
         return $attachment;
     }

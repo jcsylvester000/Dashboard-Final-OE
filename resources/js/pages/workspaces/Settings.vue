@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import DeliverySpecsCard from '@/components/workspaces/DeliverySpecsCard.vue';
 import IntegrationsCard from '@/components/workspaces/IntegrationsCard.vue';
+import AutomationRulesCard from '@/components/workspaces/AutomationRulesCard.vue';
+import type { RuleRow } from '@/components/workspaces/AutomationRulesCard.vue';
+import ReportPacksCard from '@/components/workspaces/ReportPacksCard.vue';
+import type { PackRow } from '@/components/workspaces/ReportPacksCard.vue';
 import type {
     ChatChannelRow,
     RepositoryRow,
@@ -59,6 +63,15 @@ const props = defineProps<{
     taskTypes?: Record<string, string>;
     // E-25 / E-34
     checklistDefaults?: Record<string, string>;
+    // E-37 / E-51
+    automations?: RuleRow[];
+    automationTriggers?: Record<string, string>;
+    automationActions?: Record<string, string>;
+    statusSlugs?: Record<string, string>;
+    labelOptions?: { id: number; name: string }[];
+    departmentOptions?: { id: number; name: string }[];
+    reportPacks?: PackRow[];
+    packSections?: Record<string, string>;
     // E-24 / E-41
     repositories?: RepositoryRow[];
     githubWebhook?: { url: string; configured: boolean };
@@ -755,6 +768,32 @@ async function removeLabel(label: {
             :webhook="githubWebhook"
             :channels="chatChannels"
             :events="chatEvents"
+        />
+
+        <AutomationRulesCard
+            v-if="
+                workspace.can.lead &&
+                automations &&
+                automationTriggers &&
+                automationActions
+            "
+            :workspace-slug="workspace.slug"
+            :rules="automations"
+            :triggers="automationTriggers"
+            :actions="automationActions"
+            :status-slugs="statusSlugs ?? {}"
+            :labels="labelOptions ?? []"
+            :members="memberOptions ?? []"
+            :departments="departmentOptions ?? []"
+            :task-types="taskTypes ?? {}"
+        />
+
+        <ReportPacksCard
+            v-if="workspace.can.lead && reportPacks && packSections"
+            :workspace-slug="workspace.slug"
+            :packs="reportPacks"
+            :sections="packSections"
+            :members="memberOptions ?? []"
         />
     </div>
 </template>

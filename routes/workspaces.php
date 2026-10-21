@@ -1,11 +1,15 @@
 <?php
 
+use App\Http\Controllers\Workspaces\AutomationRuleController;
 use App\Http\Controllers\Workspaces\DeliverySpecController;
+use App\Http\Controllers\Workspaces\DocumentTemplateController;
+use App\Http\Controllers\Workspaces\FormController;
 use App\Http\Controllers\Workspaces\IntegrationsController;
 use App\Http\Controllers\Workspaces\LabelController;
 use App\Http\Controllers\Workspaces\ProjectBudgetController;
 use App\Http\Controllers\Workspaces\ProjectController;
 use App\Http\Controllers\Workspaces\RecordLinkController;
+use App\Http\Controllers\Workspaces\ReportPackController;
 use App\Http\Controllers\Workspaces\ReviewRuleController;
 use App\Http\Controllers\Workspaces\TaskFieldsController;
 use App\Http\Controllers\Workspaces\WorkspaceController;
@@ -33,6 +37,29 @@ Route::middleware('auth')->group(function () {
         Route::post('settings/delivery-specs', [DeliverySpecController::class, 'store'])->name('delivery-specs.store');
         Route::put('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'update'])->name('delivery-specs.update');
         Route::delete('settings/delivery-specs/{deliverySpec}', [DeliverySpecController::class, 'destroy'])->name('delivery-specs.destroy');
+        // E-37: automation rules (leads).
+        Route::post('settings/automations', [AutomationRuleController::class, 'store'])->name('automations.store');
+        Route::put('settings/automations/{rule}', [AutomationRuleController::class, 'update'])->name('automations.update');
+        Route::delete('settings/automations/{rule}', [AutomationRuleController::class, 'destroy'])->name('automations.destroy');
+        // E-51: scheduled report packs (leads).
+        Route::post('settings/report-packs', [ReportPackController::class, 'store'])->name('report-packs.store');
+        Route::put('settings/report-packs/{pack}', [ReportPackController::class, 'update'])->name('report-packs.update');
+        Route::delete('settings/report-packs/{pack}', [ReportPackController::class, 'destroy'])->name('report-packs.destroy');
+        Route::post('settings/report-packs/{pack}/run', [ReportPackController::class, 'run'])->middleware('throttle:10,1')->name('report-packs.run');
+        // E-52: generate a document from a template for a project.
+        Route::post('projects/{project}/documents', [DocumentTemplateController::class, 'generate'])->middleware('throttle:20,1')->name('projects.documents.store');
+        // E-53 / E-54 / E-42: forms (leads build; members fill and see submissions).
+        Route::get('forms', [FormController::class, 'index'])->name('forms.index');
+        Route::post('forms', [FormController::class, 'store'])->name('forms.store');
+        Route::get('forms/{form}/edit', [FormController::class, 'edit'])->name('forms.edit');
+        Route::put('forms/{form}', [FormController::class, 'update'])->name('forms.update');
+        Route::post('forms/{form}/publish', [FormController::class, 'publish'])->name('forms.publish');
+        Route::post('forms/{form}/link', [FormController::class, 'link'])->name('forms.link');
+        Route::delete('forms/{form}/link', [FormController::class, 'unlink'])->name('forms.unlink');
+        Route::post('forms/{form}/archive', [FormController::class, 'archive'])->name('forms.archive');
+        Route::get('forms/{form}/fill', [FormController::class, 'fill'])->name('forms.fill');
+        Route::post('forms/{form}/submissions', [FormController::class, 'submit'])->middleware('throttle:30,1')->name('forms.submit');
+        Route::get('forms/{form}/submissions', [FormController::class, 'submissions'])->name('forms.submissions');
         // E-24 / E-41: GitHub repositories and chat channels (leads).
         Route::post('settings/repositories', [IntegrationsController::class, 'storeRepository'])->name('repositories.store');
         Route::put('settings/repositories/{repository}', [IntegrationsController::class, 'updateRepository'])->name('repositories.update');
